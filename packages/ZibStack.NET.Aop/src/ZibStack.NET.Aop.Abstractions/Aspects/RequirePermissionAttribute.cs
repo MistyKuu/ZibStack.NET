@@ -1,22 +1,13 @@
 namespace ZibStack.NET.Aop.Aspects;
 
 /// <summary>
-/// Checks authorization before method execution. Throws <see cref="UnauthorizedAccessException"/>
-/// if the check fails. Configure via DI (<see cref="IPermissionChecker"/>) or
-/// static <see cref="RequirePermissionHandler.AuthorizationCheck"/>.
+/// Checks authorization before method execution via <see cref="IPermissionChecker"/> from DI.
+/// Throws <see cref="UnauthorizedAccessException"/> if denied.
 /// </summary>
 /// <example>
 /// <code>
-/// // Option 1 — DI (recommended):
 /// builder.Services.AddScoped&lt;IPermissionChecker, MyAuthChecker&gt;();
 /// builder.Services.AddTransient&lt;RequirePermissionHandler&gt;();
-///
-/// // Option 2 — static delegate:
-/// RequirePermissionHandler.AuthorizationCheck = (ctx, policy) =&gt;
-/// {
-///     var user = GetCurrentUser();
-///     return user.HasPermission(policy ?? ctx.MethodName);
-/// };
 ///
 /// [RequirePermission]
 /// public void DeleteOrder(int id) { ... }
@@ -29,27 +20,20 @@ namespace ZibStack.NET.Aop.Aspects;
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
 public sealed class RequirePermissionAttribute : AspectAttribute
 {
-    /// <summary>Optional policy name. If null, the method name is used.</summary>
     public string? Policy { get; set; }
 }
 
 /// <summary>
-/// Authorization checker interface. Register in DI to provide authorization logic.
+/// Register in DI to provide authorization logic for <see cref="RequirePermissionAttribute"/>.
 /// </summary>
 public interface IPermissionChecker
 {
-    /// <summary>Return true to allow, false to deny.</summary>
     bool HasPermission(AspectContext context, string? policy);
 }
 
 public sealed class RequirePermissionHandler : IAroundAspectHandler
 {
-    private readonly IPermissionChecker? _checker;
-
-    /// <summary>Static delegate fallback. Used when DI is not configured.</summary>
-    public static Func<AspectContext, string?, bool>? AuthorizationCheck { get; set; }
-
-    public RequirePermissionHandler() { }
+    private readonly IPermissionChecker _checker;
 
     public RequirePermissionHandler(IPermissionChecker checker) => _checker = checker;
 
@@ -57,13 +41,7 @@ public sealed class RequirePermissionHandler : IAroundAspectHandler
     {
         var policy = context.Properties.TryGetValue("Policy", out var p) && p is string s ? s : null;
 
-        bool authorized;
-        if (_checker != null)
-            authorized = _checker.HasPermission(context, policy);
-        else
-            authorized = AuthorizationCheck?.Invoke(context, policy) ?? true;
-
-        if (!authorized)
+        if (!_checker.HasPermission(context, policy))
             throw new UnauthorizedAccessException(
                 $"Access denied to {context.ClassName}.{context.MethodName}" +
                 (policy != null ? $" (policy: {policy})" : ""));

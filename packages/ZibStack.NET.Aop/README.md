@@ -89,34 +89,23 @@ public async Task<Order> GetOrderAsync(int id) { ... }
 
 ### [Cache] — caching
 
-Supports DI with `IAspectCache` (Redis, IMemoryCache, etc.) or built-in in-memory fallback.
+Register `IAspectCache` in DI (wrap IMemoryCache, Redis, etc.):
 
 ```csharp
-// Option 1 — DI with custom cache:
-builder.Services.AddSingleton<IAspectCache, RedisAspectCache>();
+builder.Services.AddSingleton<IAspectCache, MyMemoryCache>();
 builder.Services.AddTransient<CacheHandler>();
 
-// Option 2 — built-in in-memory (no DI needed):
 [Cache(DurationSeconds = 60)]
 public Order GetOrder(int id) { ... }
-
-// Invalidate (fallback cache only):
-CacheHandler.Invalidate("GetOrder");
-CacheHandler.ClearAll();
 ```
 
 ### [RequirePermission] — authorization check
 
-Supports DI with `IPermissionChecker` or static delegate fallback.
+Register `IPermissionChecker` in DI:
 
 ```csharp
-// Option 1 — DI (recommended):
 builder.Services.AddScoped<IPermissionChecker, MyAuthChecker>();
 builder.Services.AddTransient<RequirePermissionHandler>();
-
-// Option 2 — static delegate:
-RequirePermissionHandler.AuthorizationCheck = (ctx, policy) =>
-    currentUser.HasPermission(policy ?? ctx.MethodName);
 
 [RequirePermission]
 public void DeleteOrder(int id) { ... }  // checks "DeleteOrder" permission
