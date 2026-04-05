@@ -18,6 +18,9 @@ public class LoggingBenchmarks
     private ManualLogService _manual = null!;
     private OptimizedManualLogService _optimized = null!;
 
+    private ZibLogSanitizerService _sanitizerService = null!;
+    private ZibLogPlainService _plainService = null!;
+
     // NullLogger — logging is enabled but goes nowhere (measures pure overhead)
     private ZibLogService _smartLogNull = null!;
     private ManualLogService _manualNull = null!;
@@ -30,7 +33,9 @@ public class LoggingBenchmarks
         var factory = LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Information).AddProvider(NullLoggerProvider.Instance));
 
         _noLog = new NoLogService();
-        _zibLog = new ZibLogService(); // logger resolved from DI via AspectServiceProvider
+        _zibLog = new ZibLogService();
+        _sanitizerService = new ZibLogSanitizerService();
+        _plainService = new ZibLogPlainService();
         _manual = new ManualLogService(factory.CreateLogger<ManualLogService>());
         _optimized = new OptimizedManualLogService(factory.CreateLogger<OptimizedManualLogService>());
 
@@ -77,4 +82,14 @@ public class LoggingBenchmarks
 
     [Benchmark(Description = "Manual LoggerMessage.Define (level OFF)")]
     public int Optimized_Disabled() => _optimizedNull.Add(1, 2);
+
+    // ═══════════════════════════════════════════
+    // Complex objects: with vs without [Sensitive] property sanitization
+    // ═══════════════════════════════════════════
+
+    [Benchmark(Description = "[Log] return object (no [Sensitive])")]
+    public PlainOrder Log_PlainObject() => _plainService.GetOrder(1);
+
+    [Benchmark(Description = "[Log] return object (with [Sensitive])")]
+    public SensitiveOrder Log_SanitizedObject() => _sanitizerService.GetOrder(1);
 }

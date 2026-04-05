@@ -71,6 +71,43 @@ public class OptimizedManualLogService
     }
 }
 
+// ─── Service with [Sensitive] properties on return type ───
+public class SensitiveOrder
+{
+    public int Id { get; set; }
+    public string Product { get; set; } = "";
+    public decimal Total { get; set; }
+    [Sensitive] public string CreditCard { get; set; } = "";
+    [NoLog] public byte[]? Payload { get; set; }
+}
+
+public class ZibLogSanitizerService
+{
+    [Log]
+    public SensitiveOrder GetOrder(int id)
+    {
+        return new SensitiveOrder { Id = id, Product = "Widget", Total = 29.97m, CreditCard = "4111-1111" };
+    }
+}
+
+// ─── Same but without [Sensitive] properties ───
+public class PlainOrder
+{
+    public int Id { get; set; }
+    public string Product { get; set; } = "";
+    public decimal Total { get; set; }
+    public string CreditCard { get; set; } = "";
+}
+
+public class ZibLogPlainService
+{
+    [Log]
+    public PlainOrder GetOrder(int id)
+    {
+        return new PlainOrder { Id = id, Product = "Widget", Total = 29.97m, CreditCard = "4111-1111" };
+    }
+}
+
 // ─── Bare service (no logging at all) ───
 public class NoLogService
 {
