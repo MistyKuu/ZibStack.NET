@@ -3,14 +3,9 @@ using ZibStack.NET.Log;
 
 namespace ZibStack.NET.Log.Benchmarks;
 
-// ─── Service WITH ZibStack.Log interceptors ───
-[ZibLog]
+// ─── Service WITH ZibStack.Log interceptors (logger from DI) ───
 public class ZibLogService
 {
-    private readonly ILogger<ZibLogService> _logger;
-
-    public ZibLogService(ILogger<ZibLogService> logger) => _logger = logger;
-
     [Log]
     public int Add(int a, int b) => a + b;
 

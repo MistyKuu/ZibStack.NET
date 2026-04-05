@@ -28,15 +28,8 @@ public class AddressInfo
     [Sensitive] public string Street { get; set; } = "";
 }
 
-[ZibLog]
 public class OrderService
 {
-    private readonly ILogger<OrderService> _logger;
-
-    public OrderService(ILogger<OrderService> logger)
-    {
-        _logger = logger;
-    }
 
     [Log]
     public Order PlaceOrder(int customerId, string product, int quantity)

@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Order;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -29,14 +30,20 @@ public class LoggingBenchmarks
         var factory = LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Information).AddProvider(NullLoggerProvider.Instance));
 
         _noLog = new NoLogService();
-        _zibLog = new ZibLogService(factory.CreateLogger<ZibLogService>());
+        _zibLog = new ZibLogService(); // logger resolved from DI via AspectServiceProvider
         _manual = new ManualLogService(factory.CreateLogger<ManualLogService>());
         _optimized = new OptimizedManualLogService(factory.CreateLogger<OptimizedManualLogService>());
 
         // With NullLogger (IsEnabled returns false — measures overhead when logging is off)
-        _smartLogNull = new ZibLogService(NullLogger<ZibLogService>.Instance);
+        _smartLogNull = new ZibLogService();
         _manualNull = new ManualLogService(NullLogger<ManualLogService>.Instance);
         _optimizedNull = new OptimizedManualLogService(NullLogger<OptimizedManualLogService>.Instance);
+
+        // Wire up DI for ZibLog — use a simple service provider
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(factory);
+        services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+        ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider = services.BuildServiceProvider();
     }
 
     // ═══════════════════════════════════════════

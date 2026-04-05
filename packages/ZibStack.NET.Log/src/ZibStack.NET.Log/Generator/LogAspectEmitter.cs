@@ -339,56 +339,21 @@ internal sealed class LogAspectEmitter : IAspectEmitter
 }
 
 /// <summary>
-/// Extracts logger field info from [ZibLog]-annotated classes and reports diagnostics.
+/// Reads assembly-level [ZibLogDefaults] and reports diagnostics for [Log] methods.
+/// Logger is resolved from DI — no [ZibLog] or field detection needed.
 /// </summary>
 internal sealed class LogClassDataProvider : IClassDataProvider
 {
-    private const string ZibLogAttr = "ZibStack.NET.Log.ZibLogAttribute";
-    private const string ILoggerName = "Microsoft.Extensions.Logging.ILogger";
-    private const string ILoggerGenericName = "Microsoft.Extensions.Logging.ILogger`1";
-
     public string AttributeFullName => "ZibStack.NET.Log.LogAttribute";
 
     public IReadOnlyDictionary<string, object?>? ExtractClassData(INamedTypeSymbol classSymbol)
     {
-        string? loggerFieldOverride = null;
-        bool hasZibLog = false;
-        foreach (var attr in classSymbol.GetAttributes())
-        {
-            if (attr.AttributeClass?.ToDisplayString() == ZibLogAttr)
-            {
-                hasZibLog = true;
-                foreach (var arg in attr.NamedArguments)
-                    if (arg.Key == "LoggerField" && arg.Value.Value is string f)
-                        loggerFieldOverride = f;
-            }
-        }
-        if (!hasZibLog) return null;
+        // Check if class has any [Log] methods
+        bool hasLog = classSymbol.GetMembers().OfType<IMethodSymbol>()
+            .Any(m => m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.LogAttribute"));
+        if (!hasLog) return null;
 
-        var loggerFields = new List<(string name, string type)>();
-        foreach (var member in classSymbol.GetMembers())
-            if (member is IFieldSymbol field && IsILogger(field.Type))
-                loggerFields.Add((field.Name, field.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
-
-        string? fieldName, fieldType;
-        if (loggerFieldOverride != null)
-        {
-            var match = loggerFields.FirstOrDefault(f => f.name == loggerFieldOverride);
-            fieldName = match.name; fieldType = match.type;
-        }
-        else if (loggerFields.Count == 1)
-        {
-            fieldName = loggerFields[0].name; fieldType = loggerFields[0].type;
-        }
-        else { fieldName = null; fieldType = null; }
-
-        if (fieldName == null) return null;
-
-        var data = new Dictionary<string, object?>
-        {
-            ["LoggerFieldName"] = fieldName,
-            ["LoggerFieldType"] = fieldType
-        };
+        var data = new Dictionary<string, object?>();
 
         // Read assembly-level [ZibLogDefaults]
         foreach (var asmAttr in classSymbol.ContainingAssembly.GetAttributes())
@@ -400,49 +365,12 @@ internal sealed class LogClassDataProvider : IClassDataProvider
             }
         }
 
-        return data;
+        return data.Count > 0 ? data : null;
     }
 
     public IEnumerable<Diagnostic> GetDiagnostics(INamedTypeSymbol classSymbol)
     {
-        bool hasZibLog = classSymbol.GetAttributes()
-            .Any(a => a.AttributeClass?.ToDisplayString() == ZibLogAttr);
-        if (!hasZibLog) yield break;
-
-        var loggerFields = new List<string>();
-        foreach (var member in classSymbol.GetMembers())
-            if (member is IFieldSymbol field && IsILogger(field.Type))
-                loggerFields.Add(field.Name);
-
-        string? loggerFieldOverride = null;
-        foreach (var attr in classSymbol.GetAttributes())
-            if (attr.AttributeClass?.ToDisplayString() == ZibLogAttr)
-                foreach (var arg in attr.NamedArguments)
-                    if (arg.Key == "LoggerField" && arg.Value.Value is string f)
-                        loggerFieldOverride = f;
-
-        if (loggerFields.Count == 0)
-        {
-            var loc = classSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation();
-            if (loc != null)
-                yield return Diagnostic.Create(DiagnosticDescriptors.NoLoggerField, loc, classSymbol.Name);
-        }
-        else if (loggerFields.Count > 1 && loggerFieldOverride == null)
-        {
-            var loc = classSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation();
-            if (loc != null)
-                yield return Diagnostic.Create(DiagnosticDescriptors.MultipleLoggerFields, loc,
-                    classSymbol.Name, string.Join(", ", loggerFields));
-        }
-
-        if (loggerFieldOverride != null && !loggerFields.Contains(loggerFieldOverride))
-        {
-            var loc = classSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation();
-            if (loc != null)
-                yield return Diagnostic.Create(DiagnosticDescriptors.SpecifiedLoggerFieldNotFound, loc,
-                    loggerFieldOverride, classSymbol.Name);
-        }
-
+        // Check for static methods with [Log]
         foreach (var member in classSymbol.GetMembers())
         {
             if (member is IMethodSymbol method && method.IsStatic &&
@@ -454,16 +382,5 @@ internal sealed class LogClassDataProvider : IClassDataProvider
                     yield return Diagnostic.Create(DiagnosticDescriptors.StaticMethodNotSupported, loc, method.Name);
             }
         }
-    }
-
-    private static bool IsILogger(ITypeSymbol type)
-    {
-        if (type.ToDisplayString() == ILoggerName) return true;
-        if (type is INamedTypeSymbol nt && nt.IsGenericType)
-        {
-            var meta = nt.OriginalDefinition.ContainingNamespace + "." + nt.OriginalDefinition.MetadataName;
-            if (meta == ILoggerGenericName) return true;
-        }
-        return false;
     }
 }

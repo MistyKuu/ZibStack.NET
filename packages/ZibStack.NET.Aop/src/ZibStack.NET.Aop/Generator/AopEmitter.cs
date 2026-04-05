@@ -65,22 +65,6 @@ public static class AopEmitter
         sb.AppendLine($"    internal static class __{classModel.ClassName}_Aop");
         sb.AppendLine("    {");
 
-        // Per-instance handler cache (ConditionalWeakTable — entries removed when instance is GC'd)
-        var emittedHandlerFields = new HashSet<string>();
-        foreach (var method in classModel.Methods)
-        {
-            foreach (var aspect in method.Aspects)
-            {
-                if (aspect.HandlerTypeName != null && !emitters.ContainsKey(aspect.AttributeFullName)
-                    && emittedHandlerFields.Add(aspect.AttributeFullName))
-                {
-                    var fieldName = GetCachedHandlerFieldName(aspect);
-                    sb.AppendLine($"        private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<{classModel.ClassName}, {aspect.HandlerTypeName}> {fieldName} = new();");
-                }
-            }
-        }
-        if (emittedHandlerFields.Count > 0) sb.AppendLine();
-
         // Per-method: class members from emitters
         foreach (var method in classModel.Methods)
         {
@@ -279,15 +263,13 @@ public static class AopEmitter
 
     private static string GetHandlerVarName(AspectInfo aspect) => $"__handler_{SafeName(aspect)}";
     private static string GetContextVarName(AspectInfo aspect) => $"__ctx_{SafeName(aspect)}";
-    private static string GetCachedHandlerFieldName(AspectInfo aspect) => $"__cachedHandler_{SafeName(aspect)}";
 
     private static void EmitRuntimeHandlerBefore(StringBuilder sb, InterceptedClassModel classModel, InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
         var handlerVar = GetHandlerVarName(aspect);
         var ctxVar = GetContextVarName(aspect);
 
-        var cachedField = GetCachedHandlerFieldName(aspect);
-        sb.AppendLine($"{indent}var {handlerVar} = {cachedField}.GetValue(@this, static _ => global::ZibStack.NET.Aop.AspectServiceProvider.Resolve<{aspect.HandlerTypeName}>()!);");
+        sb.AppendLine($"{indent}var {handlerVar} = global::ZibStack.NET.Aop.AspectServiceProvider.Resolve<{aspect.HandlerTypeName}>();");
         sb.AppendLine($"{indent}var {ctxVar} = new global::ZibStack.NET.Aop.AspectContext");
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{indent}    ClassName = \"{classModel.ClassName}\",");

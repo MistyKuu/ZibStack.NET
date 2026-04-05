@@ -19,3 +19,5 @@ public class LoggingTimingRecorder : ITimingRecorder
             className, methodName, elapsedMilliseconds);
     }
 }
+
+

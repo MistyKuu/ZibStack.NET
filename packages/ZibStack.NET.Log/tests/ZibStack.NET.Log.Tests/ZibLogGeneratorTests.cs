@@ -17,49 +17,8 @@ public class ZibLogGeneratorTests
 
         Assert.Empty(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
 
-        // Attributes come from ZibStack.NET.Log.Abstractions, not injected by generator
         var sourceNames = generatedSources.Select(s => s.HintName).ToList();
-        Assert.DoesNotContain("ZibLogAttribute.g.cs", sourceNames);
-    }
-
-    [Fact]
-    public void Generator_ReportsError_WhenNoLoggerField()
-    {
-        var source = @"
-using ZibStack.NET.Log;
-
-[ZibLog]
-public class MyService
-{
-    [Log]
-    public void DoWork() { }
-}
-";
-        var (_, diagnostics, _) = RunGenerator(source);
-
-        Assert.Contains(diagnostics, d => d.Id == "SL0002");
-    }
-
-    [Fact]
-    public void Generator_ReportsError_WhenMultipleLoggerFields()
-    {
-        var source = @"
-using ZibStack.NET.Log;
-using Microsoft.Extensions.Logging;
-
-[ZibLog]
-public class MyService
-{
-    private readonly ILogger<MyService> _logger;
-    private readonly ILogger _otherLogger;
-
-    [Log]
-    public void DoWork() { }
-}
-";
-        var (_, diagnostics, _) = RunGenerator(source);
-
-        Assert.Contains(diagnostics, d => d.Id == "SL0003");
+        Assert.DoesNotContain("LogAttribute.g.cs", sourceNames);
     }
 
     [Fact]
@@ -67,13 +26,9 @@ public class MyService
     {
         var source = @"
 using ZibStack.NET.Log;
-using Microsoft.Extensions.Logging;
 
-[ZibLog]
 public class MyService
 {
-    private readonly ILogger<MyService> _logger;
-
     [Log]
     public static void DoWork() { }
 }
@@ -88,13 +43,9 @@ public class MyService
     {
         var source = @"
 using ZibStack.NET.Log;
-using Microsoft.Extensions.Logging;
 
-[ZibLog]
 public class MyService
 {
-    private readonly ILogger<MyService> _logger;
-
     [Log]
     public string GetValue(int id)
     {
@@ -113,31 +64,8 @@ public class Consumer
 ";
         var (_, diagnostics, generatedSources) = RunGenerator(source);
 
-        // Generator should run without critical errors (some compilation errors expected in test stubs)
         var generatedNames = generatedSources.Select(s => s.HintName).ToList();
-        // Attributes come from Abstractions, not injected
-        Assert.DoesNotContain("ZibLogAttribute.g.cs", generatedNames);
-    }
-
-    [Fact]
-    public void Generator_ReportsError_WhenSpecifiedLoggerFieldNotFound()
-    {
-        var source = @"
-using ZibStack.NET.Log;
-using Microsoft.Extensions.Logging;
-
-[ZibLog(LoggerField = ""_nonExistent"")]
-public class MyService
-{
-    private readonly ILogger<MyService> _logger;
-
-    [Log]
-    public void DoWork() { }
-}
-";
-        var (_, diagnostics, _) = RunGenerator(source);
-
-        Assert.Contains(diagnostics, d => d.Id == "SL0006");
+        Assert.DoesNotContain("LogAttribute.g.cs", generatedNames);
     }
 
     private static (Compilation compilation, ImmutableArray<Diagnostic> diagnostics, ImmutableArray<(string HintName, string Source)> generatedSources)
@@ -149,13 +77,10 @@ public class MyService
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
-            // ZibStack.NET.Log.Abstractions — provides [ZibLog], [Log], etc.
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.ZibLogAttribute).Assembly.Location),
-            // ZibStack.NET.Aop.Abstractions — [Log] derives from AspectAttribute
+            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.LogAttribute).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
         };
 
-        // Add System.Runtime
         var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
         var systemRuntime = Path.Combine(runtimeDir, "System.Runtime.dll");
         if (File.Exists(systemRuntime))
@@ -165,7 +90,6 @@ public class MyService
         if (File.Exists(netstandard))
             references.Add(MetadataReference.CreateFromFile(netstandard));
 
-        // Try to add Microsoft.Extensions.Logging.Abstractions
         var loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
             .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
         if (loggingAbstractions is not null)
@@ -174,7 +98,6 @@ public class MyService
         }
         else
         {
-            // Add a stub ILogger interface for compilation
             var loggerStub = CSharpSyntaxTree.ParseText(@"
 namespace Microsoft.Extensions.Logging
 {
@@ -183,7 +106,6 @@ namespace Microsoft.Extensions.Logging
     public interface ILogger<out T> : ILogger { }
 }
 ");
-            references.Add(MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
             syntaxTree = CSharpSyntaxTree.ParseText(source + loggerStub.ToString());
         }
 
