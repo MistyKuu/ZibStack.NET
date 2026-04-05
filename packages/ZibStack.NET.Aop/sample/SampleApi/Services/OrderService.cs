@@ -1,4 +1,4 @@
-using ZibStack.NET.Aop.Aspects;
+using ZibStack.NET.Aop.Sample.Aspects;
 
 namespace ZibStack.NET.Aop.Sample.Services;
 
@@ -26,11 +26,10 @@ public class OrderService
     }
 }
 
-[RequirePermission]
+[Timing]
 public class OrderService2
 {
     public void Debug(int a)
     {
-        
     }
 }

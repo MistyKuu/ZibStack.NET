@@ -1,21 +1,28 @@
 using ZibStack.NET.Aop;
-using ZibStack.NET.Aop.Aspects;
 
 namespace ZibStack.NET.Aop.Sample.Aspects;
 
-/// <summary>
-/// Custom timing recorder that uses ILogger via DI.
-/// No more static events needed!
-/// </summary>
-public class LoggingTimingRecorder : ITimingRecorder
+[AspectHandler(typeof(TimingHandler))]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+public sealed class TimingAttribute : AspectAttribute { }
+
+public sealed class TimingHandler : IAspectHandler
 {
-    private readonly ILogger<LoggingTimingRecorder> _logger;
+    private readonly ILogger<TimingHandler> _logger;
 
-    public LoggingTimingRecorder(ILogger<LoggingTimingRecorder> logger) => _logger = logger;
+    public TimingHandler(ILogger<TimingHandler> logger) => _logger = logger;
 
-    public void Record(string className, string methodName, long elapsedMilliseconds)
+    public void OnBefore(AspectContext context) { }
+
+    public void OnAfter(AspectContext context)
     {
         _logger.LogInformation("[Timing] {Class}.{Method} completed in {Ms}ms",
-            className, methodName, elapsedMilliseconds);
+            context.ClassName, context.MethodName, context.ElapsedMilliseconds);
+    }
+
+    public void OnException(AspectContext context, Exception exception)
+    {
+        _logger.LogWarning("[Timing] {Class}.{Method} failed after {Ms}ms",
+            context.ClassName, context.MethodName, context.ElapsedMilliseconds);
     }
 }
