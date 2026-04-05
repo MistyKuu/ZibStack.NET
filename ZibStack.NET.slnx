@@ -1,5 +1,13 @@
 <Solution>
   <Folder Name="/packages/" />
+  <Folder Name="/packages/ZibStack.NET.Aop/" />
+  <Folder Name="/packages/ZibStack.NET.Aop/sample/">
+    <Project Path="packages/ZibStack.NET.Aop/sample/SampleApi/SampleApi.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Aop/src/">
+    <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Abstractions/ZibStack.NET.Aop.Abstractions.csproj" />
+    <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop/ZibStack.NET.Aop.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Dto/" />
   <Folder Name="/packages/ZibStack.NET.Dto/sample/">
     <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />

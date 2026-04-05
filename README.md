@@ -7,6 +7,7 @@ A collection of .NET source generators and utilities for common application conc
 | Package | NuGet | Description |
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
+| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Define custom aspects via `IAspectHandler` with `OnBefore`/`OnAfter`/`OnException` hooks. |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for strongly-typed Create and Update request DTOs with PatchField support. |
 
 ## Quick Examples
@@ -32,6 +33,28 @@ public class OrderService
 _logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
 ```
 
+### ZibStack.NET.Aop
+
+```csharp
+// Define a custom aspect — just a class + attribute:
+[AspectHandler(typeof(TimingHandler))]
+public class TimingAttribute : AspectAttribute { }
+
+public class TimingHandler : IAspectHandler
+{
+    public void OnBefore(AspectContext ctx)
+        => Console.WriteLine($"Starting {ctx.MethodName}({ctx.FormatParameters()})");
+    public void OnAfter(AspectContext ctx)
+        => Console.WriteLine($"Completed {ctx.MethodName} in {ctx.ElapsedMilliseconds}ms");
+    public void OnException(AspectContext ctx, Exception ex)
+        => Console.WriteLine($"Failed {ctx.MethodName}: {ex.Message}");
+}
+
+// Apply it:
+[Timing]
+public Order GetOrder(int id) { ... }
+```
+
 ### ZibStack.NET.Dto
 
 ```csharp
@@ -46,6 +69,9 @@ public partial class PlayerDto { }
 ```
 ZibStack.NET/
 ├── packages/
+│   ├── ZibStack.NET.Aop/          → AOP framework (aspects, interceptors)
+│   │   ├── src/                   → Generator + Abstractions
+│   │   └── sample/                → Sample with custom aspects
 │   ├── ZibStack.NET.Log/          → Logging source generator
 │   │   ├── src/                   → Generator + Abstractions
 │   │   ├── tests/                 → Unit tests + Benchmarks
@@ -56,6 +82,7 @@ ZibStack.NET/
 │       └── sample/                → Sample API
 ├── .github/workflows/
 │   ├── ci.yml                     → Builds & tests all packages
+│   ├── release-aop.yml            → Release ZibStack.NET.Aop to NuGet
 │   ├── release-log.yml            → Release ZibStack.NET.Log to NuGet
 │   └── release-dto.yml            → Release ZibStack.NET.Dto to NuGet
 └── ZibStack.NET.slnx

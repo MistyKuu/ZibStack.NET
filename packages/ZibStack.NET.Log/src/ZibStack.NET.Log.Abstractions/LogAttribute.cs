@@ -1,3 +1,5 @@
+using ZibStack.NET.Aop;
+
 namespace ZibStack.NET.Log;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace ZibStack.NET.Log;
 /// that logs method entry, exit, parameters, return values, and exceptions.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
-public sealed class LogAttribute : Attribute
+public sealed class LogAttribute : AspectAttribute
 {
     /// <summary>
     /// Log level for entry/exit messages. Use <see cref="ZibLogLevel"/> constants.

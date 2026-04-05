@@ -26,3 +26,5 @@ jobs:
 
       - name: Test Dto
         run: dotnet test packages/ZibStack.NET.Dto/tests/ZibStack.NET.Dto.Tests/ZibStack.NET.Dto.Tests.csproj -c Release --no-build
+
+      # Aop has no unit tests yet — build verification only

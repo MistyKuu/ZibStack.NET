@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <PackageId>ZibStack.NET.Aop.Abstractions</PackageId>
+    <Description>AOP framework attributes and interfaces for ZibStack.NET. Define custom aspects with IAspectHandler.</Description>
+    <Authors>$(Authors)</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
+    <PackageTags>aop;aspects;interceptors;source-generator;csharp</PackageTags>
+  </PropertyGroup>
+
+</Project>
