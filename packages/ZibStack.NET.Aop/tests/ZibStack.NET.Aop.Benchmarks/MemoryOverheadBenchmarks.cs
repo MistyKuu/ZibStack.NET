@@ -10,7 +10,7 @@ namespace ZibStack.NET.Aop.Benchmarks;
 /// does the per-instance handler cache cost?"
 /// </summary>
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net100)]
+[SimpleJob(RuntimeMoniker.Net80)]
 public class MemoryOverheadBenchmarks
 {
     public sealed class FakeHandler { public int Id; }

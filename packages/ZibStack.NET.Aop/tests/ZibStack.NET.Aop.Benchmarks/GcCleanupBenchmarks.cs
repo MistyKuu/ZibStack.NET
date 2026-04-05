@@ -8,7 +8,7 @@ namespace ZibStack.NET.Aop.Benchmarks;
 /// Validates ConditionalWeakTable releases entries after GC at scale.
 /// Creates many instances, drops references, verifies cleanup.
 /// </summary>
-[SimpleJob(RuntimeMoniker.Net100, iterationCount: 3, warmupCount: 1)]
+[SimpleJob(RuntimeMoniker.Net80, iterationCount: 3, warmupCount: 1)]
 [MemoryDiagnoser]
 public class GcCleanupBenchmarks
 {
