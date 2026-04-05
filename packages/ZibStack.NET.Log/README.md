@@ -288,7 +288,7 @@ ZibStack.NET.Log is a **Roslyn source generator** that runs at compile time:
 1. Finds classes marked with `[ZibStack.Log]` and methods marked with `[Log]`
 2. Scans all call-sites in your project where those methods are invoked
 3. Generates **C# interceptors** (`[InterceptsLocation]`) that redirect each call-site to a logging wrapper
-4. The wrapper uses `LoggerMessage.Define` (zero-allocation) and `UnsafeAccessor` (zero-overhead field access)
+4. The wrapper uses `LoggerMessage.Define` (zero-allocation) and DI-resolved logger (cached after first call)
 
 ```
 Your code                          Generated interceptor
@@ -380,7 +380,7 @@ Set defaults for all `[Log]` methods in the assembly. Per-method properties over
 
 ## Requirements
 
-- **.NET 8.0** or later (uses `UnsafeAccessor` and interceptors)
+- **.NET 8.0** or later (uses interceptors)
 - `<InterceptorsPreviewNamespaces>ZibStack.Generated</InterceptorsPreviewNamespaces>` in `.csproj`
 
 ## Roadmap

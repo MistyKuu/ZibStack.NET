@@ -9,13 +9,8 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </summary>
 /// <example>
 /// <code>
-/// // Option 1 — DI:
 /// builder.Services.AddSingleton&lt;IExceptionObserver, MyExceptionLogger&gt;();
 /// builder.Services.AddTransient&lt;SuppressExceptionHandler&gt;();
-///
-/// // Option 2 — static event:
-/// SuppressExceptionHandler.OnExceptionSuppressed += (ctx, ex)
-///     =&gt; Console.WriteLine($"Suppressed {ex.GetType().Name} in {ctx.MethodName}");
 ///
 /// [SuppressException]
 /// public Order? GetOrder(int id) { ... }
@@ -37,18 +32,12 @@ public interface IExceptionObserver
 }
 
 /// <summary>
-/// Built-in exception suppression handler. Uses <see cref="IExceptionObserver"/> from DI when available,
-/// otherwise falls back to <see cref="OnExceptionSuppressed"/> static event.
+/// Built-in exception suppression handler. Uses <see cref="IExceptionObserver"/> from DI.
 /// Note: Cannot actually prevent re-throw in current pipeline — observability only.
 /// </summary>
 public sealed class SuppressExceptionHandler : IAspectHandler
 {
-    private readonly IExceptionObserver? _observer;
-
-    /// <summary>Static event fallback. Used when DI is not configured.</summary>
-    public static event Action<AspectContext, Exception>? OnExceptionSuppressed;
-
-    public SuppressExceptionHandler() { }
+    private readonly IExceptionObserver _observer;
 
     public SuppressExceptionHandler(IExceptionObserver observer) => _observer = observer;
 
@@ -57,9 +46,6 @@ public sealed class SuppressExceptionHandler : IAspectHandler
 
     public void OnException(AspectContext context, Exception exception)
     {
-        if (_observer != null)
-            _observer.OnException(context, exception);
-        else
-            OnExceptionSuppressed?.Invoke(context, exception);
+        _observer.OnException(context, exception);
     }
 }
