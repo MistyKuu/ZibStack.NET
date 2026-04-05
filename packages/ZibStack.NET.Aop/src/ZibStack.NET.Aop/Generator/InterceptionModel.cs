@@ -133,6 +133,12 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
     /// <summary>Whether the handler implements IAsyncAspectHandler (vs IAspectHandler).</summary>
     public bool IsAsyncHandler { get; }
 
+    /// <summary>Whether the handler implements IAroundAspectHandler or IAsyncAroundAspectHandler.</summary>
+    public bool IsAroundHandler { get; }
+
+    /// <summary>Whether the around handler is async (IAsyncAroundAspectHandler).</summary>
+    public bool IsAsyncAroundHandler { get; }
+
     /// <summary>
     /// Return-value attributes: [return: Sensitive], [return: NoLog]
     /// </summary>
@@ -143,6 +149,8 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
         IReadOnlyDictionary<string, object?> properties,
         string? handlerTypeName = null,
         bool isAsyncHandler = false,
+        bool isAroundHandler = false,
+        bool isAsyncAroundHandler = false,
         bool sensitiveReturn = false, bool noLogReturn = false)
     {
         AttributeFullName = attributeFullName;
@@ -150,6 +158,8 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
         Properties = properties;
         HandlerTypeName = handlerTypeName;
         IsAsyncHandler = isAsyncHandler;
+        IsAroundHandler = isAroundHandler;
+        IsAsyncAroundHandler = isAsyncAroundHandler;
         SensitiveReturn = sensitiveReturn;
         NoLogReturn = noLogReturn;
     }

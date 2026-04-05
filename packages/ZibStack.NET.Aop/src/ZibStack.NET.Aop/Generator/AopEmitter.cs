@@ -121,8 +121,12 @@ public static class AopEmitter
 
         var indent = "            ";
 
-        // Ordered aspects: OnBefore (ascending order)
-        foreach (var aspect in method.Aspects)
+        // Separate aspects into before/after handlers and around handlers
+        var beforeAfterAspects = method.Aspects.Where(a => !a.IsAroundHandler).ToList();
+        var aroundAspects = method.Aspects.Where(a => a.IsAroundHandler).ToList();
+
+        // Emit OnBefore for non-around aspects (ascending order)
+        foreach (var aspect in beforeAfterAspects)
         {
             if (emitters.TryGetValue(aspect.AttributeFullName, out var emitter))
                 emitter.EmitBefore(sb, classModel, method, aspect, indent);
@@ -132,24 +136,97 @@ public static class AopEmitter
 
         sb.AppendLine();
         sb.AppendLine($"{indent}var __sw = global::System.Diagnostics.Stopwatch.StartNew();");
-        sb.AppendLine($"{indent}try");
-        sb.AppendLine($"{indent}{{");
 
-        // Call original
+        // Build the proceed chain for around handlers
         var callArgs = string.Join(", ", method.Parameters.Select(p => p.Name));
         var originalCall = $"@this.{method.MethodName}({callArgs})";
-        if (method.IsAsync)
-            originalCall = $"await {originalCall}.ConfigureAwait(false)";
 
-        if (method.ReturnsVoid)
-            sb.AppendLine($"{indent}    {originalCall};");
+        if (aroundAspects.Count > 0)
+        {
+            // Build nested Around calls: outermost around wraps inner, innermost wraps original call
+            if (method.IsAsync)
+            {
+                // Async: Func<ValueTask<object?>>
+                sb.AppendLine($"{indent}global::System.Func<global::System.Threading.Tasks.ValueTask<object?>> __proceed = async () =>");
+                sb.AppendLine($"{indent}{{");
+                if (method.ReturnsVoid)
+                {
+                    sb.AppendLine($"{indent}    await {originalCall}.ConfigureAwait(false);");
+                    sb.AppendLine($"{indent}    return null;");
+                }
+                else
+                    sb.AppendLine($"{indent}    return await {originalCall}.ConfigureAwait(false);");
+                sb.AppendLine($"{indent}}};");
+
+                // Wrap with each around handler (innermost first, outermost last)
+                foreach (var aspect in aroundAspects)
+                {
+                    var handlerVar = GetHandlerVarName(aspect);
+                    var ctxVar = GetContextVarName(aspect);
+                    sb.AppendLine($"{indent}var __prevProceed_{handlerVar} = __proceed;");
+                    if (aspect.IsAsyncAroundHandler)
+                        sb.AppendLine($"{indent}__proceed = () => {handlerVar}.AroundAsync({ctxVar}, __prevProceed_{handlerVar});");
+                    else
+                        sb.AppendLine($"{indent}__proceed = () => new global::System.Threading.Tasks.ValueTask<object?>({handlerVar}.Around({ctxVar}, () => __prevProceed_{handlerVar}().GetAwaiter().GetResult()));");
+                }
+
+                // Execute the chain
+                sb.AppendLine($"{indent}try");
+                sb.AppendLine($"{indent}{{");
+                if (method.ReturnsVoid)
+                    sb.AppendLine($"{indent}    await __proceed().ConfigureAwait(false);");
+                else
+                    sb.AppendLine($"{indent}    var __result = ({method.ReturnType})await __proceed().ConfigureAwait(false);");
+            }
+            else
+            {
+                // Sync: Func<object?>
+                sb.AppendLine($"{indent}global::System.Func<object?> __proceed = () =>");
+                sb.AppendLine($"{indent}{{");
+                if (method.ReturnsVoid)
+                {
+                    sb.AppendLine($"{indent}    {originalCall};");
+                    sb.AppendLine($"{indent}    return null;");
+                }
+                else
+                    sb.AppendLine($"{indent}    return {originalCall};");
+                sb.AppendLine($"{indent}}};");
+
+                foreach (var aspect in aroundAspects)
+                {
+                    var handlerVar = GetHandlerVarName(aspect);
+                    var ctxVar = GetContextVarName(aspect);
+                    sb.AppendLine($"{indent}var __prevProceed_{handlerVar} = __proceed;");
+                    sb.AppendLine($"{indent}__proceed = () => {handlerVar}.Around({ctxVar}, __prevProceed_{handlerVar});");
+                }
+
+                sb.AppendLine($"{indent}try");
+                sb.AppendLine($"{indent}{{");
+                if (method.ReturnsVoid)
+                    sb.AppendLine($"{indent}    __proceed();");
+                else
+                    sb.AppendLine($"{indent}    var __result = ({method.ReturnType})__proceed()!;");
+            }
+        }
         else
-            sb.AppendLine($"{indent}    var __result = {originalCall};");
+        {
+            // No around handlers — direct call (original behavior)
+            sb.AppendLine($"{indent}try");
+            sb.AppendLine($"{indent}{{");
+
+            if (method.IsAsync)
+                originalCall = $"await {originalCall}.ConfigureAwait(false)";
+
+            if (method.ReturnsVoid)
+                sb.AppendLine($"{indent}    {originalCall};");
+            else
+                sb.AppendLine($"{indent}    var __result = {originalCall};");
+        }
 
         sb.AppendLine($"{indent}    __sw.Stop();");
 
-        // Ordered aspects: OnAfter (reversed)
-        foreach (var aspect in method.Aspects.Reverse())
+        // OnAfter for non-around aspects (reversed)
+        foreach (var aspect in beforeAfterAspects.AsEnumerable().Reverse())
         {
             if (emitters.TryGetValue(aspect.AttributeFullName, out var emitter))
                 emitter.EmitAfter(sb, classModel, method, aspect, indent + "    ");
@@ -165,8 +242,8 @@ public static class AopEmitter
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{indent}    __sw.Stop();");
 
-        // Ordered aspects: OnException (reversed)
-        foreach (var aspect in method.Aspects.Reverse())
+        // OnException for non-around aspects (reversed)
+        foreach (var aspect in beforeAfterAspects.AsEnumerable().Reverse())
         {
             if (emitters.TryGetValue(aspect.AttributeFullName, out var emitter))
                 emitter.EmitOnException(sb, classModel, method, aspect, indent + "    ");

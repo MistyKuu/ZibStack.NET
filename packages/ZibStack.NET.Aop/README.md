@@ -61,6 +61,44 @@ SuppressExceptionHandler.OnExceptionSuppressed += (ctx, ex) =>
 public Order? TryGetOrder(int id) { ... }
 ```
 
+### [Retry] — automatic retry with backoff
+
+```csharp
+[Retry(MaxAttempts = 3, DelayMs = 100)]
+public Order GetOrder(int id) { ... }
+
+// Exponential backoff: 100ms, 200ms, 400ms
+[Retry(MaxAttempts = 4, DelayMs = 100, BackoffMultiplier = 2.0)]
+public async Task<Order> GetOrderAsync(int id) { ... }
+```
+
+### [Cache] — in-memory caching
+
+```csharp
+[Cache(DurationSeconds = 60)]
+public Order GetOrder(int id) { ... }
+// First call: executes, caches result
+// Same params again: returns cached (no execution)
+
+// Invalidate:
+CacheHandler.Invalidate("GetOrder");
+CacheHandler.ClearAll();
+```
+
+### [Authorize] — authorization check
+
+```csharp
+// Setup once at startup:
+AuthorizeHandler.AuthorizationCheck = (ctx, policy) =>
+    currentUser.HasPermission(policy ?? ctx.MethodName);
+
+[Authorize]
+public void DeleteOrder(int id) { ... }  // checks "DeleteOrder" permission
+
+[Authorize(Policy = "Admin")]
+public void PurgeAllData() { ... }  // checks "Admin" permission
+```
+
 ## Custom Aspects
 
 ### Sync handler (works on sync + async methods)
@@ -77,6 +115,38 @@ public class MyHandler : IAspectHandler
         => Console.WriteLine($"After {ctx.MethodName} in {ctx.ElapsedMilliseconds}ms");
     public void OnException(AspectContext ctx, Exception ex)
         => Console.WriteLine($"Error in {ctx.MethodName}: {ex.Message}");
+}
+```
+
+### Around handler — full control over execution
+
+Use `IAroundAspectHandler` to wrap the method call. You control whether to call, how many times, and what to return:
+
+```csharp
+[AspectHandler(typeof(CircuitBreakerHandler))]
+public class CircuitBreakerAttribute : AspectAttribute { }
+
+public class CircuitBreakerHandler : IAroundAspectHandler
+{
+    private static int _failures;
+
+    public object? Around(AspectContext ctx, Func<object?> proceed)
+    {
+        if (_failures > 5)
+            throw new Exception("Circuit open — too many failures");
+
+        try
+        {
+            var result = proceed();
+            _failures = 0;
+            return result;
+        }
+        catch
+        {
+            _failures++;
+            throw;
+        }
+    }
 }
 ```
 

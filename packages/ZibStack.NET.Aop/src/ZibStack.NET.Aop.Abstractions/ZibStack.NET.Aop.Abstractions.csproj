@@ -18,6 +18,7 @@
   <!-- IAsyncAspectHandler and Trace aspect need .NET 8+ features -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <Compile Remove="IAsyncAspectHandler.cs" />
+    <Compile Remove="IAsyncAroundAspectHandler.cs" />
     <Compile Remove="Aspects\TraceAttribute.cs" />
   </ItemGroup>
 

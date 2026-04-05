@@ -7,7 +7,7 @@ A collection of .NET source generators and utilities for common application conc
 | Package | NuGet | Description |
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
-| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in aspects: `[Trace]` (OpenTelemetry), `[Timing]`, `[SuppressException]`. Custom aspects via `IAspectHandler`/`IAsyncAspectHandler`. |
+| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in: `[Retry]`, `[Cache]`, `[Authorize]`, `[Trace]`, `[Timing]`. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for strongly-typed Create and Update request DTOs with PatchField support. |
 
 ## Quick Examples
