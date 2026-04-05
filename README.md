@@ -132,6 +132,12 @@ ZibStack.NET/
 └── ZibStack.NET.slnx
 ```
 
+## Support
+
+If you find ZibStack.NET useful, consider buying me a coffee:
+
+<a href="https://buymeacoffee.com/mistykuu" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
+
 ## License
 
 MIT
