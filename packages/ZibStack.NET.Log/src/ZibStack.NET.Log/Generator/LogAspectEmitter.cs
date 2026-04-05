@@ -43,6 +43,12 @@ internal sealed class LogAspectEmitter : IAspectEmitter
                 sb.AppendLine($"{indent}private static extern ref {loggerFieldType} __GetLogger({cls.ClassName} @this);");
                 sb.AppendLine();
             }
+            else
+            {
+                // Cached DI-resolved logger — resolved once, same perf as UnsafeAccessor after first call
+                sb.AppendLine($"{indent}private static global::Microsoft.Extensions.Logging.ILogger? __cachedLogger;");
+                sb.AppendLine();
+            }
 
             // Emit sanitizer methods for types with [Sensitive]/[NoLog] properties
             var emittedSanitizers = new HashSet<string>();
@@ -111,7 +117,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         }
         else
         {
-            sb.AppendLine($"{indent}var __logger = (global::Microsoft.Extensions.Logging.ILogger)global::ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider!.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
+            sb.AppendLine($"{indent}var __logger = __cachedLogger ??= (global::Microsoft.Extensions.Logging.ILogger)global::ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider!.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
         }
 
         if (loggable.Count <= 6)
