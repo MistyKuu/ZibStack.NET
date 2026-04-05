@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/packages/" />
+  <Folder Name="/packages/ZibStack.NET.Dto/" />
+  <Folder Name="/packages/ZibStack.NET.Dto/sample/">
+    <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Dto/src/">
+    <Project Path="packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Dto/tests/">
+    <Project Path="packages/ZibStack.NET.Dto/tests/ZibStack.NET.Dto.Tests/ZibStack.NET.Dto.Tests.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Log/" />
+  <Folder Name="/packages/ZibStack.NET.Log/sample/">
+    <Project Path="packages/ZibStack.NET.Log/sample/SampleApi/SampleApi.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Log/src/">
+    <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log.Abstractions/ZibStack.NET.Log.Abstractions.csproj" />
+    <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log/ZibStack.NET.Log.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Log/tests/">
+    <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj" />
+    <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Tests/ZibStack.NET.Log.Tests.csproj" />
+  </Folder>
+</Solution>
