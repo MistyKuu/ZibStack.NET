@@ -65,7 +65,7 @@ public static class AopEmitter
         sb.AppendLine($"    internal static class __{classModel.ClassName}_Aop");
         sb.AppendLine("    {");
 
-        // Cached static fields for runtime handlers (resolve once from DI)
+        // Per-instance handler cache (ConditionalWeakTable — entries removed when instance is GC'd)
         var emittedHandlerFields = new HashSet<string>();
         foreach (var method in classModel.Methods)
         {
@@ -75,7 +75,7 @@ public static class AopEmitter
                     && emittedHandlerFields.Add(aspect.AttributeFullName))
                 {
                     var fieldName = GetCachedHandlerFieldName(aspect);
-                    sb.AppendLine($"        private static {aspect.HandlerTypeName}? {fieldName};");
+                    sb.AppendLine($"        private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<{classModel.ClassName}, {aspect.HandlerTypeName}> {fieldName} = new();");
                 }
             }
         }
@@ -287,7 +287,7 @@ public static class AopEmitter
         var ctxVar = GetContextVarName(aspect);
 
         var cachedField = GetCachedHandlerFieldName(aspect);
-        sb.AppendLine($"{indent}var {handlerVar} = {cachedField} ??= global::ZibStack.NET.Aop.AspectServiceProvider.Resolve<{aspect.HandlerTypeName}>()!;");
+        sb.AppendLine($"{indent}var {handlerVar} = {cachedField}.GetValue(@this, static _ => global::ZibStack.NET.Aop.AspectServiceProvider.Resolve<{aspect.HandlerTypeName}>()!);");
         sb.AppendLine($"{indent}var {ctxVar} = new global::ZibStack.NET.Aop.AspectContext");
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{indent}    ClassName = \"{classModel.ClassName}\",");
