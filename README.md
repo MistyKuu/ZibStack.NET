@@ -31,6 +31,9 @@ public class OrderService
 
 // Interpolated string logging:
 _logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
+
+// Assembly-level defaults:
+[assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
 ```
 
 ### ZibStack.NET.Aop
