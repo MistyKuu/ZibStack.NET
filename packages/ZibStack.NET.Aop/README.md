@@ -35,6 +35,21 @@ AspectServiceProvider.ServiceProvider = app.Services;
 
 Now any method with aspects will resolve its handler from DI.
 
+## Benchmarks
+
+Runtime handler overhead per call, measured with BenchmarkDotNet on .NET 10.0:
+
+| Method | Mean | Allocated |
+|---|---:|---:|
+| Direct call (no AOP) | 0.2 ns | 0 B |
+| No params (zero-alloc) | 17.4 ns | 104 B |
+| **1 runtime handler** | **73.7 ns** | **360 B** |
+| **2 stacked handlers** | **106.0 ns** | **672 B** |
+
+~74ns + 360B per handler per call. For typical API endpoints (1-10ms), this is <0.01% overhead.
+
+For hot paths, use an **inline emitter** (`[Log]` does this) — see [Inline Emitters vs Runtime Handlers](#inline-emitters-vs-runtime-handlers).
+
 ## Custom Aspects
 
 ### Sync handler (works on sync + async methods)

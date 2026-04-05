@@ -73,23 +73,23 @@ _logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
 
 ## Benchmarks
 
-Overhead of calling a simple `int Add(int a, int b) => a + b;` method with logging, measured with BenchmarkDotNet on .NET 10.0:
+Overhead of calling `int Add(int a, int b) => a + b;` with logging, BenchmarkDotNet on .NET 10.0:
 
-| Method | What it does | Mean | Allocated |
-|---|---|---:|---:|
-| No logging | `a + b` directly, no logging | 0.04 ns | 0 B |
-| **ZibStack.Log `[Log]` no stopwatch** | `[Log(MeasureElapsed = false)]` — entry + exit log | **8.8 ns** | **24 B** |
-| Manual `LoggerMessage.Define` (level OFF) | Hand-written `LoggerMessage.Define`, log level disabled | 33.0 ns | 0 B |
-| ZibStack.Log `[Log]` (level OFF) | `[Log]` with log level disabled — only `IsEnabled` check | 37.0 ns | 64 B |
-| **Manual `LoggerMessage.Define`** | Hand-written `LoggerMessage.Define` with entry + exit + stopwatch | **38.2 ns** | **0 B** |
-| **ZibStack.Log `[Log]`** | `[Log]` — auto entry + exit + stopwatch + params | **46.9 ns** | **64 B** |
-| Manual `ILogger.Log()` (level OFF) | `_logger.LogInformation("...", args)`, level disabled | 67.8 ns | 176 B |
-| Manual `ILogger.Log()` | `_logger.LogInformation("...", args)` with string formatting | 81.6 ns | 176 B |
+| Method | Mean | Allocated |
+|---|---:|---:|
+| No logging (baseline) | 0.0 ns | 0 B |
+| Manual `LoggerMessage.Define` (level OFF) | 34.0 ns | 0 B |
+| Manual `LoggerMessage.Define` | 40.4 ns | 0 B |
+| **ZibStack.Log `[Log]` (level OFF)** | **45.5 ns** | **64 B** |
+| **ZibStack.Log `[Log]` no stopwatch** | **47.1 ns** | **64 B** |
+| **ZibStack.Log `[Log]`** | **48.9 ns** | **64 B** |
+| Manual `ILogger.Log()` (level OFF) | 75.9 ns | 176 B |
+| Manual `ILogger.Log()` | 109.5 ns | 176 B |
 
-- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** (47 ns vs 38 ns) — same ballpark
-- **1.7x faster** than `_logger.LogInformation()` (47 ns vs 82 ns)
+- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~49 ns vs ~40 ns)
+- **2.2x faster** than `_logger.LogInformation()` (49 ns vs 110 ns)
 - **2.8x less memory** than `_logger.LogInformation()` (64 B vs 176 B)
-- With `MeasureElapsed = false`: only **8.8 ns** overhead
+- When log level OFF: ~45 ns (just DI resolve + `IsEnabled` check)
 
 ## Features
 
