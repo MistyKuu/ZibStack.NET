@@ -9,9 +9,13 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </summary>
 /// <example>
 /// <code>
-/// // Currently useful for observability — logs/records that an exception was suppressed:
+/// // Option 1 — DI:
+/// builder.Services.AddSingleton&lt;IExceptionObserver, MyExceptionLogger&gt;();
+/// builder.Services.AddTransient&lt;SuppressExceptionHandler&gt;();
+///
+/// // Option 2 — static event:
 /// SuppressExceptionHandler.OnExceptionSuppressed += (ctx, ex)
-///     => Console.WriteLine($"Suppressed {ex.GetType().Name} in {ctx.MethodName}");
+///     =&gt; Console.WriteLine($"Suppressed {ex.GetType().Name} in {ctx.MethodName}");
 ///
 /// [SuppressException]
 /// public Order? GetOrder(int id) { ... }
@@ -24,19 +28,38 @@ public sealed class SuppressExceptionAttribute : AspectAttribute
 }
 
 /// <summary>
-/// Built-in exception suppression handler. Raises an event when exceptions occur.
+/// Receives exception notifications from <see cref="SuppressExceptionHandler"/>.
+/// Register your implementation in DI to observe suppressed exceptions.
+/// </summary>
+public interface IExceptionObserver
+{
+    void OnException(AspectContext context, Exception exception);
+}
+
+/// <summary>
+/// Built-in exception suppression handler. Uses <see cref="IExceptionObserver"/> from DI when available,
+/// otherwise falls back to <see cref="OnExceptionSuppressed"/> static event.
 /// Note: Cannot actually prevent re-throw in current pipeline — observability only.
 /// </summary>
 public sealed class SuppressExceptionHandler : IAspectHandler
 {
-    /// <summary>Event raised when an exception is caught. For observability.</summary>
+    private readonly IExceptionObserver? _observer;
+
+    /// <summary>Static event fallback. Used when DI is not configured.</summary>
     public static event Action<AspectContext, Exception>? OnExceptionSuppressed;
+
+    public SuppressExceptionHandler() { }
+
+    public SuppressExceptionHandler(IExceptionObserver observer) => _observer = observer;
 
     public void OnBefore(AspectContext context) { }
     public void OnAfter(AspectContext context) { }
 
     public void OnException(AspectContext context, Exception exception)
     {
-        OnExceptionSuppressed?.Invoke(context, exception);
+        if (_observer != null)
+            _observer.OnException(context, exception);
+        else
+            OnExceptionSuppressed?.Invoke(context, exception);
     }
 }

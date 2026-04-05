@@ -35,15 +35,16 @@ Parameters are added as span tags. Exceptions set error status + add exception e
 
 ### [Timing] — lightweight metrics
 
-Records method execution time via a static event. No external dependencies.
+Records method execution time. Supports DI with `ITimingRecorder` or static event fallback.
 
 ```csharp
-// Subscribe to timing events:
+// Option 1 — DI (recommended):
+builder.Services.AddSingleton<ITimingRecorder, MyMetricsRecorder>();
+builder.Services.AddTransient<TimingHandler>();
+
+// Option 2 — static event (no DI needed):
 TimingHandler.OnTimingRecorded += (className, methodName, elapsedMs) =>
-{
     Console.WriteLine($"{className}.{methodName}: {elapsedMs}ms");
-    // or: myMetrics.RecordHistogram("method_duration", elapsedMs, methodName);
-};
 
 [Timing]
 public Order GetOrder(int id) { ... }
@@ -51,9 +52,14 @@ public Order GetOrder(int id) { ... }
 
 ### [SuppressException] — exception observability
 
-Fires an event when a method throws. Useful for recording exceptions without changing control flow.
+Fires when a method throws. Supports DI with `IExceptionObserver` or static event fallback.
 
 ```csharp
+// Option 1 — DI:
+builder.Services.AddSingleton<IExceptionObserver, MyExceptionLogger>();
+builder.Services.AddTransient<SuppressExceptionHandler>();
+
+// Option 2 — static event:
 SuppressExceptionHandler.OnExceptionSuppressed += (ctx, ex) =>
     logger.LogWarning(ex, "Exception in {Method}", ctx.MethodName);
 
@@ -72,23 +78,34 @@ public Order GetOrder(int id) { ... }
 public async Task<Order> GetOrderAsync(int id) { ... }
 ```
 
-### [Cache] — in-memory caching
+### [Cache] — caching
+
+Supports DI with `IAspectCache` (Redis, IMemoryCache, etc.) or built-in in-memory fallback.
 
 ```csharp
+// Option 1 — DI with custom cache:
+builder.Services.AddSingleton<IAspectCache, RedisAspectCache>();
+builder.Services.AddTransient<CacheHandler>();
+
+// Option 2 — built-in in-memory (no DI needed):
 [Cache(DurationSeconds = 60)]
 public Order GetOrder(int id) { ... }
-// First call: executes, caches result
-// Same params again: returns cached (no execution)
 
-// Invalidate:
+// Invalidate (fallback cache only):
 CacheHandler.Invalidate("GetOrder");
 CacheHandler.ClearAll();
 ```
 
 ### [Authorize] — authorization check
 
+Supports DI with `IAuthorizationChecker` or static delegate fallback.
+
 ```csharp
-// Setup once at startup:
+// Option 1 — DI (recommended):
+builder.Services.AddScoped<IAuthorizationChecker, MyAuthChecker>();
+builder.Services.AddTransient<AuthorizeHandler>();
+
+// Option 2 — static delegate:
 AuthorizeHandler.AuthorizationCheck = (ctx, policy) =>
     currentUser.HasPermission(policy ?? ctx.MethodName);
 
@@ -97,6 +114,53 @@ public void DeleteOrder(int id) { ... }  // checks "DeleteOrder" permission
 
 [Authorize(Policy = "Admin")]
 public void PurgeAllData() { ... }  // checks "Admin" permission
+```
+
+## Dependency Injection
+
+All aspect handlers support DI. Register handlers and their dependencies in your DI container, then wire up `AspectServiceProvider`:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Register handler dependencies
+builder.Services.AddSingleton<ITimingRecorder, PrometheusTimingRecorder>();
+builder.Services.AddScoped<IAuthorizationChecker, JwtAuthChecker>();
+builder.Services.AddSingleton<IAspectCache, RedisAspectCache>();
+
+// Register handlers themselves
+builder.Services.AddTransient<TimingHandler>();
+builder.Services.AddTransient<AuthorizeHandler>();
+builder.Services.AddTransient<CacheHandler>();
+
+var app = builder.Build();
+
+// Enable DI for all aspect handlers (one line):
+AspectServiceProvider.ServiceProvider = app.Services;
+```
+
+When `AspectServiceProvider.ServiceProvider` is set, generated code resolves handlers from DI. If DI is not configured or a handler is not registered, it falls back to `new` (backward compatible).
+
+Custom handlers also benefit — just add constructor parameters:
+
+```csharp
+public class MetricsHandler : IAspectHandler
+{
+    private readonly ILogger<MetricsHandler> _logger;
+    private readonly IMetrics _metrics;
+
+    public MetricsHandler(ILogger<MetricsHandler> logger, IMetrics metrics)
+    {
+        _logger = logger;
+        _metrics = metrics;
+    }
+
+    public void OnBefore(AspectContext ctx) { }
+    public void OnAfter(AspectContext ctx)
+        => _metrics.RecordHistogram("method_duration", ctx.ElapsedMilliseconds, ctx.MethodName);
+    public void OnException(AspectContext ctx, Exception ex)
+        => _logger.LogError(ex, "Failed {Method}", ctx.MethodName);
+}
 ```
 
 ## Custom Aspects

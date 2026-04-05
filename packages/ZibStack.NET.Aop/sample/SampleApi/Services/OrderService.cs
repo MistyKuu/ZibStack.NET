@@ -1,4 +1,4 @@
-using ZibStack.NET.Aop.Sample.Aspects;
+using ZibStack.NET.Aop.Aspects;
 
 namespace ZibStack.NET.Aop.Sample.Services;
 
