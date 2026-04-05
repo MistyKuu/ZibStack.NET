@@ -22,11 +22,31 @@ This pulls in `ZibStack.NET.Log.Abstractions` automatically (transitive dependen
 
 ### 3. Add attributes
 
+**Option A — with DI (no `[ZibLog]` or field needed):**
+
+```csharp
+// Program.cs
+AspectServiceProvider.ServiceProvider = app.Services;
+// ILogger<T> is resolved from DI automatically
+
+// OrderService.cs
+public class OrderService
+{
+    [Log]
+    public Order PlaceOrder(int customerId, string product, int quantity)
+    {
+        return _repo.Create(customerId, product, quantity);
+    }
+}
+```
+
+**Option B — with `[ZibLog]` + explicit field (original, no DI needed):**
+
 ```csharp
 using ZibStack.NET.Log;
 using Microsoft.Extensions.Logging;
 
-[ZibStack.Log]
+[ZibLog]
 public class OrderService
 {
     private readonly ILogger<OrderService> _logger;
@@ -41,7 +61,7 @@ public class OrderService
 }
 ```
 
-That's it. Every call to `PlaceOrder` now logs entry, exit, elapsed time, and exceptions:
+Both options produce the same logging. Every call to `PlaceOrder` now logs entry, exit, elapsed time, and exceptions:
 
 ```
 info: OrderService[1] Entering OrderService.PlaceOrder(customerId: 42, product: Widget, quantity: 3)

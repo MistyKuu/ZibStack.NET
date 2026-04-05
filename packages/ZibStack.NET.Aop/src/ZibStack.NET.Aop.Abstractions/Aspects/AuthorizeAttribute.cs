@@ -2,12 +2,17 @@ namespace ZibStack.NET.Aop.Aspects;
 
 /// <summary>
 /// Checks authorization before method execution. Throws <see cref="UnauthorizedAccessException"/>
-/// if the check fails. Configure the authorization logic via <see cref="AuthorizeHandler.AuthorizationCheck"/>.
+/// if the check fails. Configure via DI (<see cref="IAuthorizationChecker"/>) or
+/// static <see cref="AuthorizeHandler.AuthorizationCheck"/>.
 /// </summary>
 /// <example>
 /// <code>
-/// // Setup (once, at startup):
-/// AuthorizeHandler.AuthorizationCheck = (ctx, policy) =>
+/// // Option 1 — DI (recommended):
+/// builder.Services.AddScoped&lt;IAuthorizationChecker, MyAuthChecker&gt;();
+/// builder.Services.AddTransient&lt;AuthorizeHandler&gt;();
+///
+/// // Option 2 — static delegate:
+/// AuthorizeHandler.AuthorizationCheck = (ctx, policy) =&gt;
 /// {
 ///     var user = GetCurrentUser();
 ///     return user.HasPermission(policy ?? ctx.MethodName);
@@ -28,20 +33,37 @@ public sealed class AuthorizeAttribute : AspectAttribute
     public string? Policy { get; set; }
 }
 
+/// <summary>
+/// Authorization checker interface. Register in DI to provide authorization logic.
+/// </summary>
+public interface IAuthorizationChecker
+{
+    /// <summary>Return true to allow, false to deny.</summary>
+    bool IsAuthorized(AspectContext context, string? policy);
+}
+
 public sealed class AuthorizeHandler : IAroundAspectHandler
 {
-    /// <summary>
-    /// Set this at startup. Parameters: AspectContext, policy string (nullable).
-    /// Return true to allow, false to deny.
-    /// </summary>
+    private readonly IAuthorizationChecker? _checker;
+
+    /// <summary>Static delegate fallback. Used when DI is not configured.</summary>
     public static Func<AspectContext, string?, bool>? AuthorizationCheck { get; set; }
+
+    public AuthorizeHandler() { }
+
+    public AuthorizeHandler(IAuthorizationChecker checker) => _checker = checker;
 
     public object? Around(AspectContext context, Func<object?> proceed)
     {
         var policy = context.Properties.TryGetValue("Policy", out var p) && p is string s ? s : null;
 
-        var check = AuthorizationCheck;
-        if (check != null && !check(context, policy))
+        bool authorized;
+        if (_checker != null)
+            authorized = _checker.IsAuthorized(context, policy);
+        else
+            authorized = AuthorizationCheck?.Invoke(context, policy) ?? true;
+
+        if (!authorized)
             throw new UnauthorizedAccessException(
                 $"Access denied to {context.ClassName}.{context.MethodName}" +
                 (policy != null ? $" (policy: {policy})" : ""));

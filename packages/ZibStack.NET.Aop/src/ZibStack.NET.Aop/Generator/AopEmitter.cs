@@ -275,7 +275,7 @@ public static class AopEmitter
         var handlerVar = GetHandlerVarName(aspect);
         var ctxVar = GetContextVarName(aspect);
 
-        sb.AppendLine($"{indent}var {handlerVar} = new {aspect.HandlerTypeName}();");
+        sb.AppendLine($"{indent}var {handlerVar} = global::ZibStack.NET.Aop.AspectServiceProvider.Resolve<{aspect.HandlerTypeName}>() ?? new {aspect.HandlerTypeName}();");
         sb.AppendLine($"{indent}var {ctxVar} = new global::ZibStack.NET.Aop.AspectContext");
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{indent}    ClassName = \"{classModel.ClassName}\",");
