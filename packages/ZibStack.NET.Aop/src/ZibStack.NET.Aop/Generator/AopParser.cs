@@ -125,6 +125,11 @@ public static class AopParser
                 .Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
             bool isNoLog = param.GetAttributes()
                 .Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+            bool isComplex = IsComplexType(param.Type);
+
+            SanitizedTypeModel? sanitizedType = null;
+            if (isComplex && !isNoLog && !isSensitive)
+                sanitizedType = ParseTypeProperties(param.Type);
 
             parameters.Add(new InterceptedParameterModel(
                 param.Name,
@@ -132,7 +137,8 @@ public static class AopParser
                 param.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 isSensitive,
                 isNoLog,
-                IsComplexType(param.Type)));
+                isComplex,
+                sanitizedType));
         }
 
         // Return type
@@ -164,6 +170,15 @@ public static class AopParser
             _ => "public"
         };
 
+        // Return type complexity + sanitization
+        var actualReturnType = returnType;
+        if (isAsync && returnType is INamedTypeSymbol asyncRet && asyncRet.IsGenericType)
+            actualReturnType = asyncRet.TypeArguments[0];
+        bool hasComplexReturnType = !returnsVoid && IsComplexType(actualReturnType);
+        SanitizedTypeModel? sanitizedReturnType = null;
+        if (hasComplexReturnType)
+            sanitizedReturnType = ParseTypeProperties(actualReturnType);
+
         return new InterceptedMethodModel(
             method.Name,
             returnTypeStr,
@@ -171,7 +186,9 @@ public static class AopParser
             returnsVoid,
             accessibility,
             parameters,
-            aspects);
+            aspects,
+            hasComplexReturnType,
+            sanitizedReturnType);
     }
 
     /// <summary>
@@ -204,6 +221,56 @@ public static class AopParser
             : classSymbol.ContainingNamespace.ToDisplayString();
 
         return new InterceptedClassModel(ns, classSymbol.Name, methods, classData);
+    }
+
+    private const int MaxPropertyDepth = 5;
+
+    public static SanitizedTypeModel? ParseTypeProperties(ITypeSymbol type, HashSet<string>? visited = null, int depth = 0)
+    {
+        if (depth >= MaxPropertyDepth || !IsComplexType(type))
+            return null;
+
+        var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        visited ??= new HashSet<string>();
+        if (!visited.Add(fullName))
+            return null;
+
+        var properties = new List<TypePropertyModel>();
+        bool hasDecorated = false;
+
+        foreach (var member in type.GetMembers())
+        {
+            if (member is not IPropertySymbol prop) continue;
+            if (prop.IsStatic || prop.IsIndexer || prop.DeclaredAccessibility != Accessibility.Public) continue;
+            if (prop.GetMethod is null) continue;
+
+            var attrs = prop.GetAttributes();
+            bool isSensitive = attrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
+            bool isNoLog = attrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+            bool isComplex = IsComplexType(prop.Type);
+
+            IReadOnlyList<TypePropertyModel>? nestedProps = null;
+            if (isComplex && !isSensitive && !isNoLog)
+            {
+                var nested = ParseTypeProperties(prop.Type, visited, depth + 1);
+                if (nested != null) { nestedProps = nested.Properties; hasDecorated = true; }
+            }
+
+            if (isSensitive || isNoLog) hasDecorated = true;
+
+            properties.Add(new TypePropertyModel(
+                prop.Name,
+                prop.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                isSensitive, isNoLog, isComplex, nestedProps));
+        }
+
+        visited.Remove(fullName);
+        if (!hasDecorated) return null;
+
+        var safeName = fullName.Replace("global::", "").Replace(".", "_")
+            .Replace("<", "_").Replace(">", "_").Replace(",", "_").Replace(" ", "");
+
+        return new SanitizedTypeModel(fullName, safeName, properties);
     }
 
     private static bool DerivesFromAspectAttribute(INamedTypeSymbol? type)

@@ -29,8 +29,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\ZibStack.NET.Aop.csproj" PrivateAssets="all" />
-    <ProjectReference Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Include Aop generator source files directly (generators must be single-assembly) -->
+  <ItemGroup>
+    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopParser.cs" Link="AopGenerator\AopParser.cs" />
+    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopEmitter.cs" Link="AopGenerator\AopEmitter.cs" />
+    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopGenerator.cs" Link="AopGenerator\AopGenerator.cs" />
+    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\IAspectEmitter.cs" Link="AopGenerator\IAspectEmitter.cs" />
+    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\InterceptionModel.cs" Link="AopGenerator\InterceptionModel.cs" />
+    <!-- NOT including AopStandaloneGenerator.cs — we have our own ZibLogGenerator -->
   </ItemGroup>
 
   <ItemGroup>

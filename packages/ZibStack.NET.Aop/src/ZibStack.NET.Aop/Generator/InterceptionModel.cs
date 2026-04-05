@@ -47,6 +47,8 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
     public string Accessibility { get; }
     public IReadOnlyList<InterceptedParameterModel> Parameters { get; }
     public IReadOnlyList<AspectInfo> Aspects { get; }
+    public bool HasComplexReturnType { get; }
+    public SanitizedTypeModel? SanitizedReturnType { get; }
 
     public InterceptedMethodModel(
         string methodName,
@@ -55,7 +57,9 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
         bool returnsVoid,
         string accessibility,
         IReadOnlyList<InterceptedParameterModel> parameters,
-        IReadOnlyList<AspectInfo> aspects)
+        IReadOnlyList<AspectInfo> aspects,
+        bool hasComplexReturnType = false,
+        SanitizedTypeModel? sanitizedReturnType = null)
     {
         MethodName = methodName;
         ReturnType = returnType;
@@ -64,6 +68,8 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
         Accessibility = accessibility;
         Parameters = parameters;
         Aspects = aspects;
+        HasComplexReturnType = hasComplexReturnType;
+        SanitizedReturnType = sanitizedReturnType;
     }
 
     public bool Equals(InterceptedMethodModel? other)
@@ -84,9 +90,10 @@ public sealed class InterceptedParameterModel : IEquatable<InterceptedParameterM
     public bool IsSensitive { get; }
     public bool IsNoLog { get; }
     public bool IsComplexType { get; }
+    public SanitizedTypeModel? SanitizedType { get; }
 
     public InterceptedParameterModel(string name, string type, string fullyQualifiedType,
-        bool isSensitive, bool isNoLog, bool isComplexType)
+        bool isSensitive, bool isNoLog, bool isComplexType, SanitizedTypeModel? sanitizedType = null)
     {
         Name = name;
         Type = type;
@@ -94,6 +101,7 @@ public sealed class InterceptedParameterModel : IEquatable<InterceptedParameterM
         IsSensitive = isSensitive;
         IsNoLog = isNoLog;
         IsComplexType = isComplexType;
+        SanitizedType = sanitizedType;
     }
 
     public bool Equals(InterceptedParameterModel? other)
@@ -175,4 +183,44 @@ public sealed class CallSiteModel : IEquatable<CallSiteModel>
 
     public override bool Equals(object? obj) => Equals(obj as CallSiteModel);
     public override int GetHashCode() => InterceptsLocationAttributeSyntax.GetHashCode();
+}
+
+/// <summary>
+/// A complex type whose properties have [Sensitive]/[NoLog] attributes.
+/// Used to generate sanitizer methods for property-level masking.
+/// </summary>
+public sealed class SanitizedTypeModel
+{
+    public string FullyQualifiedType { get; }
+    public string SafeName { get; }
+    public IReadOnlyList<TypePropertyModel> Properties { get; }
+
+    public SanitizedTypeModel(string fullyQualifiedType, string safeName, IReadOnlyList<TypePropertyModel> properties)
+    {
+        FullyQualifiedType = fullyQualifiedType;
+        SafeName = safeName;
+        Properties = properties;
+    }
+}
+
+public sealed class TypePropertyModel
+{
+    public string Name { get; }
+    public string FullyQualifiedType { get; }
+    public bool IsSensitive { get; }
+    public bool IsNoLog { get; }
+    public bool IsComplexType { get; }
+    public IReadOnlyList<TypePropertyModel>? NestedProperties { get; }
+
+    public TypePropertyModel(string name, string fullyQualifiedType,
+        bool isSensitive, bool isNoLog, bool isComplexType,
+        IReadOnlyList<TypePropertyModel>? nestedProperties)
+    {
+        Name = name;
+        FullyQualifiedType = fullyQualifiedType;
+        IsSensitive = isSensitive;
+        IsNoLog = isNoLog;
+        IsComplexType = isComplexType;
+        NestedProperties = nestedProperties;
+    }
 }

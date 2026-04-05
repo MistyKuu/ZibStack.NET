@@ -8,7 +8,9 @@ namespace ZibStack.NET.Log.Generator;
 
 /// <summary>
 /// Compile-time inline emitter for the [Log] aspect.
-/// Generates LoggerMessage.Define delegates, UnsafeAccessor, and structured logging code.
+/// Full parity with the old ZibLogEmitter: LoggerMessage.Define, UnsafeAccessor,
+/// ObjectLogMode (Destructure/Json/ToString), [Sensitive]/[NoLog] on params/return,
+/// optional Stopwatch, custom messages.
 /// </summary>
 internal sealed class LogAspectEmitter : IAspectEmitter
 {
@@ -22,145 +24,312 @@ internal sealed class LogAspectEmitter : IAspectEmitter
 
     public IEnumerable<string> RequiredUsings => new[] { "Microsoft.Extensions.Logging" };
 
+    // === EmitClassMembers: UnsafeAccessor + LoggerMessage.Define delegates ===
+
     public void EmitClassMembers(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        var loggerFieldName = GetClassData(cls, "LoggerFieldName") as string ?? "_logger";
-        var loggerFieldType = GetClassData(cls, "LoggerFieldType") as string
+        var loggerFieldName = ClassData(cls, "LoggerFieldName") as string ?? "_logger";
+        var loggerFieldType = ClassData(cls, "LoggerFieldType") as string
             ?? $"global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>";
 
-        // UnsafeAccessor (once per class)
         if (_emittedAccessors.Add(cls.ClassName))
         {
             sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = \"{loggerFieldName}\")]");
             sb.AppendLine($"{indent}private static extern ref {loggerFieldType} __GetLogger({cls.ClassName} @this);");
             sb.AppendLine();
+
+            // Emit sanitizer methods for types with [Sensitive]/[NoLog] properties
+            var emittedSanitizers = new HashSet<string>();
+            foreach (var m in cls.Methods)
+            {
+                foreach (var p in m.Parameters)
+                    if (p.SanitizedType != null) EmitSanitizer(sb, p.SanitizedType, emittedSanitizers, indent);
+                if (m.SanitizedReturnType != null) EmitSanitizer(sb, m.SanitizedReturnType, emittedSanitizers, indent);
+            }
         }
 
-        var entryExitLevel = Prop(aspect, "EntryExitLevel", 2);
-        var exceptionLevel = Prop(aspect, "ExceptionLevel", 4);
-        var logParams = Prop(aspect, "LogParameters", true);
-        var measureElapsed = Prop(aspect, "MeasureElapsed", true);
-        var logReturn = Prop(aspect, "LogReturnValue", true) && !aspect.NoLogReturn;
+        var level = P(aspect, "EntryExitLevel", 2);
+        var exLevel = P(aspect, "ExceptionLevel", 4);
+        var logParams = P(aspect, "LogParameters", true);
+        var logReturn = P(aspect, "LogReturnValue", true) && !aspect.NoLogReturn;
+        var measureElapsed = P(aspect, "MeasureElapsed", true);
+        var objectLogging = P(aspect, "ObjectLogging", 1);
 
-        var loggable = logParams
-            ? method.Parameters.Where(p => !p.IsNoLog).ToList()
+        var loggable = logParams ? method.Parameters.Where(p => !p.IsNoLog).ToList()
             : new List<InterceptedParameterModel>();
 
         // --- Entry delegate ---
-        var entryMsg = PropStr(aspect, "EntryMessage")
-            ?? BuildMsg($"Entering {cls.ClassName}.{method.MethodName}(",
-                loggable.Select(p => p.IsSensitive ? $"{p.Name}: {{__s_{p.Name}}}" : $"{p.Name}: {{{p.Name}}}"), ")");
-
+        var entryMsg = PStr(aspect, "EntryMessage") ?? BuildEntryMessage(cls, method, loggable, objectLogging);
         if (loggable.Count <= 6)
         {
-            var types = loggable.Select(p => p.IsSensitive ? "string" : p.FullyQualifiedType).ToList();
-            EmitDefineDelegate(sb, indent, method.MethodName, "Entry", types, entryExitLevel, ref _eventId, entryMsg);
+            var types = loggable.Select(p => GetParamLogType(p, objectLogging)).ToList();
+            EmitDelegate(sb, indent, method.MethodName, "Entry", types, level, ref _eventId, entryMsg);
         }
         else _eventId++;
 
         // --- Exit delegate ---
         var exitTypes = new List<string>();
         if (measureElapsed) exitTypes.Add("long");
-        if (logReturn && !method.ReturnsVoid) exitTypes.Add("string?");
-
-        var exitMsg = PropStr(aspect, "ExitMessage") ?? BuildExitMsg(cls, method, measureElapsed, logReturn);
-        EmitDefineDelegate(sb, indent, method.MethodName, "Exit", exitTypes, entryExitLevel, ref _eventId, exitMsg);
+        if (logReturn && !method.ReturnsVoid)
+        {
+            if (method.SanitizedReturnType != null && objectLogging == 1)
+                exitTypes.Add("object"); // Destructure + sanitized → dict as object
+            else if (objectLogging == 1 && method.HasComplexReturnType)
+                exitTypes.Add("object"); // Destructure + complex → object
+            else
+                exitTypes.Add("string?");
+        }
+        var exitMsg = PStr(aspect, "ExitMessage") ?? BuildExitMessage(cls, method, measureElapsed, logReturn, objectLogging);
+        EmitDelegate(sb, indent, method.MethodName, "Exit", exitTypes, level, ref _eventId, exitMsg);
 
         // --- Error delegate ---
         var errTypes = measureElapsed ? new List<string> { "long" } : new List<string>();
-        var errMsg = PropStr(aspect, "ExceptionMessage")
-            ?? (measureElapsed ? $"{cls.ClassName}.{method.MethodName} failed after {{ElapsedMs}}ms"
-                              : $"{cls.ClassName}.{method.MethodName} failed");
-        EmitDefineDelegate(sb, indent, method.MethodName, "Error", errTypes, exceptionLevel, ref _eventId, errMsg);
+        var errMsg = PStr(aspect, "ExceptionMessage") ?? BuildErrorMessage(cls, method, measureElapsed);
+        EmitDelegate(sb, indent, method.MethodName, "Error", errTypes, exLevel, ref _eventId, errMsg);
     }
+
+    // === EmitBefore: log entry ===
 
     public void EmitBefore(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        var logParams = Prop(aspect, "LogParameters", true);
-        var loggable = logParams
-            ? method.Parameters.Where(p => !p.IsNoLog).ToList()
+        var logParams = P(aspect, "LogParameters", true);
+        var objectLogging = P(aspect, "ObjectLogging", 1);
+        var loggable = logParams ? method.Parameters.Where(p => !p.IsNoLog).ToList()
             : new List<InterceptedParameterModel>();
 
         sb.AppendLine($"{indent}var __logger = __GetLogger(@this);");
+
         if (loggable.Count <= 6)
         {
-            var args = string.Join("", loggable.Select(p => p.IsSensitive ? ", \"***\"" : $", {p.Name}"));
+            var args = string.Join("", loggable.Select(p => FormatEntryArg(p, objectLogging)));
             sb.AppendLine($"{indent}__log{method.MethodName}Entry(__logger{args}, null);");
         }
+        else
+        {
+            // >6 params fallback
+            var levelName = LogLevelNames[P(aspect, "EntryExitLevel", 2)];
+            var msg = BuildEntryMessage(cls, method, loggable, objectLogging);
+            var argList = string.Join(", ", loggable.Select(p => p.IsSensitive ? "(object)\"***\"" : $"(object){p.Name}"));
+            sb.AppendLine($"{indent}if (__logger.IsEnabled(global::Microsoft.Extensions.Logging.LogLevel.{levelName}))");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    __logger.Log(global::Microsoft.Extensions.Logging.LogLevel.{levelName}, \"{Esc(msg)}\", {argList});");
+            sb.AppendLine($"{indent}}}");
+        }
     }
+
+    // === EmitAfter: log exit ===
 
     public void EmitAfter(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        var measureElapsed = Prop(aspect, "MeasureElapsed", true);
-        var logReturn = Prop(aspect, "LogReturnValue", true) && !aspect.NoLogReturn;
+        var measureElapsed = P(aspect, "MeasureElapsed", true);
+        var logReturn = P(aspect, "LogReturnValue", true) && !aspect.NoLogReturn;
+        var objectLogging = P(aspect, "ObjectLogging", 1);
 
-        var args = new List<string>();
-        if (measureElapsed) args.Add("__sw.ElapsedMilliseconds");
-        if (logReturn && !method.ReturnsVoid)
-            args.Add(aspect.SensitiveReturn ? "\"***\"" : "((object?)__result)?.ToString()");
-
-        if (args.Count > 0)
-            sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, {string.Join(", ", args)}, null);");
+        if (method.ReturnsVoid)
+        {
+            if (measureElapsed)
+                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, __sw.ElapsedMilliseconds, null);");
+            else
+                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, null);");
+        }
         else
-            sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, null);");
+        {
+            var args = new List<string>();
+            if (measureElapsed) args.Add("__sw.ElapsedMilliseconds");
+            if (logReturn) args.Add(FormatReturnValue(method, aspect, objectLogging));
+
+            if (args.Count > 0)
+                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, {string.Join(", ", args)}, null);");
+            else
+                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, null);");
+        }
     }
+
+    // === EmitOnException: log error ===
 
     public void EmitOnException(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        if (Prop(aspect, "MeasureElapsed", true))
+        if (P(aspect, "MeasureElapsed", true))
             sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __sw.ElapsedMilliseconds, __ex);");
         else
             sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __ex);");
     }
 
-    // === Helpers ===
+    // === Format helpers (parity with old SmartLogEmitter) ===
 
-    private static void EmitDefineDelegate(StringBuilder sb, string indent, string methodName,
+    private static string GetParamLogType(InterceptedParameterModel p, int objectLogging)
+    {
+        if (p.IsSensitive) return "string";
+        if (p.SanitizedType != null)
+            return objectLogging == 1 ? "object" : "string"; // Destructure: dict as object, else string
+        if (objectLogging == 2 && p.IsComplexType) return "string";
+        return p.FullyQualifiedType;
+    }
+
+    private static string FormatEntryArg(InterceptedParameterModel p, int objectLogging)
+    {
+        if (p.IsSensitive) return ", \"***\"";
+        if (p.SanitizedType != null)
+        {
+            if (objectLogging == 1) return $", __SanitizeDict_{p.SanitizedType.SafeName}({p.Name})";
+            return $", __Sanitize_{p.SanitizedType.SafeName}({p.Name})";
+        }
+        if (objectLogging == 2 && p.IsComplexType)
+            return $", global::System.Text.Json.JsonSerializer.Serialize({p.Name})";
+        return $", {p.Name}";
+    }
+
+    private static string FormatReturnValue(InterceptedMethodModel method, AspectInfo aspect, int objectLogging)
+    {
+        if (aspect.SensitiveReturn) return "\"***\"";
+        if (method.SanitizedReturnType != null)
+        {
+            if (objectLogging == 1) return $"__SanitizeDict_{method.SanitizedReturnType.SafeName}(__result)";
+            return $"__Sanitize_{method.SanitizedReturnType.SafeName}(__result)";
+        }
+        if (objectLogging == 2 && method.HasComplexReturnType)
+            return "global::System.Text.Json.JsonSerializer.Serialize(__result)";
+        return "((object?)__result)?.ToString()";
+    }
+
+    private static string BuildEntryMessage(InterceptedClassModel cls, InterceptedMethodModel method,
+        List<InterceptedParameterModel> loggable, int objectLogging)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"Entering {cls.ClassName}.{method.MethodName}(");
+        var parts = new List<string>();
+        foreach (var p in loggable)
+        {
+            if (p.IsSensitive)
+                parts.Add($"{p.Name}: {{__sensitive_{p.Name}}}");
+            else if (objectLogging == 1 && p.IsComplexType) // Destructure
+                parts.Add($"{p.Name}: {{@{p.Name}}}");
+            else
+                parts.Add($"{p.Name}: {{{p.Name}}}");
+        }
+        sb.Append(string.Join(", ", parts));
+        sb.Append(')');
+        return sb.ToString();
+    }
+
+    private static string BuildExitMessage(InterceptedClassModel cls, InterceptedMethodModel method,
+        bool measureElapsed, bool logReturn, int objectLogging)
+    {
+        var sb = new StringBuilder();
+        sb.Append($"Exited {cls.ClassName}.{method.MethodName}");
+        var parts = new List<string>();
+        if (measureElapsed) parts.Add("in {ElapsedMs}ms");
+        if (logReturn && !method.ReturnsVoid)
+        {
+            if (objectLogging == 1) // Destructure
+                parts.Add("-> {@Result}");
+            else
+                parts.Add("-> {Result}");
+        }
+        if (parts.Count > 0) { sb.Append(" "); sb.Append(string.Join(" ", parts)); }
+        return sb.ToString();
+    }
+
+    private static string BuildErrorMessage(InterceptedClassModel cls, InterceptedMethodModel method, bool measureElapsed)
+    {
+        return measureElapsed
+            ? $"{cls.ClassName}.{method.MethodName} failed after {{ElapsedMs}}ms"
+            : $"{cls.ClassName}.{method.MethodName} failed";
+    }
+
+    // === Shared emit helper ===
+
+    private static void EmitDelegate(StringBuilder sb, string indent, string methodName,
         string suffix, List<string> typeArgs, int level, ref int eventId, string message)
     {
         var typeArgsStr = typeArgs.Count > 0 ? $"<{string.Join(", ", typeArgs)}>" : "";
-        var allTypes = new List<string> { "global::Microsoft.Extensions.Logging.ILogger" };
-        allTypes.AddRange(typeArgs);
-        allTypes.Add("global::System.Exception?");
-        var delegateType = $"global::System.Action<{string.Join(", ", allTypes)}>";
+        var all = new List<string> { "global::Microsoft.Extensions.Logging.ILogger" };
+        all.AddRange(typeArgs);
+        all.Add("global::System.Exception?");
 
-        sb.AppendLine($"{indent}private static readonly {delegateType} __log{methodName}{suffix} =");
+        sb.AppendLine($"{indent}private static readonly global::System.Action<{string.Join(", ", all)}> __log{methodName}{suffix} =");
         sb.AppendLine($"{indent}    global::Microsoft.Extensions.Logging.LoggerMessage.Define{typeArgsStr}(");
         sb.AppendLine($"{indent}        global::Microsoft.Extensions.Logging.LogLevel.{LogLevelNames[level]},");
         sb.AppendLine($"{indent}        new global::Microsoft.Extensions.Logging.EventId({eventId++}, \"{methodName}_{suffix}\"),");
         sb.AppendLine($"{indent}        \"{Esc(message)}\");");
     }
 
-    private static object? GetClassData(InterceptedClassModel cls, string key)
+    private static object? ClassData(InterceptedClassModel cls, string key)
     {
         if (cls.AspectClassData.TryGetValue("ZibStack.NET.Log.LogAttribute", out var d) && d.TryGetValue(key, out var v)) return v;
         return null;
     }
 
-    private static int Prop(AspectInfo a, string k, int def) => a.Properties.TryGetValue(k, out var v) && v is int i ? i : def;
-    private static bool Prop(AspectInfo a, string k, bool def) => a.Properties.TryGetValue(k, out var v) && v is bool b ? b : def;
-    private static string? PropStr(AspectInfo a, string k) => a.Properties.TryGetValue(k, out var v) && v is string s ? s : null;
+    private static int P(AspectInfo a, string k, int def) => a.Properties.TryGetValue(k, out var v) && v is int i ? i : def;
+    private static bool P(AspectInfo a, string k, bool def) => a.Properties.TryGetValue(k, out var v) && v is bool b ? b : def;
+    private static string? PStr(AspectInfo a, string k) => a.Properties.TryGetValue(k, out var v) && v is string s ? s : null;
+    private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
-    private static string BuildMsg(string prefix, IEnumerable<string> parts, string suffix)
-        => prefix + string.Join(", ", parts) + suffix;
+    // === Sanitizer emission (property-level [Sensitive]/[NoLog]) ===
 
-    private static string BuildExitMsg(InterceptedClassModel cls, InterceptedMethodModel m, bool elapsed, bool ret)
+    private static void EmitSanitizer(StringBuilder sb, SanitizedTypeModel model, HashSet<string> emitted, string indent)
     {
-        var parts = new List<string>();
-        if (elapsed) parts.Add("in {ElapsedMs}ms");
-        if (ret && !m.ReturnsVoid) parts.Add("-> {Result}");
-        return $"Exited {cls.ClassName}.{m.MethodName}" + (parts.Count > 0 ? " " + string.Join(" ", parts) : "");
+        if (!emitted.Add(model.SafeName)) return;
+
+        foreach (var prop in model.Properties)
+        {
+            if (prop.NestedProperties != null)
+            {
+                var nested = new SanitizedTypeModel(prop.FullyQualifiedType,
+                    prop.FullyQualifiedType.Replace("global::", "").Replace(".", "_")
+                        .Replace("<", "_").Replace(">", "_").Replace(",", "_").Replace(" ", ""),
+                    prop.NestedProperties);
+                EmitSanitizer(sb, nested, emitted, indent);
+            }
+        }
+
+        // Dict version (for Destructure mode — Serilog destructures Dictionary as object)
+        sb.AppendLine($"{indent}private static global::System.Collections.Generic.Dictionary<string, object?> __SanitizeDict_{model.SafeName}({model.FullyQualifiedType} __obj)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    var __dict = new global::System.Collections.Generic.Dictionary<string, object?>();");
+        EmitDictEntries(sb, model, indent + "    ");
+        sb.AppendLine($"{indent}    return __dict;");
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine();
+
+        // String version (for JSON/ToString mode)
+        sb.AppendLine($"{indent}private static string __Sanitize_{model.SafeName}({model.FullyQualifiedType} __obj)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    if (__obj == null) return \"null\";");
+        sb.AppendLine($"{indent}    return global::System.Text.Json.JsonSerializer.Serialize(__SanitizeDict_{model.SafeName}(__obj));");
+        sb.AppendLine($"{indent}}}");
+        sb.AppendLine();
     }
 
-    private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    private static void EmitDictEntries(StringBuilder sb, SanitizedTypeModel model, string indent)
+    {
+        foreach (var prop in model.Properties)
+        {
+            if (prop.IsNoLog) continue;
+            if (prop.IsSensitive)
+            {
+                sb.AppendLine($"{indent}__dict[\"{prop.Name}\"] = \"***\";");
+            }
+            else if (prop.NestedProperties != null)
+            {
+                var nestedSafe = prop.FullyQualifiedType.Replace("global::", "").Replace(".", "_")
+                    .Replace("<", "_").Replace(">", "_").Replace(",", "_").Replace(" ", "");
+                sb.AppendLine($"{indent}__dict[\"{prop.Name}\"] = __obj.{prop.Name} != null ? __SanitizeDict_{nestedSafe}(__obj.{prop.Name}) : null;");
+            }
+            else
+            {
+                sb.AppendLine($"{indent}__dict[\"{prop.Name}\"] = __obj.{prop.Name};");
+            }
+        }
+    }
 }
 
 /// <summary>
-/// Extracts logger field info from [ZibLog]-annotated classes.
+/// Extracts logger field info from [ZibLog]-annotated classes and reports diagnostics.
 /// </summary>
 internal sealed class LogClassDataProvider : IClassDataProvider
 {
@@ -172,7 +341,6 @@ internal sealed class LogClassDataProvider : IClassDataProvider
 
     public IReadOnlyDictionary<string, object?>? ExtractClassData(INamedTypeSymbol classSymbol)
     {
-        // Check if class has [ZibLog]
         string? loggerFieldOverride = null;
         bool hasZibLog = false;
         foreach (var attr in classSymbol.GetAttributes())
@@ -187,31 +355,22 @@ internal sealed class LogClassDataProvider : IClassDataProvider
         }
         if (!hasZibLog) return null;
 
-        // Find logger field
         var loggerFields = new List<(string name, string type)>();
         foreach (var member in classSymbol.GetMembers())
-        {
             if (member is IFieldSymbol field && IsILogger(field.Type))
                 loggerFields.Add((field.Name, field.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
-        }
 
         string? fieldName, fieldType;
         if (loggerFieldOverride != null)
         {
             var match = loggerFields.FirstOrDefault(f => f.name == loggerFieldOverride);
-            fieldName = match.name;
-            fieldType = match.type;
+            fieldName = match.name; fieldType = match.type;
         }
         else if (loggerFields.Count == 1)
         {
-            fieldName = loggerFields[0].name;
-            fieldType = loggerFields[0].type;
+            fieldName = loggerFields[0].name; fieldType = loggerFields[0].type;
         }
-        else
-        {
-            fieldName = null;
-            fieldType = null;
-        }
+        else { fieldName = null; fieldType = null; }
 
         if (fieldName == null) return null;
 
@@ -254,7 +413,6 @@ internal sealed class LogClassDataProvider : IClassDataProvider
                     classSymbol.Name, string.Join(", ", loggerFields));
         }
 
-        // Check specified logger field exists
         if (loggerFieldOverride != null && !loggerFields.Contains(loggerFieldOverride))
         {
             var loc = classSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation();
@@ -263,20 +421,15 @@ internal sealed class LogClassDataProvider : IClassDataProvider
                     loggerFieldOverride, classSymbol.Name);
         }
 
-        // Check for static methods with [Log]
         foreach (var member in classSymbol.GetMembers())
         {
-            if (member is IMethodSymbol method && method.IsStatic)
+            if (member is IMethodSymbol method && method.IsStatic &&
+                method.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.LogAttribute"))
             {
-                bool hasLog = method.GetAttributes()
-                    .Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.LogAttribute");
-                if (hasLog)
-                {
-                    var loc = method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax()?.GetLocation()
-                        ?? classSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation();
-                    if (loc != null)
-                        yield return Diagnostic.Create(DiagnosticDescriptors.StaticMethodNotSupported, loc, method.Name);
-                }
+                var loc = method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax()?.GetLocation()
+                    ?? classSymbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax().GetLocation();
+                if (loc != null)
+                    yield return Diagnostic.Create(DiagnosticDescriptors.StaticMethodNotSupported, loc, method.Name);
             }
         }
     }
