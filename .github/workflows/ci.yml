@@ -27,4 +27,16 @@ jobs:
       - name: Test Dto
         run: dotnet test packages/ZibStack.NET.Dto/tests/ZibStack.NET.Dto.Tests/ZibStack.NET.Dto.Tests.csproj -c Release --no-build
 
-      # Aop has no unit tests yet — build verification only
+      - name: Benchmark Log
+        run: dotnet run --project packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj -c Release -- --filter "*" --exporters json
+
+      - name: Benchmark Aop
+        run: dotnet run --project packages/ZibStack.NET.Aop/tests/ZibStack.NET.Aop.Benchmarks/ZibStack.NET.Aop.Benchmarks.csproj -c Release -- --filter "*" --exporters json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: BenchmarkDotNet.Artifacts/
+          retention-days: 30
