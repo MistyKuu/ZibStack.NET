@@ -7,21 +7,34 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace ZibStack.NET.Aop.Generator;
 
 /// <summary>
-/// Shared AOP generator infrastructure. Not a [Generator] itself — consuming packages
-/// (like ZibStack.NET.Log) create their own IIncrementalGenerator and use this helper
-/// to set up the pipeline with their IAspectEmitter registrations.
+/// Provides class-level data for specific aspects (e.g., logger field for [Log]).
+/// </summary>
+public interface IClassDataProvider
+{
+    /// <summary>The aspect attribute FQN this provider serves.</summary>
+    string AttributeFullName { get; }
+
+    /// <summary>Extract class-level data from the class symbol.</summary>
+    IReadOnlyDictionary<string, object?>? ExtractClassData(INamedTypeSymbol classSymbol);
+
+    /// <summary>Report diagnostics for the class.</summary>
+    IEnumerable<Diagnostic> GetDiagnostics(INamedTypeSymbol classSymbol);
+}
+
+/// <summary>
+/// Shared AOP generator infrastructure. Consuming packages create their own
+/// IIncrementalGenerator and call AopPipeline.Register() with emitters and class data providers.
 /// </summary>
 public static class AopPipeline
 {
-    /// <summary>
-    /// Registers the full AOP pipeline in a generator's Initialize method.
-    /// </summary>
     public static void Register(
         IncrementalGeneratorInitializationContext context,
         IReadOnlyDictionary<string, IAspectEmitter> emitters,
-        System.Action<IncrementalGeneratorInitializationContext, IncrementalValuesProvider<INamedTypeSymbol>>? classDiscoveryHook = null)
+        IReadOnlyList<IClassDataProvider>? classDataProviders = null)
     {
-        // Step 1: Find call-sites to methods with any AspectAttribute-derived attribute
+        var providers = classDataProviders ?? System.Array.Empty<IClassDataProvider>();
+
+        // Step 1: Find call-sites
         var callSites = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is InvocationExpressionSyntax,
@@ -39,7 +52,6 @@ public static class AopPipeline
                 {
                     var methodSymbol = ctx.SemanticModel.GetDeclaredSymbol((MethodDeclarationSyntax)ctx.Node, ct);
                     if (methodSymbol is null) return null;
-
                     bool hasAspect = methodSymbol.GetAttributes()
                         .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
                     return hasAspect ? methodSymbol.ContainingType : null;
@@ -49,18 +61,42 @@ public static class AopPipeline
             .Collect()
             .SelectMany(static (types, _) => types.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default));
 
-        // Allow consuming generators to hook into class discovery (e.g., to extract logger field)
-        classDiscoveryHook?.Invoke(context, classSymbols);
+        // Step 2b: Report diagnostics from class data providers
+        var providersCopy = providers;
+        context.RegisterSourceOutput(classSymbols.Collect(), (spc, symbols) =>
+        {
+            foreach (var cls in symbols)
+            {
+                foreach (var provider in providersCopy)
+                {
+                    foreach (var diag in provider.GetDiagnostics(cls))
+                        spc.ReportDiagnostic(diag);
+                }
+            }
+        });
 
+        // Step 3: Parse classes with class-level data from providers
         var classModels = classSymbols
-            .Select(static (classSymbol, ct) => AopParser.ParseClass(classSymbol, null, ct))
+            .Select((classSymbol, ct) =>
+            {
+                // Collect class data from all providers
+                var classData = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+                foreach (var provider in providersCopy)
+                {
+                    var data = provider.ExtractClassData(classSymbol);
+                    if (data != null)
+                        classData[provider.AttributeFullName] = data;
+                }
+
+                return AopParser.ParseClass(classSymbol, classData.Count > 0 ? classData : null, ct);
+            })
             .Where(static m => m is not null)
             .Select(static (m, _) => m!);
 
-        // Step 3: Combine and emit
+        // Step 4: Combine and emit
         var combined = classModels.Combine(callSiteCollection);
 
-        var emittersCopy = emitters; // capture for lambda
+        var emittersCopy = emitters;
         context.RegisterSourceOutput(combined, (spc, pair) =>
         {
             var (classModel, allCallSites) = pair;

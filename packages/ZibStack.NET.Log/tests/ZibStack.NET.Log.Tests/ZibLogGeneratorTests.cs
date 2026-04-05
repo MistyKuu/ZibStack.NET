@@ -151,6 +151,8 @@ public class MyService
             MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
             // ZibStack.NET.Log.Abstractions — provides [ZibLog], [Log], etc.
             MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.ZibLogAttribute).Assembly.Location),
+            // ZibStack.NET.Aop.Abstractions — [Log] derives from AspectAttribute
+            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
         };
 
         // Add System.Runtime

@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ZibStack.NET.Log\ZibStack.NET.Log.csproj" />
     <ProjectReference Include="..\..\src\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>
