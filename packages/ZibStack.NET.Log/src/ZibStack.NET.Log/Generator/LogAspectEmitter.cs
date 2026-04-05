@@ -49,12 +49,12 @@ internal sealed class LogAspectEmitter : IAspectEmitter
             }
         }
 
-        var level = P(aspect, "EntryExitLevel", 2);
-        var exLevel = P(aspect, "ExceptionLevel", 4);
-        var logParams = P(aspect, "LogParameters", true);
-        var logReturn = P(aspect, "LogReturnValue", true) && !aspect.NoLogReturn;
-        var measureElapsed = P(aspect, "MeasureElapsed", true);
-        var objectLogging = P(aspect, "ObjectLogging", 1);
+        var level = P(aspect, "EntryExitLevel", 2, cls);
+        var exLevel = P(aspect, "ExceptionLevel", 4, cls);
+        var logParams = P(aspect, "LogParameters", true, cls);
+        var logReturn = P(aspect, "LogReturnValue", true, cls) && !aspect.NoLogReturn;
+        var measureElapsed = P(aspect, "MeasureElapsed", true, cls);
+        var objectLogging = P(aspect, "ObjectLogging", 1, cls);
 
         var loggable = logParams ? method.Parameters.Where(p => !p.IsNoLog).ToList()
             : new List<InterceptedParameterModel>();
@@ -94,8 +94,8 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     public void EmitBefore(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        var logParams = P(aspect, "LogParameters", true);
-        var objectLogging = P(aspect, "ObjectLogging", 1);
+        var logParams = P(aspect, "LogParameters", true, cls);
+        var objectLogging = P(aspect, "ObjectLogging", 1, cls);
         var loggable = logParams ? method.Parameters.Where(p => !p.IsNoLog).ToList()
             : new List<InterceptedParameterModel>();
 
@@ -109,7 +109,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         else
         {
             // >6 params fallback
-            var levelName = LogLevelNames[P(aspect, "EntryExitLevel", 2)];
+            var levelName = LogLevelNames[P(aspect, "EntryExitLevel", 2, cls)];
             var msg = BuildEntryMessage(cls, method, loggable, objectLogging);
             var argList = string.Join(", ", loggable.Select(p => p.IsSensitive ? "(object)\"***\"" : $"(object){p.Name}"));
             sb.AppendLine($"{indent}if (__logger.IsEnabled(global::Microsoft.Extensions.Logging.LogLevel.{levelName}))");
@@ -124,9 +124,9 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     public void EmitAfter(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        var measureElapsed = P(aspect, "MeasureElapsed", true);
-        var logReturn = P(aspect, "LogReturnValue", true) && !aspect.NoLogReturn;
-        var objectLogging = P(aspect, "ObjectLogging", 1);
+        var measureElapsed = P(aspect, "MeasureElapsed", true, cls);
+        var logReturn = P(aspect, "LogReturnValue", true, cls) && !aspect.NoLogReturn;
+        var objectLogging = P(aspect, "ObjectLogging", 1, cls);
 
         if (method.ReturnsVoid)
         {
@@ -153,7 +153,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     public void EmitOnException(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        if (P(aspect, "MeasureElapsed", true))
+        if (P(aspect, "MeasureElapsed", true, cls))
             sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __sw.ElapsedMilliseconds, __ex);");
         else
             sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __ex);");
@@ -264,8 +264,22 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         return null;
     }
 
-    private static int P(AspectInfo a, string k, int def) => a.Properties.TryGetValue(k, out var v) && v is int i ? i : def;
-    private static bool P(AspectInfo a, string k, bool def) => a.Properties.TryGetValue(k, out var v) && v is bool b ? b : def;
+    /// <summary>Get int property: per-method override > assembly default > hardcoded default.</summary>
+    private static int P(AspectInfo a, string k, int def, InterceptedClassModel? cls = null)
+    {
+        if (a.Properties.TryGetValue(k, out var v) && v is int i) return i;
+        if (cls != null && ClassData(cls, $"Default_{k}") is int d && d != -1) return d;
+        return def;
+    }
+
+    /// <summary>Get bool property: per-method override > assembly default > hardcoded default.</summary>
+    private static bool P(AspectInfo a, string k, bool def, InterceptedClassModel? cls = null)
+    {
+        if (a.Properties.TryGetValue(k, out var v) && v is bool b) return b;
+        if (cls != null && ClassData(cls, $"Default_{k}") is bool d) return d;
+        return def;
+    }
+
     private static string? PStr(AspectInfo a, string k) => a.Properties.TryGetValue(k, out var v) && v is string s ? s : null;
     private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
@@ -374,11 +388,23 @@ internal sealed class LogClassDataProvider : IClassDataProvider
 
         if (fieldName == null) return null;
 
-        return new Dictionary<string, object?>
+        var data = new Dictionary<string, object?>
         {
             ["LoggerFieldName"] = fieldName,
             ["LoggerFieldType"] = fieldType
         };
+
+        // Read assembly-level [ZibLogDefaults]
+        foreach (var asmAttr in classSymbol.ContainingAssembly.GetAttributes())
+        {
+            if (asmAttr.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.ZibLogDefaultsAttribute")
+            {
+                foreach (var arg in asmAttr.NamedArguments)
+                    data[$"Default_{arg.Key}"] = arg.Value.Value;
+            }
+        }
+
+        return data;
     }
 
     public IEnumerable<Diagnostic> GetDiagnostics(INamedTypeSymbol classSymbol)

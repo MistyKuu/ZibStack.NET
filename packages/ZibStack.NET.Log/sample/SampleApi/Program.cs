@@ -1,6 +1,10 @@
 using ZibStack.NET.Log.Sample.Services;
 using ZibStack.NET.Log;
 
+// Assembly-level defaults: all [Log] methods in this project use Debug level
+// and JSON mode unless overridden per-method.
+[assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<OrderService>();
