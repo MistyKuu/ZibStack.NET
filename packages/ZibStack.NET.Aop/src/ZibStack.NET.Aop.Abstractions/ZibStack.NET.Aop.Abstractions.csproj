@@ -13,7 +13,12 @@
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
     <PackageTags>aop;aspects;interceptors;source-generator;csharp</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <!-- IAsyncAspectHandler and Trace aspect need .NET 8+ features -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

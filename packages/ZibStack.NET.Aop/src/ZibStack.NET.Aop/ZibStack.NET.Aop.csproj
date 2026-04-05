@@ -15,6 +15,7 @@
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
     <PackageTags>aop;aspects;interceptors;source-generator;csharp;codegen</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
@@ -31,6 +32,7 @@
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
