@@ -53,6 +53,15 @@ public class TimingHandler : IAspectHandler
 // Apply it:
 [Timing]
 public Order GetOrder(int id) { ... }
+
+// Async handlers (for async methods):
+public class MetricsHandler : IAsyncAspectHandler
+{
+    public ValueTask OnBeforeAsync(AspectContext ctx) => default;
+    public async ValueTask OnAfterAsync(AspectContext ctx)
+        => await _client.RecordAsync(ctx.MethodName, ctx.ElapsedMilliseconds);
+    public ValueTask OnExceptionAsync(AspectContext ctx, Exception ex) => default;
+}
 ```
 
 ### ZibStack.NET.Dto

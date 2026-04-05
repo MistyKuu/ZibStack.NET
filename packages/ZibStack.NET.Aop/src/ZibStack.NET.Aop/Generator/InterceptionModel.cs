@@ -130,6 +130,9 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
     /// </summary>
     public string? HandlerTypeName { get; }
 
+    /// <summary>Whether the handler implements IAsyncAspectHandler (vs IAspectHandler).</summary>
+    public bool IsAsyncHandler { get; }
+
     /// <summary>
     /// Return-value attributes: [return: Sensitive], [return: NoLog]
     /// </summary>
@@ -139,12 +142,14 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
     public AspectInfo(string attributeFullName, int order,
         IReadOnlyDictionary<string, object?> properties,
         string? handlerTypeName = null,
+        bool isAsyncHandler = false,
         bool sensitiveReturn = false, bool noLogReturn = false)
     {
         AttributeFullName = attributeFullName;
         Order = order;
         Properties = properties;
         HandlerTypeName = handlerTypeName;
+        IsAsyncHandler = isAsyncHandler;
         SensitiveReturn = sensitiveReturn;
         NoLogReturn = noLogReturn;
     }

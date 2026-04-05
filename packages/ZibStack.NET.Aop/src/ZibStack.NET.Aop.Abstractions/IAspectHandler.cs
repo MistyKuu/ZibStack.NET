@@ -1,8 +1,10 @@
 namespace ZibStack.NET.Aop;
 
 /// <summary>
-/// Runtime handler for custom aspects. Implement this interface and link it
+/// Synchronous runtime handler for custom aspects. Implement this interface and link it
 /// to an attribute via <see cref="AspectHandlerAttribute"/>.
+/// Works on both sync and async methods.
+/// For async hooks, implement <see cref="IAsyncAspectHandler"/> (async methods only).
 /// </summary>
 public interface IAspectHandler
 {

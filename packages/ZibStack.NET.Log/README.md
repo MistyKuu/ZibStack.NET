@@ -16,7 +16,7 @@ This pulls in `ZibStack.NET.Log.Abstractions` automatically (transitive dependen
 
 ```xml
 <PropertyGroup>
-    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Log.Generated</InterceptorsPreviewNamespaces>
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated</InterceptorsPreviewNamespaces>
 </PropertyGroup>
 ```
 
@@ -325,6 +325,26 @@ ZibStack.NET.Log reports clear compiler errors when something is misconfigured:
 | `[NoLog]` | Parameter | | Excludes parameter from logs entirely |
 | `[return: NoLog]` | Return value | | Excludes return value from exit logs |
 
+### Assembly-level defaults
+
+Set defaults for all `[Log]` methods in the assembly. Per-method properties override these.
+
+```csharp
+[assembly: ZibLogDefaults(
+    EntryExitLevel = ZibLogLevel.Debug,
+    ObjectLogging = ObjectLogMode.Json,
+    MeasureElapsed = false)]
+```
+
+| Property | Default | Description |
+|---|---|---|
+| `EntryExitLevel` | `Information` | Default log level for entry/exit |
+| `ExceptionLevel` | `Error` | Default log level for exceptions |
+| `LogParameters` | `true` | Log parameter values |
+| `LogReturnValue` | `true` | Log return value |
+| `MeasureElapsed` | `true` | Measure elapsed time |
+| `ObjectLogging` | `Destructure` | How complex objects are logged |
+
 ### Interpolated string logging
 
 | Method | Description |
@@ -341,7 +361,7 @@ ZibStack.NET.Log reports clear compiler errors when something is misconfigured:
 ## Requirements
 
 - **.NET 8.0** or later (uses `UnsafeAccessor` and interceptors)
-- `<InterceptorsPreviewNamespaces>ZibStack.Log.Generated</InterceptorsPreviewNamespaces>` in `.csproj`
+- `<InterceptorsPreviewNamespaces>ZibStack.Generated</InterceptorsPreviewNamespaces>` in `.csproj`
 
 ## Roadmap
 

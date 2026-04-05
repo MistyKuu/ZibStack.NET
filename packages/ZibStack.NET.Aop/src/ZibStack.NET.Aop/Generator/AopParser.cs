@@ -87,6 +87,7 @@ public static class AopParser
 
             // Check if attribute class has [AspectHandler]
             string? handlerTypeName = null;
+            bool isAsyncHandler = false;
             foreach (var classAttr in attr.AttributeClass!.GetAttributes())
             {
                 if (classAttr.AttributeClass?.ToDisplayString() == AspectHandlerAttributeFullName
@@ -94,6 +95,9 @@ public static class AopParser
                     && classAttr.ConstructorArguments[0].Value is INamedTypeSymbol handlerType)
                 {
                     handlerTypeName = handlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    // Check if handler implements IAsyncAspectHandler
+                    isAsyncHandler = handlerType.AllInterfaces
+                        .Any(i => i.ToDisplayString() == "ZibStack.NET.Aop.IAsyncAspectHandler");
                 }
             }
 
@@ -107,6 +111,7 @@ public static class AopParser
                 order,
                 props,
                 handlerTypeName,
+                isAsyncHandler,
                 sensitiveReturn,
                 noLogReturn));
         }

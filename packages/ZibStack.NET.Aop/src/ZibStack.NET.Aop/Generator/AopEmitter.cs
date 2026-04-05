@@ -216,7 +216,15 @@ public static class AopEmitter
         }
         sb.AppendLine($"{indent}    }}");
         sb.AppendLine($"{indent}}};");
-        sb.AppendLine($"{indent}{handlerVar}.OnBefore({ctxVar});");
+        if (aspect.IsAsyncHandler)
+        {
+            if (method.IsAsync)
+                sb.AppendLine($"{indent}await {handlerVar}.OnBeforeAsync({ctxVar}).ConfigureAwait(false);");
+            else
+                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method. Make the method async or use IAspectHandler.");
+        }
+        else
+            sb.AppendLine($"{indent}{handlerVar}.OnBefore({ctxVar});");
     }
 
     private static void EmitRuntimeHandlerAfter(StringBuilder sb, InterceptedMethodModel method, AspectInfo aspect, string indent)
@@ -227,7 +235,15 @@ public static class AopEmitter
         sb.AppendLine($"{indent}{ctxVar}.ElapsedMilliseconds = __sw.ElapsedMilliseconds;");
         if (!method.ReturnsVoid)
             sb.AppendLine($"{indent}{ctxVar}.ReturnValue = __result;");
-        sb.AppendLine($"{indent}{handlerVar}.OnAfter({ctxVar});");
+        if (aspect.IsAsyncHandler)
+        {
+            if (method.IsAsync)
+                sb.AppendLine($"{indent}await {handlerVar}.OnAfterAsync({ctxVar}).ConfigureAwait(false);");
+            else
+                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method.");
+        }
+        else
+            sb.AppendLine($"{indent}{handlerVar}.OnAfter({ctxVar});");
     }
 
     private static void EmitRuntimeHandlerOnException(StringBuilder sb, InterceptedMethodModel method, AspectInfo aspect, string indent)
@@ -236,6 +252,14 @@ public static class AopEmitter
         var ctxVar = GetContextVarName(aspect);
 
         sb.AppendLine($"{indent}{ctxVar}.ElapsedMilliseconds = __sw.ElapsedMilliseconds;");
-        sb.AppendLine($"{indent}{handlerVar}.OnException({ctxVar}, __ex);");
+        if (aspect.IsAsyncHandler)
+        {
+            if (method.IsAsync)
+                sb.AppendLine($"{indent}await {handlerVar}.OnExceptionAsync({ctxVar}, __ex).ConfigureAwait(false);");
+            else
+                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method.");
+        }
+        else
+            sb.AppendLine($"{indent}{handlerVar}.OnException({ctxVar}, __ex);");
     }
 }
