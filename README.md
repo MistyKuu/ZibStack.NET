@@ -7,7 +7,7 @@ A collection of .NET source generators and utilities for common application conc
 | Package | NuGet | Description |
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
-| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Define custom aspects via `IAspectHandler` with `OnBefore`/`OnAfter`/`OnException` hooks. |
+| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in aspects: `[Trace]` (OpenTelemetry), `[Timing]`, `[SuppressException]`. Custom aspects via `IAspectHandler`/`IAsyncAspectHandler`. |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for strongly-typed Create and Update request DTOs with PatchField support. |
 
 ## Quick Examples
@@ -53,8 +53,31 @@ public class TimingHandler : IAspectHandler
 // Apply it:
 [Timing]
 public Order GetOrder(int id) { ... }
+```
 
-// Async handlers (for async methods):
+Built-in aspects (no extra dependencies):
+
+```csharp
+// OpenTelemetry-compatible tracing — creates Activity spans:
+[Trace]
+public async Task<Order> GetOrderAsync(int id) { ... }
+// → Jaeger/Zipkin/OTLP see: OrderService.GetOrderAsync with params as tags
+
+// Timing — lightweight metrics via event:
+TimingHandler.OnTimingRecorded += (cls, method, ms) => metrics.Record(method, ms);
+[Timing]
+public Order PlaceOrder(int id) { ... }
+
+// Multi-aspect — combine freely:
+[Log]
+[Trace]
+[Timing]
+public async Task<Order> ProcessOrderAsync(int id) { ... }
+```
+
+Async handlers (for async methods only):
+
+```csharp
 public class MetricsHandler : IAsyncAspectHandler
 {
     public ValueTask OnBeforeAsync(AspectContext ctx) => default;

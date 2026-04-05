@@ -15,9 +15,10 @@
     <PackageTags>aop;aspects;interceptors;source-generator;csharp</PackageTags>
   </PropertyGroup>
 
-  <!-- IAsyncAspectHandler needs ValueTask — net8.0+ only -->
+  <!-- IAsyncAspectHandler and Trace aspect need .NET 8+ features -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <Compile Remove="IAsyncAspectHandler.cs" />
+    <Compile Remove="Aspects\TraceAttribute.cs" />
   </ItemGroup>
 
 </Project>
