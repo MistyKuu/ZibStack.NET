@@ -19,7 +19,7 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </code>
 /// </example>
 [AspectHandler(typeof(CacheHandler))]
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
 public sealed class CacheAttribute : AspectAttribute
 {
     /// <summary>Cache duration in seconds. Default: 300 (5 minutes). 0 = no expiration.</summary>

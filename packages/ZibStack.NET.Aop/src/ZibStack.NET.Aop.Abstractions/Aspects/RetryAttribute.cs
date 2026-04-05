@@ -15,7 +15,7 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </code>
 /// </example>
 [AspectHandler(typeof(RetryHandler))]
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
 public sealed class RetryAttribute : AspectAttribute
 {
     public int MaxAttempts { get; set; } = 3;

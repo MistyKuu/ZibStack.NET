@@ -17,7 +17,7 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </code>
 /// </example>
 [AspectHandler(typeof(SuppressExceptionHandler))]
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
 public sealed class SuppressExceptionAttribute : AspectAttribute
 {
 }
