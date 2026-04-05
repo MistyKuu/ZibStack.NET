@@ -259,6 +259,73 @@ public void OnAfter(AspectContext ctx)
 }
 ```
 
+## Inline Emitters vs Runtime Handlers
+
+ZibStack.NET.Aop supports two aspect execution models. Choose based on your performance needs:
+
+### Runtime Handlers (`IAspectHandler` / `IAroundAspectHandler`)
+
+Simple C# classes. The generator creates handler instances and `AspectContext` at runtime:
+
+```csharp
+// What you write:
+[Timing]
+public Order GetOrder(int id) { ... }
+
+// What the generator produces:
+static Order GetOrder_Aop(this OrderService @this, int id)
+{
+    var handler = AspectServiceProvider.Resolve<TimingHandler>() ?? new TimingHandler();
+    var ctx = new AspectContext                    // ← allocation
+    {
+        ClassName = "OrderService",
+        MethodName = "GetOrder",
+        Parameters = new[] { new AspectParameterInfo { Name = "id", Value = id } }  // ← allocation + boxing
+    };
+    handler.OnBefore(ctx);                        // ← virtual dispatch
+    var sw = Stopwatch.StartNew();
+    var result = @this.GetOrder(id);
+    sw.Stop();
+    ctx.ElapsedMilliseconds = sw.ElapsedMilliseconds;
+    ctx.ReturnValue = result;
+    handler.OnAfter(ctx);                         // ← virtual dispatch
+    return result;
+}
+```
+
+**~60ns overhead, ~304B allocation per call.** Easy to write — just implement an interface.
+
+### Inline Emitters (`IAspectEmitter`)
+
+Compile-time code generation. The emitter writes code directly into the interceptor — no objects, no dispatch. Used by `[Log]`:
+
+```csharp
+// What [Log] produces (via LogAspectEmitter):
+static Order GetOrder_Aop(this OrderService @this, int id)
+{
+    var logger = __GetLogger(@this);              // UnsafeAccessor, zero overhead
+    __logEntry(logger, id, null);                 // pre-compiled LoggerMessage.Define delegate
+    var sw = Stopwatch.StartNew();
+    var result = @this.GetOrder(id);
+    sw.Stop();
+    __logExit(logger, sw.ElapsedMilliseconds, result?.ToString(), null);
+    return result;
+}
+```
+
+**~40-50ns overhead, ~64B allocation per call.** Zero boxing, zero virtual dispatch. Requires writing a Roslyn `IAspectEmitter` (advanced).
+
+### When to use which
+
+| | Runtime Handler | Inline Emitter |
+|---|---|---|
+| **Ease of writing** | Simple C# class | Roslyn code generation |
+| **Overhead** | ~60ns, ~304B/call | ~40ns, ~64B/call |
+| **Best for** | Most aspects: timing, tracing, auth, cache, retry | Hot paths: logging, metrics |
+| **Built-in examples** | `[Timing]`, `[Trace]`, `[Retry]`, `[Cache]`, `[Authorize]` | `[Log]` |
+
+Both can be combined on the same method — inline emitters and runtime handlers execute in the same interceptor.
+
 ## Requirements
 
 - **.NET 8.0** or later
