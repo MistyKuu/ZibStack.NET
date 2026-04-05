@@ -155,7 +155,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
             sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __ex);");
     }
 
-    // === Format helpers (parity with old SmartLogEmitter) ===
+    // === Format helpers ===
 
     private static string GetParamLogType(InterceptedParameterModel p, int objectLogging)
     {

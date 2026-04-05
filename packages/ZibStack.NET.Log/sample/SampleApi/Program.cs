@@ -1,8 +1,7 @@
-using ZibStack.NET.Log.Sample.Services;
+using ZibStack.NET.Aop;
 using ZibStack.NET.Log;
+using ZibStack.NET.Log.Sample.Services;
 
-// Assembly-level defaults: all [Log] methods in this project use Debug level
-// and JSON mode unless overridden per-method.
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<OrderService>();
 
 var app = builder.Build();
+
+AspectServiceProvider.ServiceProvider = app.Services;
 
 app.MapGet("/order", (OrderService service) =>
 {

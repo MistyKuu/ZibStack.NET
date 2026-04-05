@@ -89,7 +89,7 @@ public partial class DtoGenerator : IIncrementalGenerator
                 spc.AddSource("FluentDtoValidator.g.cs", FluentDtoValidatorSource);
         });
 
-        // Run diagnostics on all types with SmartDto attributes
+        // Run diagnostics on all types with ZibStack.Dto attributes
         var diagnosticsTargets = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is TypeDeclarationSyntax tds &&
@@ -98,12 +98,12 @@ public partial class DtoGenerator : IIncrementalGenerator
                 {
                     var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
                     if (symbol is null) return ((INamedTypeSymbol?, TypeDeclarationSyntax?)) (null, null);
-                    var hasSmartDto = symbol.GetAttributes().Any(a =>
+                    var hasDtoAttribute = symbol.GetAttributes().Any(a =>
                     {
                         var name = a.AttributeClass?.ContainingNamespace?.ToDisplayString();
                         return name == "ZibStack.NET.Dto";
                     });
-                    if (!hasSmartDto) return (null, null);
+                    if (!hasDtoAttribute) return (null, null);
                     return (symbol, (TypeDeclarationSyntax)ctx.Node);
                 })
             .Where(static x => x.Item1 is not null);

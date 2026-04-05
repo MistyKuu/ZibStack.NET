@@ -28,7 +28,7 @@ public class OrderService { ... }
 // Interpolated string logging:
 logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
 
-// Assembly-level defaults:
+// Optional: override assembly-level defaults (default: Information level, Destructure mode)
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
 ```
 
