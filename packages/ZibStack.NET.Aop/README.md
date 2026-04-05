@@ -64,18 +64,6 @@ builder.Services.AddTransient<TimingHandler>();
 public Order GetOrder(int id) { ... }
 ```
 
-### [SuppressException] — exception observability
-
-Fires when a method throws. Register an `IExceptionObserver` in DI to observe exceptions.
-
-```csharp
-builder.Services.AddSingleton<IExceptionObserver, MyExceptionLogger>();
-builder.Services.AddTransient<SuppressExceptionHandler>();
-
-[SuppressException]
-public Order? TryGetOrder(int id) { ... }
-```
-
 ### [Retry] — automatic retry with backoff
 
 ```csharp
