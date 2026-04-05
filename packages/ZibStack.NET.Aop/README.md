@@ -16,6 +16,25 @@ Enable interceptors in your `.csproj`:
 </PropertyGroup>
 ```
 
+## Setup (DI)
+
+All aspect handlers are resolved from DI. Wire up once at startup:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Register handlers + their dependencies
+builder.Services.AddTransient<TimingHandler>();
+builder.Services.AddSingleton<ITimingRecorder, MyMetricsRecorder>();
+
+var app = builder.Build();
+
+// Enable DI for all aspects (required):
+AspectServiceProvider.ServiceProvider = app.Services;
+```
+
+Now any method with `[Timing]`, `[Trace]`, `[Cache]`, etc. will resolve its handler from DI.
+
 ## Built-in Aspects
 
 ### [Trace] — OpenTelemetry-compatible tracing

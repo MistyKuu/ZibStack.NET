@@ -4,8 +4,9 @@ namespace ZibStack.NET.Aop;
 /// Base attribute for all aspects. Derive from this to create custom aspect attributes.
 /// The source generator detects all attributes inheriting from <see cref="AspectAttribute"/>
 /// and generates interceptors for decorated methods.
+/// When applied to a class, all public instance methods are intercepted.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = true, AllowMultiple = true)]
 public abstract class AspectAttribute : Attribute
 {
     /// <summary>

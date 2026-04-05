@@ -45,21 +45,41 @@ public static class AopPipeline
         var callSiteCollection = callSites.Collect();
 
         // Step 2: Find classes with aspect-attributed methods
+        // Find classes with aspect-attributed methods OR class-level aspect attributes
         var classSymbols = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: static (node, _) => node is MethodDeclarationSyntax,
+                predicate: static (node, _) => node is MethodDeclarationSyntax or ClassDeclarationSyntax,
                 transform: static (ctx, ct) =>
                 {
-                    var methodSymbol = ctx.SemanticModel.GetDeclaredSymbol((MethodDeclarationSyntax)ctx.Node, ct);
-                    if (methodSymbol is null) return null;
-                    bool hasAspect = methodSymbol.GetAttributes()
-                        .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
-                    return hasAspect ? methodSymbol.ContainingType : null;
+                    if (ctx.Node is MethodDeclarationSyntax)
+                    {
+                        var methodSymbol = ctx.SemanticModel.GetDeclaredSymbol((MethodDeclarationSyntax)ctx.Node, ct);
+                        if (methodSymbol is null) return null;
+                        bool hasAspect = methodSymbol.GetAttributes()
+                            .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+                        return hasAspect ? methodSymbol.ContainingType : null;
+                    }
+                    else
+                    {
+                        var classSymbol = ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node, ct);
+                        if (classSymbol is null) return null;
+                        bool hasAspect = classSymbol.GetAttributes()
+                            .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+                        return hasAspect ? classSymbol : null;
+                    }
                 })
             .Where(static t => t is not null)
             .Select(static (t, _) => t!)
             .Collect()
-            .SelectMany(static (types, _) => types.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default));
+            .SelectMany(static (types, _) =>
+            {
+                var seen = new HashSet<string>();
+                var result = new List<INamedTypeSymbol>();
+                foreach (var t in types)
+                    if (seen.Add(t.ToDisplayString()))
+                        result.Add((INamedTypeSymbol)t);
+                return result;
+            });
 
         // Step 2b: Report diagnostics from class data providers
         var providersCopy = providers;

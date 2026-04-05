@@ -34,9 +34,12 @@ public static class AopParser
         if (symbolInfo.Symbol is not IMethodSymbol methodSymbol)
             return null;
 
-        // Check if method has any attribute deriving from AspectAttribute
+        // Check if method or its class has any attribute deriving from AspectAttribute
         bool hasAspect = methodSymbol.GetAttributes()
             .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+        if (!hasAspect && methodSymbol.ContainingType != null)
+            hasAspect = methodSymbol.ContainingType.GetAttributes()
+                .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
         if (!hasAspect)
             return null;
 
@@ -68,63 +71,18 @@ public static class AopParser
             return null;
 
         var aspects = new List<AspectInfo>();
+        var seenAspectTypes = new HashSet<string>();
 
-        foreach (var attr in method.GetAttributes())
-        {
-            if (!DerivesFromAspectAttribute(attr.AttributeClass))
-                continue;
+        // Method-level attributes (take priority)
+        CollectAspects(method.GetAttributes(), method, aspects, seenAspectTypes);
 
-            int order = 0;
-            var props = new Dictionary<string, object?>();
-
-            foreach (var namedArg in attr.NamedArguments)
-            {
-                if (namedArg.Key == "Order" && namedArg.Value.Value is int o)
-                    order = o;
-                else
-                    props[namedArg.Key] = namedArg.Value.Value;
-            }
-
-            // Check if attribute class has [AspectHandler]
-            string? handlerTypeName = null;
-            bool isAsyncHandler = false;
-            bool isAroundHandler = false;
-            bool isAsyncAroundHandler = false;
-            foreach (var classAttr in attr.AttributeClass!.GetAttributes())
-            {
-                if (classAttr.AttributeClass?.ToDisplayString() == AspectHandlerAttributeFullName
-                    && classAttr.ConstructorArguments.Length > 0
-                    && classAttr.ConstructorArguments[0].Value is INamedTypeSymbol handlerType)
-                {
-                    handlerTypeName = handlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    var ifaces = handlerType.AllInterfaces.Select(i => i.ToDisplayString()).ToList();
-                    isAsyncHandler = ifaces.Contains("ZibStack.NET.Aop.IAsyncAspectHandler");
-                    isAroundHandler = ifaces.Contains("ZibStack.NET.Aop.IAroundAspectHandler");
-                    isAsyncAroundHandler = ifaces.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler");
-                }
-            }
-
-            // Check [return: Sensitive] / [return: NoLog]
-            var returnAttrs = method.GetReturnTypeAttributes();
-            bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
-            bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
-
-            aspects.Add(new AspectInfo(
-                attr.AttributeClass!.ToDisplayString(),
-                order,
-                props,
-                handlerTypeName,
-                isAsyncHandler,
-                isAroundHandler || isAsyncAroundHandler,
-                isAsyncAroundHandler,
-                sensitiveReturn,
-                noLogReturn));
-        }
+        // Class-level attributes (apply to all public instance methods)
+        if (method.ContainingType != null && method.DeclaredAccessibility == Accessibility.Public)
+            CollectAspects(method.ContainingType.GetAttributes(), method, aspects, seenAspectTypes);
 
         if (aspects.Count == 0)
             return null;
 
-        // Sort by order
         aspects.Sort((a, b) => a.Order.CompareTo(b.Order));
 
         // Parse parameters
@@ -281,6 +239,55 @@ public static class AopParser
             .Replace("<", "_").Replace(">", "_").Replace(",", "_").Replace(" ", "");
 
         return new SanitizedTypeModel(fullName, safeName, properties);
+    }
+
+    private static void CollectAspects(
+        System.Collections.Immutable.ImmutableArray<AttributeData> attributes,
+        IMethodSymbol method,
+        List<AspectInfo> aspects,
+        HashSet<string> seenTypes)
+    {
+        foreach (var attr in attributes)
+        {
+            if (!DerivesFromAspectAttribute(attr.AttributeClass))
+                continue;
+            var typeName = attr.AttributeClass!.ToDisplayString();
+            if (!seenTypes.Add(typeName))
+                continue; // already added from method-level
+
+            int order = 0;
+            var props = new Dictionary<string, object?>();
+            foreach (var namedArg in attr.NamedArguments)
+            {
+                if (namedArg.Key == "Order" && namedArg.Value.Value is int o)
+                    order = o;
+                else
+                    props[namedArg.Key] = namedArg.Value.Value;
+            }
+
+            string? handlerTypeName = null;
+            bool isAsyncHandler = false, isAroundHandler = false, isAsyncAroundHandler = false;
+            foreach (var classAttr in attr.AttributeClass.GetAttributes())
+            {
+                if (classAttr.AttributeClass?.ToDisplayString() == AspectHandlerAttributeFullName
+                    && classAttr.ConstructorArguments.Length > 0
+                    && classAttr.ConstructorArguments[0].Value is INamedTypeSymbol handlerType)
+                {
+                    handlerTypeName = handlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    var ifaces = handlerType.AllInterfaces.Select(i => i.ToDisplayString()).ToList();
+                    isAsyncHandler = ifaces.Contains("ZibStack.NET.Aop.IAsyncAspectHandler");
+                    isAroundHandler = ifaces.Contains("ZibStack.NET.Aop.IAroundAspectHandler");
+                    isAsyncAroundHandler = ifaces.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler");
+                }
+            }
+
+            var returnAttrs = method.GetReturnTypeAttributes();
+            bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
+            bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+
+            aspects.Add(new AspectInfo(typeName, order, props, handlerTypeName, isAsyncHandler,
+                isAroundHandler || isAsyncAroundHandler, isAsyncAroundHandler, sensitiveReturn, noLogReturn));
+        }
     }
 
     private static bool DerivesFromAspectAttribute(INamedTypeSymbol? type)

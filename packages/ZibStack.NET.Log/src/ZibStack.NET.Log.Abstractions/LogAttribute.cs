@@ -3,10 +3,22 @@ using ZibStack.NET.Aop;
 namespace ZibStack.NET.Log;
 
 /// <summary>
-/// Marks a method for automatic logging. The source generator will create an interceptor
-/// that logs method entry, exit, parameters, return values, and exceptions.
+/// Marks a method or class for automatic logging. When applied to a class, all public
+/// instance methods are logged. The source generator creates interceptors that log
+/// method entry, exit, parameters, return values, and exceptions.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
+/// <example>
+/// <code>
+/// // On a method:
+/// [Log]
+/// public Order GetOrder(int id) { ... }
+///
+/// // On a class (logs all public methods):
+/// [Log]
+/// public class OrderService { ... }
+/// </code>
+/// </example>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class LogAttribute : AspectAttribute
 {
     /// <summary>
