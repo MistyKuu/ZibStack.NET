@@ -29,15 +29,20 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     public void EmitClassMembers(StringBuilder sb, InterceptedClassModel cls,
         InterceptedMethodModel method, AspectInfo aspect, string indent)
     {
-        var loggerFieldName = ClassData(cls, "LoggerFieldName") as string ?? "_logger";
-        var loggerFieldType = ClassData(cls, "LoggerFieldType") as string
-            ?? $"global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>";
+        var hasLoggerField = ClassData(cls, "LoggerFieldName") != null;
 
         if (_emittedAccessors.Add(cls.ClassName))
         {
-            sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = \"{loggerFieldName}\")]");
-            sb.AppendLine($"{indent}private static extern ref {loggerFieldType} __GetLogger({cls.ClassName} @this);");
-            sb.AppendLine();
+            if (hasLoggerField)
+            {
+                var loggerFieldName = (string)ClassData(cls, "LoggerFieldName")!;
+                var loggerFieldType = ClassData(cls, "LoggerFieldType") as string
+                    ?? $"global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>";
+
+                sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = \"{loggerFieldName}\")]");
+                sb.AppendLine($"{indent}private static extern ref {loggerFieldType} __GetLogger({cls.ClassName} @this);");
+                sb.AppendLine();
+            }
 
             // Emit sanitizer methods for types with [Sensitive]/[NoLog] properties
             var emittedSanitizers = new HashSet<string>();
@@ -99,7 +104,15 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         var loggable = logParams ? method.Parameters.Where(p => !p.IsNoLog).ToList()
             : new List<InterceptedParameterModel>();
 
-        sb.AppendLine($"{indent}var __logger = __GetLogger(@this);");
+        var hasLoggerField = ClassData(cls, "LoggerFieldName") != null;
+        if (hasLoggerField)
+        {
+            sb.AppendLine($"{indent}var __logger = __GetLogger(@this);");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}var __logger = (global::Microsoft.Extensions.Logging.ILogger)global::ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider!.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
+        }
 
         if (loggable.Count <= 6)
         {
