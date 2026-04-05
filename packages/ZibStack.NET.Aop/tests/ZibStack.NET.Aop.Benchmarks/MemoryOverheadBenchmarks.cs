@@ -5,9 +5,9 @@ using BenchmarkDotNet.Jobs;
 namespace ZibStack.NET.Aop.Benchmarks;
 
 /// <summary>
-/// Measures actual memory overhead of ConditionalWeakTable at scale.
-/// Creates N instances, caches a handler for each, measures total memory.
-/// Also verifies GC cleanup — after nulling references, entries should be collected.
+/// Measures memory overhead of ConditionalWeakTable at realistic scale.
+/// Answers: "if I have 100K/1M live service instances, how much extra memory
+/// does the per-instance handler cache cost?"
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(RuntimeMoniker.Net100)]
@@ -19,21 +19,24 @@ public class MemoryOverheadBenchmarks
     [Params(10_000, 100_000, 1_000_000)]
     public int Count;
 
-    [Benchmark(Description = "CWT: populate N entries")]
-    public ConditionalWeakTable<ServiceInstance, FakeHandler> CWT_Populate()
+    /// <summary>
+    /// Baseline: just allocating the instances, no cache at all.
+    /// </summary>
+    [Benchmark(Description = "Baseline: instances only", Baseline = true)]
+    public ServiceInstance[] Baseline_NoCache()
     {
-        var cwt = new ConditionalWeakTable<ServiceInstance, FakeHandler>();
+        var instances = new ServiceInstance[Count];
         for (int i = 0; i < Count; i++)
-        {
-            var inst = new ServiceInstance { Id = i };
-            cwt.GetValue(inst, static _ => new FakeHandler());
-        }
-        // instances go out of scope here — GC can reclaim
-        return cwt;
+            instances[i] = new ServiceInstance { Id = i };
+        return instances;
     }
 
-    [Benchmark(Description = "CWT: populate + retain refs")]
-    public (ConditionalWeakTable<ServiceInstance, FakeHandler>, ServiceInstance[]) CWT_PopulateRetained()
+    /// <summary>
+    /// CWT with all instances retained (worst case — full pressure).
+    /// Difference from baseline = CWT overhead.
+    /// </summary>
+    [Benchmark(Description = "CWT: instances + cache")]
+    public (ConditionalWeakTable<ServiceInstance, FakeHandler>, ServiceInstance[]) CWT_Retained()
     {
         var cwt = new ConditionalWeakTable<ServiceInstance, FakeHandler>();
         var instances = new ServiceInstance[Count];
@@ -45,16 +48,21 @@ public class MemoryOverheadBenchmarks
         return (cwt, instances);
     }
 
-    [Benchmark(Description = "Dict: populate + retain refs (baseline)")]
-    public (Dictionary<ServiceInstance, FakeHandler>, ServiceInstance[]) Dict_PopulateRetained()
+    /// <summary>
+    /// CWT with 2 handler types per instance (like [Timing] + [Log] stacked).
+    /// </summary>
+    [Benchmark(Description = "CWT x2: two handler caches")]
+    public (ConditionalWeakTable<ServiceInstance, FakeHandler>, ConditionalWeakTable<ServiceInstance, FakeHandler>, ServiceInstance[]) CWT_TwoHandlers()
     {
-        var dict = new Dictionary<ServiceInstance, FakeHandler>(Count);
+        var cwt1 = new ConditionalWeakTable<ServiceInstance, FakeHandler>();
+        var cwt2 = new ConditionalWeakTable<ServiceInstance, FakeHandler>();
         var instances = new ServiceInstance[Count];
         for (int i = 0; i < Count; i++)
         {
             instances[i] = new ServiceInstance { Id = i };
-            dict[instances[i]] = new FakeHandler();
+            cwt1.GetValue(instances[i], static _ => new FakeHandler());
+            cwt2.GetValue(instances[i], static _ => new FakeHandler());
         }
-        return (dict, instances);
+        return (cwt1, cwt2, instances);
     }
 }

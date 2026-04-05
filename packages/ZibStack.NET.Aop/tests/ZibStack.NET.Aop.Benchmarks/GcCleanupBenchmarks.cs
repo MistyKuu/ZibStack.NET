@@ -5,43 +5,83 @@ using BenchmarkDotNet.Jobs;
 namespace ZibStack.NET.Aop.Benchmarks;
 
 /// <summary>
-/// Validates that ConditionalWeakTable actually releases entries after GC.
-/// Not a perf benchmark — more of a correctness/memory safety verification.
-/// Run manually to see console output.
+/// Validates ConditionalWeakTable releases entries after GC at scale.
+/// Creates many instances, drops references, verifies cleanup.
 /// </summary>
-[SimpleJob(RuntimeMoniker.Net100, iterationCount: 1, warmupCount: 0)]
+[SimpleJob(RuntimeMoniker.Net100, iterationCount: 3, warmupCount: 1)]
+[MemoryDiagnoser]
 public class GcCleanupBenchmarks
 {
     public sealed class FakeHandler { }
     public sealed class ServiceInstance { }
 
-    [Benchmark(Description = "CWT: verify GC cleanup")]
-    public void VerifyGcCleanup()
+    [Params(10_000, 100_000)]
+    public int Count;
+
+    /// <summary>
+    /// Populate CWT, drop all instance references, GC, verify cleanup.
+    /// If CWT leaks, this will show retained memory.
+    /// </summary>
+    [Benchmark(Description = "CWT: populate + GC + verify")]
+    public int PopulateAndVerifyCleanup()
     {
         var cwt = new ConditionalWeakTable<ServiceInstance, FakeHandler>();
-        var weakRefs = new WeakReference[1000];
+        var weakRefs = new WeakReference[Count];
 
-        // Populate
-        for (int i = 0; i < 1000; i++)
+        for (int i = 0; i < Count; i++)
         {
             var inst = new ServiceInstance();
             weakRefs[i] = new WeakReference(inst);
             cwt.GetValue(inst, static _ => new FakeHandler());
         }
+        // inst refs are now out of scope
 
-        // All instances go out of scope — force GC
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
 
         int alive = 0;
-        for (int i = 0; i < 1000; i++)
+        for (int i = 0; i < Count; i++)
             if (weakRefs[i].IsAlive) alive++;
 
-        // If CWT held strong refs, all 1000 would be alive.
-        // With weak refs, most/all should be collected.
-        Console.WriteLine($"[CWT GC test] Alive after GC: {alive}/1000 (should be ~0)");
-        if (alive > 10)
-            throw new Exception($"CWT is leaking! {alive} instances survived GC.");
+        if (alive > Count / 100) // allow 1% tolerance
+            throw new Exception($"CWT leaking: {alive}/{Count} instances survived GC");
+
+        return alive;
+    }
+
+    /// <summary>
+    /// Simulate churn: create instances, use them, drop half, GC, check.
+    /// Mimics real app where services come and go (scoped DI, etc).
+    /// </summary>
+    [Benchmark(Description = "CWT: churn (create/drop/GC cycles)")]
+    public int ChurnSimulation()
+    {
+        var cwt = new ConditionalWeakTable<ServiceInstance, FakeHandler>();
+        int totalAlive = 0;
+
+        for (int cycle = 0; cycle < 5; cycle++)
+        {
+            var batch = new ServiceInstance[Count / 5];
+            for (int i = 0; i < batch.Length; i++)
+            {
+                batch[i] = new ServiceInstance();
+                cwt.GetValue(batch[i], static _ => new FakeHandler());
+            }
+
+            // keep only even-indexed instances
+            for (int i = 1; i < batch.Length; i += 2)
+                batch[i] = null!;
+
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+
+            int alive = 0;
+            for (int i = 0; i < batch.Length; i++)
+                if (batch[i] != null) alive++;
+            totalAlive += alive;
+        }
+
+        return totalAlive;
     }
 }
