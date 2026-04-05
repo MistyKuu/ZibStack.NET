@@ -105,23 +105,23 @@ CacheHandler.Invalidate("GetOrder");
 CacheHandler.ClearAll();
 ```
 
-### [Authorize] — authorization check
+### [RequirePermission] — authorization check
 
-Supports DI with `IAuthorizationChecker` or static delegate fallback.
+Supports DI with `IPermissionChecker` or static delegate fallback.
 
 ```csharp
 // Option 1 — DI (recommended):
-builder.Services.AddScoped<IAuthorizationChecker, MyAuthChecker>();
-builder.Services.AddTransient<AuthorizeHandler>();
+builder.Services.AddScoped<IPermissionChecker, MyAuthChecker>();
+builder.Services.AddTransient<RequirePermissionHandler>();
 
 // Option 2 — static delegate:
-AuthorizeHandler.AuthorizationCheck = (ctx, policy) =>
+RequirePermissionHandler.AuthorizationCheck = (ctx, policy) =>
     currentUser.HasPermission(policy ?? ctx.MethodName);
 
-[Authorize]
+[RequirePermission]
 public void DeleteOrder(int id) { ... }  // checks "DeleteOrder" permission
 
-[Authorize(Policy = "Admin")]
+[RequirePermission(Policy = "Admin")]
 public void PurgeAllData() { ... }  // checks "Admin" permission
 ```
 
@@ -134,12 +134,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Register handler dependencies
 builder.Services.AddSingleton<ITimingRecorder, PrometheusTimingRecorder>();
-builder.Services.AddScoped<IAuthorizationChecker, JwtAuthChecker>();
+builder.Services.AddScoped<IPermissionChecker, JwtAuthChecker>();
 builder.Services.AddSingleton<IAspectCache, RedisAspectCache>();
 
 // Register handlers themselves
 builder.Services.AddTransient<TimingHandler>();
-builder.Services.AddTransient<AuthorizeHandler>();
+builder.Services.AddTransient<RequirePermissionHandler>();
 builder.Services.AddTransient<CacheHandler>();
 
 var app = builder.Build();
@@ -359,7 +359,7 @@ static Order GetOrder_Aop(this OrderService @this, int id)
 | **Ease of writing** | Simple C# class | Roslyn code generation |
 | **Overhead** | ~60ns, ~304B/call | ~40ns, ~64B/call |
 | **Best for** | Most aspects: timing, tracing, auth, cache, retry | Hot paths: logging, metrics |
-| **Built-in examples** | `[Timing]`, `[Trace]`, `[Retry]`, `[Cache]`, `[Authorize]` | `[Log]` |
+| **Built-in examples** | `[Timing]`, `[Trace]`, `[Retry]`, `[Cache]`, `[RequirePermission]` | `[Log]` |
 
 Both can be combined on the same method — inline emitters and runtime handlers execute in the same interceptor.
 

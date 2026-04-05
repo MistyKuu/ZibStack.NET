@@ -137,6 +137,13 @@ public static class AopEmitter
         sb.AppendLine();
         sb.AppendLine($"{indent}var __sw = global::System.Diagnostics.Stopwatch.StartNew();");
 
+        // Declare around handler instances + contexts before the proceed chain
+        foreach (var aspect in aroundAspects)
+        {
+            if (aspect.HandlerTypeName != null)
+                EmitRuntimeHandlerBefore(sb, classModel, method, aspect, indent);
+        }
+
         // Build the proceed chain for around handlers
         var callArgs = string.Join(", ", method.Parameters.Select(p => p.Name));
         var originalCall = $"@this.{method.MethodName}({callArgs})";
@@ -294,15 +301,19 @@ public static class AopEmitter
             sb.AppendLine($"{indent}    }}");
         }
         sb.AppendLine($"{indent}}};");
-        if (aspect.IsAsyncHandler)
+        // Around handlers don't have OnBefore — they wrap via Around/AroundAsync
+        if (!aspect.IsAroundHandler)
         {
-            if (method.IsAsync)
-                sb.AppendLine($"{indent}await {handlerVar}.OnBeforeAsync({ctxVar}).ConfigureAwait(false);");
+            if (aspect.IsAsyncHandler)
+            {
+                if (method.IsAsync)
+                    sb.AppendLine($"{indent}await {handlerVar}.OnBeforeAsync({ctxVar}).ConfigureAwait(false);");
+                else
+                    sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method.");
+            }
             else
-                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method. Make the method async or use IAspectHandler.");
+                sb.AppendLine($"{indent}{handlerVar}.OnBefore({ctxVar});");
         }
-        else
-            sb.AppendLine($"{indent}{handlerVar}.OnBefore({ctxVar});");
     }
 
     private static void EmitRuntimeHandlerAfter(StringBuilder sb, InterceptedMethodModel method, AspectInfo aspect, string indent)

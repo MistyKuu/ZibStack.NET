@@ -26,7 +26,7 @@ public class OrderService
     }
 }
 
-[Authorize]
+[RequirePermission]
 public class OrderService2
 {
     public void Debug()
