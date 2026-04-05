@@ -77,19 +77,32 @@ Overhead of calling `int Add(int a, int b) => a + b;` with logging, BenchmarkDot
 
 | Method | Mean | Allocated |
 |---|---:|---:|
-| No logging (baseline) | 0.0 ns | 0 B |
-| Manual `LoggerMessage.Define` (level OFF) | 34.0 ns | 0 B |
-| Manual `LoggerMessage.Define` | 40.4 ns | 0 B |
-| **ZibStack.Log `[Log]` (level OFF)** | **45.5 ns** | **64 B** |
-| **ZibStack.Log `[Log]` no stopwatch** | **47.1 ns** | **64 B** |
-| **ZibStack.Log `[Log]`** | **48.9 ns** | **64 B** |
-| Manual `ILogger.Log()` (level OFF) | 75.9 ns | 176 B |
-| Manual `ILogger.Log()` | 109.5 ns | 176 B |
+| No logging (baseline) | 0.2 ns | 0 B |
+| Manual `LoggerMessage.Define` (level OFF) | 34.3 ns | 0 B |
+| Manual `LoggerMessage.Define` | 39.2 ns | 0 B |
+| **ZibStack.Log `[Log]` no stopwatch** | **42.9 ns** | **64 B** |
+| **ZibStack.Log `[Log]` (level OFF)** | **45.3 ns** | **64 B** |
+| **ZibStack.Log `[Log]`** | **46.1 ns** | **64 B** |
+| `[Log]` return object (no `[Sensitive]`) | 49.1 ns | 96 B |
+| Manual `ILogger.Log()` (level OFF) | 73.2 ns | 176 B |
+| Manual `ILogger.Log()` | 94.1 ns | 176 B |
+| `[Log]` return object (with `[Sensitive]`) | 116.1 ns | 624 B |
 
-- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~49 ns vs ~40 ns)
-- **2.2x faster** than `_logger.LogInformation()` (49 ns vs 110 ns)
+- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~46 ns vs ~39 ns)
+- **2x faster** than `_logger.LogInformation()` (46 ns vs 94 ns)
 - **2.8x less memory** than `_logger.LogInformation()` (64 B vs 176 B)
 - When log level OFF: ~45 ns (just DI resolve + `IsEnabled` check)
+
+### Property-level sanitization overhead
+
+When return type has `[Sensitive]`/`[NoLog]` properties (Dictionary + JSON serialization):
+
+| Method | Mean | Allocated |
+|---|---:|---:|
+| `[Log]` return object (no `[Sensitive]`) | 49.1 ns | 96 B |
+| `[Log]` return object (with `[Sensitive]`) | 116.1 ns | 624 B |
+
++67 ns and +528 B per call for sanitization. Use `[Sensitive]` on properties only where needed.
 
 ## Features
 
