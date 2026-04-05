@@ -15,22 +15,18 @@ A collection of .NET source generators and utilities for common application conc
 ### ZibStack.NET.Log
 
 ```csharp
-[ZibLog]
-public class OrderService
-{
-    private readonly ILogger<OrderService> _logger;
-
-    [Log]
-    public Order PlaceOrder(int customerId, [Sensitive] string creditCard)
-    {
-        return _repo.Create(customerId, creditCard);
-    }
-}
+// On a method:
+[Log]
+public Order PlaceOrder(int customerId, [Sensitive] string creditCard) { ... }
 // log: Entering OrderService.PlaceOrder(customerId: 42, creditCard: ***)
 // log: Exited OrderService.PlaceOrder in 53ms -> {"Id":1,"Product":"Widget"}
 
+// On a class — logs ALL public methods:
+[Log]
+public class OrderService { ... }
+
 // Interpolated string logging:
-_logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
+logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
 
 // Assembly-level defaults:
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]

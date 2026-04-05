@@ -15,7 +15,7 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </code>
 /// </example>
 [AspectHandler(typeof(TimingHandler))]
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
 public sealed class TimingAttribute : AspectAttribute
 {
 }

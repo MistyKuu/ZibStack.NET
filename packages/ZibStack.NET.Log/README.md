@@ -10,58 +10,45 @@ Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[L
 dotnet add package ZibStack.NET.Log
 ```
 
-This pulls in `ZibStack.NET.Log.Abstractions` automatically (transitive dependency). The abstractions package contains the attributes (`[ZibStack.Log]`, `[Log]`, `[Sensitive]`, `[NoLog]`) as a regular library — attributes are preserved in IL, enabling **cross-project interception**.
-
-### 2. Enable interceptors in your `.csproj`
+### 2. Enable interceptors + wire DI
 
 ```xml
+<!-- .csproj -->
 <PropertyGroup>
     <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated</InterceptorsPreviewNamespaces>
 </PropertyGroup>
 ```
 
-### 3. Add attributes
-
-**Option A — with DI (no `[ZibLog]` or field needed):**
-
 ```csharp
-// Program.cs
+// Program.cs — wire DI (required):
+var app = builder.Build();
 AspectServiceProvider.ServiceProvider = app.Services;
-// ILogger<T> is resolved from DI automatically
-
-// OrderService.cs
-public class OrderService
-{
-    [Log]
-    public Order PlaceOrder(int customerId, string product, int quantity)
-    {
-        return _repo.Create(customerId, product, quantity);
-    }
-}
 ```
 
-**Option B — with `[ZibLog]` + explicit field (original, no DI needed):**
+### 3. Add `[Log]`
 
 ```csharp
-using ZibStack.NET.Log;
-using Microsoft.Extensions.Logging;
-
-[ZibLog]
+// On a method:
 public class OrderService
 {
-    private readonly ILogger<OrderService> _logger;
-
-    public OrderService(ILogger<OrderService> logger) => _logger = logger;
-
     [Log]
     public Order PlaceOrder(int customerId, string product, int quantity)
     {
         return _repo.Create(customerId, product, quantity);
     }
 }
+
+// Or on a class — logs ALL public methods:
+[Log]
+public class OrderService
+{
+    public Order PlaceOrder(int id) { ... }     // logged
+    public void Ping() { ... }                  // logged
+    private void Internal() { ... }             // NOT logged
+}
 ```
 
-Both options produce the same logging. Every call to `PlaceOrder` now logs entry, exit, elapsed time, and exceptions:
+Logger (`ILogger<OrderService>`) is resolved from DI automatically. Every call to `PlaceOrder` now logs entry, exit, elapsed time, and exceptions:
 
 ```
 info: OrderService[1] Entering OrderService.PlaceOrder(customerId: 42, product: Widget, quantity: 3)
@@ -267,19 +254,6 @@ public async Task<List<Order>> GetOrdersAsync(int customerId)
 }
 ```
 
-### Multiple ILogger Fields
-
-If your class has more than one `ILogger` field, specify which one to use:
-
-```csharp
-[ZibStack.Log(LoggerField = "_auditLogger")]
-public class PaymentService
-{
-    private readonly ILogger<PaymentService> _logger;
-    private readonly ILogger<PaymentService> _auditLogger;
-    // ...
-}
-```
 
 ## How It Works
 
@@ -317,20 +291,14 @@ ZibStack.NET.Log reports clear compiler errors when something is misconfigured:
 
 | Code | Description |
 |---|---|
-| SL0001 | `[Log]` on method but class lacks `[ZibStack.Log]` |
-| SL0002 | No `ILogger` field found in class |
-| SL0003 | Multiple `ILogger` fields — specify `LoggerField` |
 | SL0005 | `[Log]` on static method (not supported) |
-| SL0006 | Specified `LoggerField` not found |
 
 ## Attribute Reference
 
-### Automatic method logging (`[Log]`)
+### Automatic method/class logging (`[Log]`)
 
 | Attribute | Target | Default | Description |
 |---|---|---|---|
-| `[ZibStack.Log]` | Class | | Enables ZibStack.Log generation for the class |
-| `[ZibStack.Log(LoggerField = "name")]` | Class | auto-detect | Specifies which `ILogger` field to use |
 | `[Log]` | Method | | Adds entry/exit/exception logging |
 | `[Log(EntryExitLevel = ...)]` | Method | `Information` | Log level for entry/exit (`ZibStack.LogLevel.*`) |
 | `[Log(ExceptionLevel = ...)]` | Method | `Error` | Log level for exceptions (`ZibStack.LogLevel.*`) |

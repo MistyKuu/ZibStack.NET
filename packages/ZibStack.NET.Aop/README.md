@@ -238,6 +238,24 @@ public class MetricsHandler : IAsyncAspectHandler
 }
 ```
 
+## Class-Level Aspects
+
+Apply an aspect to a class — all public instance methods are intercepted:
+
+```csharp
+[Log]
+[Timing]
+public class OrderService
+{
+    public Order GetOrder(int id) { ... }       // logged + timed
+    public void Ping() { ... }                  // logged + timed
+    private void Internal() { ... }             // NOT intercepted (private)
+
+    [Log(EntryExitLevel = ZibLogLevel.Debug)]   // method-level overrides class-level
+    public void Debug() { ... }
+}
+```
+
 ## Multi-Aspect
 
 Multiple aspects on one method — all run in a single interceptor:

@@ -25,3 +25,12 @@ public class OrderService
         return orderId * 12.50m;
     }
 }
+
+[Timing]
+public class OrderService2
+{
+    public void Debug()
+    {
+        
+    }
+}
