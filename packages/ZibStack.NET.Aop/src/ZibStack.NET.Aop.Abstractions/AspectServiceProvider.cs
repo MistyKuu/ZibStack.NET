@@ -4,13 +4,10 @@ namespace ZibStack.NET.Aop;
 
 /// <summary>
 /// Static service locator for resolving aspect handlers from DI.
-/// When configured, handlers are resolved from <see cref="ServiceProvider"/> instead of
-/// being instantiated with <c>new</c>. This allows handlers to receive constructor-injected
-/// dependencies (ILogger, IMemoryCache, IHttpContextAccessor, etc.).
+/// Set <see cref="ServiceProvider"/> at startup to enable DI for all aspect handlers.
 /// </summary>
 /// <example>
 /// <code>
-/// // Program.cs — register your handlers and wire up the provider:
 /// builder.Services.AddTransient&lt;TimingHandler&gt;();
 /// var app = builder.Build();
 /// AspectServiceProvider.ServiceProvider = app.Services;
@@ -19,17 +16,26 @@ namespace ZibStack.NET.Aop;
 public static class AspectServiceProvider
 {
     /// <summary>
-    /// The application's service provider. Set this at startup to enable DI for aspect handlers.
-    /// When null (default), handlers are created with parameterless constructors (backward compatible).
+    /// The application's service provider. Must be set at startup.
     /// </summary>
     public static IServiceProvider? ServiceProvider { get; set; }
 
     /// <summary>
-    /// Resolves a handler from <see cref="ServiceProvider"/>, or returns null if DI is not configured
-    /// or the type is not registered.
+    /// Resolves a handler from DI. Throws if DI is not configured or the handler is not registered.
     /// </summary>
-    public static T? Resolve<T>() where T : class
+    public static T Resolve<T>() where T : class
     {
-        return ServiceProvider?.GetService(typeof(T)) as T;
+        if (ServiceProvider is null)
+            throw new InvalidOperationException(
+                $"AspectServiceProvider.ServiceProvider is not set. " +
+                $"Call 'AspectServiceProvider.ServiceProvider = app.Services;' at startup.");
+
+        var service = ServiceProvider.GetService(typeof(T)) as T;
+        if (service is null)
+            throw new InvalidOperationException(
+                $"Aspect handler '{typeof(T).FullName}' is not registered in DI. " +
+                $"Add 'builder.Services.AddTransient<{typeof(T).Name}>();' at startup.");
+
+        return service;
     }
 }
