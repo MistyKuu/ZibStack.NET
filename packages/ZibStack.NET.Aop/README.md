@@ -35,16 +35,11 @@ Parameters are added as span tags. Exceptions set error status + add exception e
 
 ### [Timing] — lightweight metrics
 
-Records method execution time. Supports DI with `ITimingRecorder` or static event fallback.
+Records method execution time. Register an `ITimingRecorder` in DI to receive metrics.
 
 ```csharp
-// Option 1 — DI (recommended):
 builder.Services.AddSingleton<ITimingRecorder, MyMetricsRecorder>();
 builder.Services.AddTransient<TimingHandler>();
-
-// Option 2 — static event (no DI needed):
-TimingHandler.OnTimingRecorded += (className, methodName, elapsedMs) =>
-    Console.WriteLine($"{className}.{methodName}: {elapsedMs}ms");
 
 [Timing]
 public Order GetOrder(int id) { ... }
@@ -52,16 +47,11 @@ public Order GetOrder(int id) { ... }
 
 ### [SuppressException] — exception observability
 
-Fires when a method throws. Supports DI with `IExceptionObserver` or static event fallback.
+Fires when a method throws. Register an `IExceptionObserver` in DI to observe exceptions.
 
 ```csharp
-// Option 1 — DI:
 builder.Services.AddSingleton<IExceptionObserver, MyExceptionLogger>();
 builder.Services.AddTransient<SuppressExceptionHandler>();
-
-// Option 2 — static event:
-SuppressExceptionHandler.OnExceptionSuppressed += (ctx, ex) =>
-    logger.LogWarning(ex, "Exception in {Method}", ctx.MethodName);
 
 [SuppressException]
 public Order? TryGetOrder(int id) { ... }

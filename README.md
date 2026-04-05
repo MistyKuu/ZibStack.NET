@@ -66,9 +66,8 @@ Built-in aspects (no extra dependencies):
 public async Task<Order> GetOrderAsync(int id) { ... }
 // → Jaeger/Zipkin/OTLP see: OrderService.GetOrderAsync with params as tags
 
-// Timing — lightweight metrics (DI or static event):
-// DI: builder.Services.AddSingleton<ITimingRecorder, MyRecorder>();
-// Static: TimingHandler.OnTimingRecorded += (cls, method, ms) => ...;
+// Timing — lightweight metrics via DI:
+// builder.Services.AddSingleton<ITimingRecorder, MyRecorder>();
 [Timing]
 public Order PlaceOrder(int id) { ... }
 
