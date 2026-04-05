@@ -27,6 +27,7 @@ public class OrderService
 }
 
 [Timing]
+[Authorize]
 public class OrderService2
 {
     public void Debug()

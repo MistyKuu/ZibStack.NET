@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Register services
 builder.Services.AddSingleton<OrderService>();
+builder.Services.AddSingleton<OrderService2>();
 
 // Register aspect handlers with DI — handlers now get constructor-injected dependencies
 builder.Services.AddSingleton<ITimingRecorder, LoggingTimingRecorder>();
@@ -27,6 +28,12 @@ app.MapGet("/total/{id:int}", async (int id, OrderService service) =>
 {
     var total = await service.CalculateTotalAsync(id);
     return Results.Ok(new { id, total });
+});
+
+app.MapGet("/debug", (OrderService2 service) =>
+{
+    service.Debug();
+    return Results.Ok("ok");
 });
 
 app.Run();

@@ -26,7 +26,7 @@ namespace ZibStack.NET.Aop.Aspects;
 /// </code>
 /// </example>
 [AspectHandler(typeof(AuthorizeHandler))]
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
 public sealed class AuthorizeAttribute : AspectAttribute
 {
     /// <summary>Optional policy name. If null, the method name is used.</summary>

@@ -276,16 +276,23 @@ public static class AopEmitter
         sb.AppendLine($"{indent}    MethodName = \"{method.MethodName}\",");
 
         // Build parameters array
-        sb.AppendLine($"{indent}    Parameters = new global::ZibStack.NET.Aop.AspectParameterInfo[]");
-        sb.AppendLine($"{indent}    {{");
-        foreach (var p in method.Parameters)
+        if (method.Parameters.Count == 0)
         {
-            var sensitive = p.IsSensitive ? "true" : "false";
-            var noLog = p.IsNoLog ? "true" : "false";
-            var value = p.IsNoLog ? "null" : p.Name;
-            sb.AppendLine($"{indent}        new() {{ Name = \"{p.Name}\", Value = {value}, IsSensitive = {sensitive}, IsNoLog = {noLog} }},");
+            sb.AppendLine($"{indent}    Parameters = global::System.Array.Empty<global::ZibStack.NET.Aop.AspectParameterInfo>()");
         }
-        sb.AppendLine($"{indent}    }}");
+        else
+        {
+            sb.AppendLine($"{indent}    Parameters = new global::ZibStack.NET.Aop.AspectParameterInfo[]");
+            sb.AppendLine($"{indent}    {{");
+            foreach (var p in method.Parameters)
+            {
+                var sensitive = p.IsSensitive ? "true" : "false";
+                var noLog = p.IsNoLog ? "true" : "false";
+                var value = p.IsNoLog ? "null" : p.Name;
+                sb.AppendLine($"{indent}        new() {{ Name = \"{p.Name}\", Value = {value}, IsSensitive = {sensitive}, IsNoLog = {noLog} }},");
+            }
+            sb.AppendLine($"{indent}    }}");
+        }
         sb.AppendLine($"{indent}}};");
         if (aspect.IsAsyncHandler)
         {
