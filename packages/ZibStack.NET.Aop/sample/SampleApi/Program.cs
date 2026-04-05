@@ -32,7 +32,7 @@ app.MapGet("/total/{id:int}", async (int id, OrderService service) =>
 
 app.MapGet("/debug", (OrderService2 service) =>
 {
-    service.Debug();
+    service.Debug(123);
     return Results.Ok("ok");
 });
 

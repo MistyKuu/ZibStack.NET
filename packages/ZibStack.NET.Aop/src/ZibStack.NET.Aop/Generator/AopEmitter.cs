@@ -245,7 +245,11 @@ public static class AopEmitter
             sb.AppendLine($"{indent}    return __result;");
 
         sb.AppendLine($"{indent}}}");
-        sb.AppendLine($"{indent}catch (global::System.Exception __ex)");
+        // Use named exception variable only if there are before/after aspects that need it
+        if (beforeAfterAspects.Count > 0)
+            sb.AppendLine($"{indent}catch (global::System.Exception __ex)");
+        else
+            sb.AppendLine($"{indent}catch");
         sb.AppendLine($"{indent}{{");
         sb.AppendLine($"{indent}    __sw.Stop();");
 

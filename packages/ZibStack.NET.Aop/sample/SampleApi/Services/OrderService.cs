@@ -29,7 +29,7 @@ public class OrderService
 [RequirePermission]
 public class OrderService2
 {
-    public void Debug()
+    public void Debug(int a)
     {
         
     }
