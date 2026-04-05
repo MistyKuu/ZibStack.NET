@@ -89,10 +89,23 @@ public class MetricsHandler : IAsyncAspectHandler
 ### ZibStack.NET.Dto
 
 ```csharp
+// Your domain model:
+public class Player
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string Email { get; set; }
+    public int Score { get; set; }
+}
+
+// One line generates Create + Update DTOs:
 [DtoFor(typeof(Player), Generate.Create | Generate.Update)]
 public partial class PlayerDto { }
 
-// Generates: CreatePlayerDto, UpdatePlayerDto with PatchField<T> support
+// Generated:
+// CreatePlayerDto  { Name, Email, Score }              — no Id (auto-generated)
+// UpdatePlayerDto  { Name?, Email?, Score? }            — all nullable for partial updates
+//   with PatchField<T> support for PATCH endpoints
 ```
 
 ## Repository Structure
