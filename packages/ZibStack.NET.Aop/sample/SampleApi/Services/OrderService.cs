@@ -27,6 +27,8 @@ public class OrderService
 }
 
 [Timing]
+[Retry]
+[Trace]
 public class OrderService2
 {
     public void Debug(int a)
