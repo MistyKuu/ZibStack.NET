@@ -148,6 +148,70 @@ app.MapGet("/api/tables/player", () =>
 
 ## Frontend Integration
 
+### Razor Pages (server-side)
+
+Use the `FormDescriptor` directly in `.cshtml` — no JSON, no JavaScript needed:
+
+```cshtml
+@* Pages/Players/Create.cshtml *@
+@{
+    var form = Player.GetFormDescriptor();
+}
+
+<h3>@form.Name</h3>
+<form method="post">
+    @foreach (var group in form.Groups.OrderBy(g => g.Order))
+    {
+        <fieldset>
+            <legend>@group.Label</legend>
+            @foreach (var field in form.Fields.Where(f => f.Group == group.Name).OrderBy(f => f.Order))
+            {
+                <div class="form-group">
+                    <label asp-for="@field.Name">@field.Label</label>
+                    @switch (field.UiHint)
+                    {
+                        case "text":
+                        case "password":
+                            <input type="@field.UiHint" name="@field.Name"
+                                   placeholder="@field.Placeholder"
+                                   class="form-control" />
+                            break;
+                        case "select":
+                            <select name="@field.Name" class="form-control">
+                                <option value="">-- Select --</option>
+                                @foreach (var opt in field.Options!)
+                                {
+                                    <option value="@opt.Value">@opt.Label</option>
+                                }
+                            </select>
+                            break;
+                        case "textarea":
+                            <textarea name="@field.Name" rows="@field.Props!["rows"]"
+                                      class="form-control"></textarea>
+                            break;
+                        case "slider":
+                            <input type="range" name="@field.Name"
+                                   min="@field.Props!["min"]" max="@field.Props!["max"]" />
+                            break;
+                        case "checkbox":
+                            <input type="checkbox" name="@field.Name" />
+                            break;
+                        case "datePicker":
+                            <input type="date" name="@field.Name" class="form-control" />
+                            break;
+                    }
+                    @if (field.HelpText is not null)
+                    {
+                        <small class="form-text text-muted">@field.HelpText</small>
+                    }
+                </div>
+            }
+        </fieldset>
+    }
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>
+```
+
 ### Blazor
 
 ```razor
