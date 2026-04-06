@@ -14,6 +14,10 @@ internal sealed class TableClassInfo
     public int[] PageSizes { get; }
     public string? DefaultSort { get; }
     public string DefaultSortDirection { get; }
+    public List<ChildTableInfo> Children { get; } = new List<ChildTableInfo>();
+    public List<RowActionInfo> RowActions { get; } = new List<RowActionInfo>();
+    public List<ToolbarActionInfo> ToolbarActions { get; } = new List<ToolbarActionInfo>();
+    public PermissionInfo? Permissions { get; set; }
 
     public TableClassInfo(
         string className,
@@ -55,6 +59,8 @@ internal sealed class TableColumnInfo
     public string? Width { get; set; }
     public bool IsEnum { get; set; }
     public List<string> EnumValues { get; } = new List<string>();
+    public bool IsComputed { get; set; }
+    public List<ColumnStyleInfo> Styles { get; } = new List<ColumnStyleInfo>();
 
     public TableColumnInfo(string propertyName, string jsonName, string typeName, string columnType)
     {

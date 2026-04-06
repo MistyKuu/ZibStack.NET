@@ -154,17 +154,29 @@ namespace ZibStack.NET.UI
         public System.Collections.Generic.IReadOnlyList<TableColumnDescriptor> Columns { get; }
         public PaginationDescriptor Pagination { get; }
         public SortDescriptor? DefaultSort { get; }
+        public System.Collections.Generic.IReadOnlyList<ChildTableDescriptor> Children { get; }
+        public System.Collections.Generic.IReadOnlyList<RowActionDescriptor> RowActions { get; }
+        public System.Collections.Generic.IReadOnlyList<ToolbarActionDescriptor> ToolbarActions { get; }
+        public PermissionDescriptor? Permissions { get; }
 
         public TableDescriptor(
             string name,
             System.Collections.Generic.IReadOnlyList<TableColumnDescriptor> columns,
             PaginationDescriptor pagination,
-            SortDescriptor? defaultSort = null)
+            SortDescriptor? defaultSort = null,
+            System.Collections.Generic.IReadOnlyList<ChildTableDescriptor>? children = null,
+            System.Collections.Generic.IReadOnlyList<RowActionDescriptor>? rowActions = null,
+            System.Collections.Generic.IReadOnlyList<ToolbarActionDescriptor>? toolbarActions = null,
+            PermissionDescriptor? permissions = null)
         {
             Name = name;
             Columns = columns;
             Pagination = pagination;
             DefaultSort = defaultSort;
+            Children = children ?? System.Array.Empty<ChildTableDescriptor>();
+            RowActions = rowActions ?? System.Array.Empty<RowActionDescriptor>();
+            ToolbarActions = toolbarActions ?? System.Array.Empty<ToolbarActionDescriptor>();
+            Permissions = permissions;
         }
     }
 
@@ -181,6 +193,8 @@ namespace ZibStack.NET.UI
         public bool IsVisible { get; }
         public string? Width { get; }
         public System.Collections.Generic.IReadOnlyList<string>? Options { get; }
+        public bool IsComputed { get; }
+        public System.Collections.Generic.IReadOnlyList<ColumnStyleDescriptor>? Styles { get; }
 
         public TableColumnDescriptor(
             string name,
@@ -192,7 +206,9 @@ namespace ZibStack.NET.UI
             int order = 0,
             bool isVisible = true,
             string? width = null,
-            System.Collections.Generic.IReadOnlyList<string>? options = null)
+            System.Collections.Generic.IReadOnlyList<string>? options = null,
+            bool isComputed = false,
+            System.Collections.Generic.IReadOnlyList<ColumnStyleDescriptor>? styles = null)
         {
             Name = name;
             Type = type;
@@ -204,6 +220,86 @@ namespace ZibStack.NET.UI
             IsVisible = isVisible;
             Width = width;
             Options = options;
+            IsComputed = isComputed;
+            Styles = styles;
+        }
+    }
+
+    /// <summary>Describes a child table relationship for drill-down.</summary>
+    public sealed class ChildTableDescriptor
+    {
+        public string Label { get; }
+        public string Target { get; }
+        public string ForeignKey { get; }
+        public string? SchemaUrl { get; }
+
+        public ChildTableDescriptor(string label, string target, string foreignKey, string? schemaUrl = null)
+        {
+            Label = label;
+            Target = target;
+            ForeignKey = foreignKey;
+            SchemaUrl = schemaUrl;
+        }
+    }
+
+    /// <summary>Describes a per-row action.</summary>
+    public sealed class RowActionDescriptor
+    {
+        public string Name { get; }
+        public string Label { get; }
+        public string? Icon { get; }
+        public string Endpoint { get; }
+        public string Method { get; }
+        public string? Confirmation { get; }
+        public string? Permission { get; }
+
+        public RowActionDescriptor(string name, string label, string? icon, string endpoint, string method, string? confirmation = null, string? permission = null)
+        {
+            Name = name; Label = label; Icon = icon; Endpoint = endpoint; Method = method; Confirmation = confirmation; Permission = permission;
+        }
+    }
+
+    /// <summary>Describes a toolbar-level action.</summary>
+    public sealed class ToolbarActionDescriptor
+    {
+        public string Name { get; }
+        public string Label { get; }
+        public string? Icon { get; }
+        public string Endpoint { get; }
+        public string Method { get; }
+        public string? Confirmation { get; }
+        public string? Permission { get; }
+        public string SelectionMode { get; }
+
+        public ToolbarActionDescriptor(string name, string label, string? icon, string endpoint, string method, string? confirmation = null, string? permission = null, string selectionMode = ""none"")
+        {
+            Name = name; Label = label; Icon = icon; Endpoint = endpoint; Method = method; Confirmation = confirmation; Permission = permission; SelectionMode = selectionMode;
+        }
+    }
+
+    /// <summary>Describes permission metadata for a table/form.</summary>
+    public sealed class PermissionDescriptor
+    {
+        public string? View { get; }
+        public System.Collections.Generic.IReadOnlyDictionary<string, string>? Columns { get; }
+        public System.Collections.Generic.IReadOnlyList<string>? DataFilters { get; }
+
+        public PermissionDescriptor(string? view = null, System.Collections.Generic.IReadOnlyDictionary<string, string>? columns = null, System.Collections.Generic.IReadOnlyList<string>? dataFilters = null)
+        {
+            View = view; Columns = columns; DataFilters = dataFilters;
+        }
+    }
+
+    /// <summary>Describes conditional styling for a column.</summary>
+    public sealed class ColumnStyleDescriptor
+    {
+        public string When { get; }
+        public string Severity { get; }
+
+        public ColumnStyleDescriptor(string when, string severity)
+        {
+            When = when;
+            Severity = severity;
         }
     }
 

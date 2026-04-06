@@ -346,3 +346,136 @@ public class JsonSchemaTests
         Assert.Contains("\"operator\":\"equals\"", json);
     }
 }
+
+public class ErpTests
+{
+    [Fact]
+    public void Voivodeship_HasChildTables()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        Assert.Equal(2, descriptor.Children.Count);
+        Assert.Equal("Powiaty", descriptor.Children[0].Label);
+        Assert.Equal("CountyView", descriptor.Children[0].Target);
+        Assert.Equal("voivodeshipId", descriptor.Children[0].ForeignKey);
+        Assert.Equal("Kody pocztowe", descriptor.Children[1].Label);
+    }
+
+    [Fact]
+    public void Voivodeship_HasRowActions()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        Assert.Equal(2, descriptor.RowActions.Count);
+
+        var details = descriptor.RowActions[0];
+        Assert.Equal("showDetails", details.Name);
+        Assert.Equal("Szczegóły", details.Label);
+        Assert.Equal("/api/voivodeships/{id}", details.Endpoint);
+        Assert.Equal("GET", details.Method);
+
+        var report = descriptor.RowActions[1];
+        Assert.Equal("generateReport", report.Name);
+        Assert.Equal("file", report.Icon);
+        Assert.Equal("POST", report.Method);
+        Assert.Equal("Wygenerować raport?", report.Confirmation);
+    }
+
+    [Fact]
+    public void Voivodeship_HasToolbarActions()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        Assert.Equal(2, descriptor.ToolbarActions.Count);
+
+        var export = descriptor.ToolbarActions[0];
+        Assert.Equal("export", export.Name);
+        Assert.Equal("multiple", export.SelectionMode);
+        Assert.Equal("download", export.Icon);
+
+        var recalc = descriptor.ToolbarActions[1];
+        Assert.Equal("recalculate", recalc.Name);
+        Assert.Equal("Przeliczyć salda?", recalc.Confirmation);
+        Assert.Equal("finance.write", recalc.Permission);
+    }
+
+    [Fact]
+    public void Voivodeship_HasPermissions()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        Assert.NotNull(descriptor.Permissions);
+        Assert.Equal("voivodeship.read", descriptor.Permissions!.View);
+        Assert.Equal("finance.read", descriptor.Permissions.Columns!["budget"]);
+        Assert.Contains("voivodeshipId", descriptor.Permissions.DataFilters!);
+    }
+
+    [Fact]
+    public void Voivodeship_BudgetColumn_IsComputed()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        var budget = descriptor.Columns.First(c => c.Name == "budget");
+        Assert.True(budget.IsComputed);
+    }
+
+    [Fact]
+    public void Voivodeship_BudgetColumn_HasStyles()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        var budget = descriptor.Columns.First(c => c.Name == "budget");
+        Assert.NotNull(budget.Styles);
+        Assert.Equal(2, budget.Styles!.Count);
+        Assert.Equal("value < 0", budget.Styles[0].When);
+        Assert.Equal("danger", budget.Styles[0].Severity);
+        Assert.Equal("value >= 0", budget.Styles[1].When);
+        Assert.Equal("success", budget.Styles[1].Severity);
+    }
+
+    [Fact]
+    public void Voivodeship_CountyCountColumn_IsComputed()
+    {
+        var descriptor = VoivodeshipView.GetTableDescriptor();
+        var col = descriptor.Columns.First(c => c.Name == "countyCount");
+        Assert.True(col.IsComputed);
+    }
+
+    [Fact]
+    public void Voivodeship_Json_ContainsChildren()
+    {
+        var json = VoivodeshipView.GetTableSchemaJson();
+        Assert.Contains("\"children\":[", json);
+        Assert.Contains("\"target\":\"CountyView\"", json);
+        Assert.Contains("\"foreignKey\":\"voivodeshipId\"", json);
+    }
+
+    [Fact]
+    public void Voivodeship_Json_ContainsRowActions()
+    {
+        var json = VoivodeshipView.GetTableSchemaJson();
+        Assert.Contains("\"rowActions\":[", json);
+        Assert.Contains("\"endpoint\":\"/api/voivodeships/{id}\"", json);
+    }
+
+    [Fact]
+    public void Voivodeship_Json_ContainsToolbarActions()
+    {
+        var json = VoivodeshipView.GetTableSchemaJson();
+        Assert.Contains("\"toolbarActions\":[", json);
+        Assert.Contains("\"selectionMode\":\"multiple\"", json);
+    }
+
+    [Fact]
+    public void Voivodeship_Json_ContainsPermissions()
+    {
+        var json = VoivodeshipView.GetTableSchemaJson();
+        Assert.Contains("\"permissions\":{", json);
+        Assert.Contains("\"view\":\"voivodeship.read\"", json);
+        Assert.Contains("\"finance.read\"", json);
+        Assert.Contains("\"dataFilters\":[", json);
+    }
+
+    [Fact]
+    public void Voivodeship_Json_ContainsComputedAndStyles()
+    {
+        var json = VoivodeshipView.GetTableSchemaJson();
+        Assert.Contains("\"computed\":true", json);
+        Assert.Contains("\"styles\":[", json);
+        Assert.Contains("\"severity\":\"danger\"", json);
+    }
+}

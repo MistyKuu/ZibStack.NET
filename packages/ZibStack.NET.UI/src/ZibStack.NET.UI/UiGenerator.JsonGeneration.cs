@@ -231,6 +231,17 @@ public partial class UiGenerator
                 sb.Append(string.Join(",", col.EnumValues.Select(v => $"\"{JsonEscape(v)}\"")));
                 sb.Append("]");
             }
+            if (col.IsComputed) sb.Append(",\"computed\":true");
+            if (col.Styles.Count > 0)
+            {
+                sb.Append(",\"styles\":[");
+                for (int j = 0; j < col.Styles.Count; j++)
+                {
+                    if (j > 0) sb.Append(",");
+                    sb.Append($"{{\"when\":\"{JsonEscape(col.Styles[j].When)}\",\"severity\":\"{JsonEscape(col.Styles[j].Severity)}\"}}");
+                }
+                sb.Append("]");
+            }
             sb.Append("}");
         }
         sb.Append("],");
@@ -246,6 +257,87 @@ public partial class UiGenerator
         else
         {
             sb.Append("\"defaultSort\":null");
+        }
+
+        // Children
+        if (info.Children.Count > 0)
+        {
+            sb.Append(",\"children\":[");
+            for (int i = 0; i < info.Children.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var c = info.Children[i];
+                sb.Append($"{{\"label\":\"{JsonEscape(c.Label)}\",\"target\":\"{JsonEscape(c.TargetTypeName)}\",\"foreignKey\":\"{JsonEscape(c.ForeignKey)}\"");
+                if (c.SchemaUrl != null) sb.Append($",\"schemaUrl\":\"{JsonEscape(c.SchemaUrl)}\"");
+                sb.Append("}");
+            }
+            sb.Append("]");
+        }
+
+        // RowActions
+        if (info.RowActions.Count > 0)
+        {
+            sb.Append(",\"rowActions\":[");
+            for (int i = 0; i < info.RowActions.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var ra = info.RowActions[i];
+                sb.Append($"{{\"name\":\"{JsonEscape(ra.Name)}\",\"label\":\"{JsonEscape(ra.Label)}\"");
+                if (ra.Icon != null) sb.Append($",\"icon\":\"{JsonEscape(ra.Icon)}\"");
+                sb.Append($",\"endpoint\":\"{JsonEscape(ra.Endpoint)}\",\"method\":\"{JsonEscape(ra.Method)}\"");
+                if (ra.Confirmation != null) sb.Append($",\"confirmation\":\"{JsonEscape(ra.Confirmation)}\"");
+                if (ra.Permission != null) sb.Append($",\"permission\":\"{JsonEscape(ra.Permission)}\"");
+                sb.Append("}");
+            }
+            sb.Append("]");
+        }
+
+        // ToolbarActions
+        if (info.ToolbarActions.Count > 0)
+        {
+            sb.Append(",\"toolbarActions\":[");
+            for (int i = 0; i < info.ToolbarActions.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var ta = info.ToolbarActions[i];
+                sb.Append($"{{\"name\":\"{JsonEscape(ta.Name)}\",\"label\":\"{JsonEscape(ta.Label)}\"");
+                if (ta.Icon != null) sb.Append($",\"icon\":\"{JsonEscape(ta.Icon)}\"");
+                sb.Append($",\"endpoint\":\"{JsonEscape(ta.Endpoint)}\",\"method\":\"{JsonEscape(ta.Method)}\"");
+                if (ta.Confirmation != null) sb.Append($",\"confirmation\":\"{JsonEscape(ta.Confirmation)}\"");
+                if (ta.Permission != null) sb.Append($",\"permission\":\"{JsonEscape(ta.Permission)}\"");
+                sb.Append($",\"selectionMode\":\"{JsonEscape(ta.SelectionMode)}\"");
+                sb.Append("}");
+            }
+            sb.Append("]");
+        }
+
+        // Permissions
+        if (info.Permissions != null)
+        {
+            sb.Append(",\"permissions\":{");
+            if (info.Permissions.ViewPermission != null)
+                sb.Append($"\"view\":\"{JsonEscape(info.Permissions.ViewPermission)}\"");
+            if (info.Permissions.ColumnPermissions.Count > 0)
+            {
+                if (info.Permissions.ViewPermission != null) sb.Append(",");
+                sb.Append("\"columns\":{");
+                bool first = true;
+                foreach (var kv in info.Permissions.ColumnPermissions)
+                {
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append($"\"{JsonEscape(kv.Key)}\":\"{JsonEscape(kv.Value)}\"");
+                }
+                sb.Append("}");
+            }
+            if (info.Permissions.DataFilters.Count > 0)
+            {
+                if (info.Permissions.ViewPermission != null || info.Permissions.ColumnPermissions.Count > 0) sb.Append(",");
+                sb.Append("\"dataFilters\":[");
+                sb.Append(string.Join(",", info.Permissions.DataFilters.Select(f => $"\"{JsonEscape(f)}\"")));
+                sb.Append("]");
+            }
+            sb.Append("}");
         }
 
         sb.Append("}");

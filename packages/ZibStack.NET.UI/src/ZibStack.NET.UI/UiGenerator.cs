@@ -27,6 +27,18 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     private const string TableColumnAttributeFqn = "ZibStack.NET.UI.TableColumnAttribute";
     private const string TableIgnoreAttributeFqn = "ZibStack.NET.UI.TableIgnoreAttribute";
 
+    // ERP: class-level
+    private const string ChildTableAttributeFqn = "ZibStack.NET.UI.ChildTableAttribute";
+    private const string RowActionAttributeFqn = "ZibStack.NET.UI.RowActionAttribute";
+    private const string ToolbarActionAttributeFqn = "ZibStack.NET.UI.ToolbarActionAttribute";
+    private const string PermissionAttributeFqn = "ZibStack.NET.UI.PermissionAttribute";
+    private const string ColumnPermissionAttributeFqn = "ZibStack.NET.UI.ColumnPermissionAttribute";
+    private const string DataFilterAttributeFqn = "ZibStack.NET.UI.DataFilterAttribute";
+
+    // ERP: property-level
+    private const string ComputedAttributeFqn = "ZibStack.NET.UI.ComputedAttribute";
+    private const string ColumnStyleAttributeFqn = "ZibStack.NET.UI.ColumnStyleAttribute";
+
     // UI control hints
     private const string TextAreaAttributeFqn = "ZibStack.NET.UI.TextAreaAttribute";
     private const string SelectAttributeFqn = "ZibStack.NET.UI.SelectAttribute";
@@ -76,6 +88,16 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             ctx.AddSource("RichTextAttribute.g.cs", RichTextAttributeSource);
             ctx.AddSource("SliderAttribute.g.cs", SliderAttributeSource);
             ctx.AddSource("PasswordInputAttribute.g.cs", PasswordInputAttributeSource);
+
+            // ERP attributes
+            ctx.AddSource("ChildTableAttribute.g.cs", ChildTableAttributeSource);
+            ctx.AddSource("RowActionAttribute.g.cs", RowActionAttributeSource);
+            ctx.AddSource("ToolbarActionAttribute.g.cs", ToolbarActionAttributeSource);
+            ctx.AddSource("PermissionAttribute.g.cs", PermissionAttributeSource);
+            ctx.AddSource("ColumnPermissionAttribute.g.cs", ColumnPermissionAttributeSource);
+            ctx.AddSource("DataFilterAttribute.g.cs", DataFilterAttributeSource);
+            ctx.AddSource("ComputedAttribute.g.cs", ComputedAttributeSource);
+            ctx.AddSource("ColumnStyleAttribute.g.cs", ColumnStyleAttributeSource);
 
             // Runtime types
             ctx.AddSource("FormDescriptor.g.cs", FormDescriptorSource);

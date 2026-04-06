@@ -603,15 +603,111 @@ public partial class UiGenerator
                     col.Width = GetNamedArgString(colAttr, "Width");
                 }
 
+                // [Computed]
+                if (HasAttribute(prop, ComputedAttributeFqn))
+                    col.IsComputed = true;
+
+                // [ColumnStyle] (AllowMultiple)
+                foreach (var styleAttr in prop.GetAttributes())
+                {
+                    if (styleAttr.AttributeClass?.ToDisplayString() == ColumnStyleAttributeFqn)
+                    {
+                        var when = GetNamedArgString(styleAttr, "When");
+                        var severity = GetNamedArgString(styleAttr, "Severity");
+                        if (when != null && severity != null)
+                            col.Styles.Add(new ColumnStyleInfo(when, severity));
+                    }
+                }
+
                 columns.Add(col);
             }
 
-            return new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
+            var result = new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
                 defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant());
+
+            // ERP: class-level attributes
+            ExtractErpClassAttributes(symbol, result);
+
+            return result;
         }
         catch
         {
             return null;
         }
+    }
+
+    private static void ExtractErpClassAttributes(INamedTypeSymbol symbol, TableClassInfo info)
+    {
+        var permissions = new PermissionInfo();
+
+        foreach (var attr in symbol.GetAttributes())
+        {
+            var fqn = attr.AttributeClass?.ToDisplayString();
+            if (fqn == null) continue;
+
+            switch (fqn)
+            {
+                case ChildTableAttributeFqn:
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is INamedTypeSymbol targetType)
+                    {
+                        var foreignKey = GetNamedArgString(attr, "ForeignKey") ?? "";
+                        var label = GetNamedArgString(attr, "Label") ?? targetType.Name;
+                        var schemaUrl = GetNamedArgString(attr, "SchemaUrl");
+                        info.Children.Add(new ChildTableInfo(targetType.Name, ToCamelCase(foreignKey), label, schemaUrl));
+                    }
+                    break;
+
+                case RowActionAttributeFqn:
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string raName)
+                    {
+                        info.RowActions.Add(new RowActionInfo(
+                            raName,
+                            GetNamedArgString(attr, "Label") ?? raName,
+                            GetNamedArgString(attr, "Icon"),
+                            GetNamedArgString(attr, "Endpoint") ?? "",
+                            (GetNamedArgString(attr, "Method") ?? "GET").ToUpperInvariant(),
+                            GetNamedArgString(attr, "Confirmation"),
+                            GetNamedArgString(attr, "Permission")));
+                    }
+                    break;
+
+                case ToolbarActionAttributeFqn:
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string taName)
+                    {
+                        info.ToolbarActions.Add(new ToolbarActionInfo(
+                            taName,
+                            GetNamedArgString(attr, "Label") ?? taName,
+                            GetNamedArgString(attr, "Icon"),
+                            GetNamedArgString(attr, "Endpoint") ?? "",
+                            (GetNamedArgString(attr, "Method") ?? "POST").ToUpperInvariant(),
+                            GetNamedArgString(attr, "Confirmation"),
+                            GetNamedArgString(attr, "Permission"),
+                            (GetNamedArgString(attr, "SelectionMode") ?? "none").ToLowerInvariant()));
+                    }
+                    break;
+
+                case PermissionAttributeFqn:
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string perm)
+                        permissions.ViewPermission = perm;
+                    break;
+
+                case ColumnPermissionAttributeFqn:
+                    if (attr.ConstructorArguments.Length >= 2
+                        && attr.ConstructorArguments[0].Value is string colName
+                        && attr.ConstructorArguments[1].Value is string colPerm)
+                    {
+                        permissions.ColumnPermissions[ToCamelCase(colName)] = colPerm;
+                    }
+                    break;
+
+                case DataFilterAttributeFqn:
+                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string filterProp)
+                        permissions.DataFilters.Add(ToCamelCase(filterProp));
+                    break;
+            }
+        }
+
+        if (permissions.HasAny)
+            info.Permissions = permissions;
     }
 }

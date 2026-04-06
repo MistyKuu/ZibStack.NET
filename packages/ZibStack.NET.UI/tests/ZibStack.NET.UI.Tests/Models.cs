@@ -117,3 +117,47 @@ public partial class FormWithRadioAndFile
     [FormDisabled]
     public string? LockedField { get; set; }
 }
+
+// ─── ERP models ──────────────────────────────────────────────────────
+
+public partial class CountyView { }
+public partial class PostalCodeView { }
+
+[Table(DefaultSort = "Name", DefaultPageSize = 50)]
+[Permission("voivodeship.read")]
+[ColumnPermission("Budget", "finance.read")]
+[DataFilter("VoivodeshipId")]
+[ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
+[ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
+[RowAction("showDetails", Label = "Szczegóły", Endpoint = "/api/voivodeships/{id}")]
+[RowAction("generateReport", Label = "Raport", Icon = "file",
+           Endpoint = "/api/voivodeships/{id}/report", Method = "POST",
+           Confirmation = "Wygenerować raport?")]
+[ToolbarAction("export", Label = "Eksport", Icon = "download",
+               Endpoint = "/api/voivodeships/export", SelectionMode = "multiple")]
+[ToolbarAction("recalculate", Label = "Przelicz salda",
+               Endpoint = "/api/voivodeships/recalculate", Method = "POST",
+               Confirmation = "Przeliczyć salda?", Permission = "finance.write")]
+public partial class VoivodeshipView
+{
+    [TableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [TableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+
+    [TableColumn(Sortable = true)]
+    public string Code { get; set; } = "";
+
+    [TableColumn(Sortable = true)]
+    [Computed]
+    [ColumnStyle(When = "value < 0", Severity = "danger")]
+    [ColumnStyle(When = "value >= 0", Severity = "success")]
+    public decimal Budget { get; set; }
+
+    [TableColumn(Sortable = true)]
+    [Computed]
+    public int CountyCount { get; set; }
+
+    public int VoivodeshipId { get; set; }
+}

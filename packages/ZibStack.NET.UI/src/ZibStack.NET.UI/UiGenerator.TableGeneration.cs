@@ -44,14 +44,102 @@ public partial class UiGenerator
         sb.AppendLine($"        pagination: new PaginationDescriptor({info.DefaultPageSize}, new[] {{ {pageSizesStr} }}),");
 
         // DefaultSort
+        var hasErpAttrs = info.Children.Count > 0 || info.RowActions.Count > 0 || info.ToolbarActions.Count > 0 || info.Permissions != null;
+        var sortTrail = hasErpAttrs ? "," : "";
         if (info.DefaultSort != null)
         {
             var sortCol = ToCamelCase(info.DefaultSort);
-            sb.AppendLine($"        defaultSort: new SortDescriptor(\"{EscapeString(sortCol)}\", \"{EscapeString(info.DefaultSortDirection)}\")");
+            sb.AppendLine($"        defaultSort: new SortDescriptor(\"{EscapeString(sortCol)}\", \"{EscapeString(info.DefaultSortDirection)}\"){sortTrail}");
         }
         else
         {
-            sb.AppendLine("        defaultSort: null");
+            sb.AppendLine($"        defaultSort: null{sortTrail}");
+        }
+
+        // ERP sections — collect and emit with proper comma handling
+        var erpSections = new System.Collections.Generic.List<string>();
+
+        if (info.Children.Count > 0)
+        {
+            var csb = new StringBuilder();
+            csb.AppendLine("        children: new ChildTableDescriptor[]");
+            csb.AppendLine("        {");
+            foreach (var child in info.Children)
+            {
+                var schemaUrlParam = child.SchemaUrl != null ? $", \"{EscapeString(child.SchemaUrl)}\"" : "";
+                csb.AppendLine($"            new ChildTableDescriptor(\"{EscapeString(child.Label)}\", \"{EscapeString(child.TargetTypeName)}\", \"{EscapeString(child.ForeignKey)}\"{schemaUrlParam}),");
+            }
+            csb.Append("        }");
+            erpSections.Add(csb.ToString());
+        }
+
+        if (info.RowActions.Count > 0)
+        {
+            var csb = new StringBuilder();
+            csb.AppendLine("        rowActions: new RowActionDescriptor[]");
+            csb.AppendLine("        {");
+            foreach (var ra in info.RowActions)
+            {
+                var confirm = ra.Confirmation != null ? $", \"{EscapeString(ra.Confirmation)}\"" : ", null";
+                var perm = ra.Permission != null ? $", \"{EscapeString(ra.Permission)}\"" : ", null";
+                csb.AppendLine($"            new RowActionDescriptor(\"{EscapeString(ra.Name)}\", \"{EscapeString(ra.Label)}\", {(ra.Icon != null ? $"\"{EscapeString(ra.Icon)}\"" : "null")}, \"{EscapeString(ra.Endpoint)}\", \"{EscapeString(ra.Method)}\"{confirm}{perm}),");
+            }
+            csb.Append("        }");
+            erpSections.Add(csb.ToString());
+        }
+
+        if (info.ToolbarActions.Count > 0)
+        {
+            var csb = new StringBuilder();
+            csb.AppendLine("        toolbarActions: new ToolbarActionDescriptor[]");
+            csb.AppendLine("        {");
+            foreach (var ta in info.ToolbarActions)
+            {
+                var confirm = ta.Confirmation != null ? $", \"{EscapeString(ta.Confirmation)}\"" : ", null";
+                var perm = ta.Permission != null ? $", \"{EscapeString(ta.Permission)}\"" : ", null";
+                csb.AppendLine($"            new ToolbarActionDescriptor(\"{EscapeString(ta.Name)}\", \"{EscapeString(ta.Label)}\", {(ta.Icon != null ? $"\"{EscapeString(ta.Icon)}\"" : "null")}, \"{EscapeString(ta.Endpoint)}\", \"{EscapeString(ta.Method)}\"{confirm}{perm}, \"{EscapeString(ta.SelectionMode)}\"),");
+            }
+            csb.Append("        }");
+            erpSections.Add(csb.ToString());
+        }
+
+        if (info.Permissions != null)
+        {
+            var csb = new StringBuilder();
+            csb.AppendLine("        permissions: new PermissionDescriptor(");
+            csb.AppendLine($"            view: {(info.Permissions.ViewPermission != null ? $"\"{EscapeString(info.Permissions.ViewPermission)}\"" : "null")},");
+            if (info.Permissions.ColumnPermissions.Count > 0)
+            {
+                csb.AppendLine("            columns: new Dictionary<string, string>");
+                csb.AppendLine("            {");
+                foreach (var kv in info.Permissions.ColumnPermissions)
+                    csb.AppendLine($"                [\"{EscapeString(kv.Key)}\"] = \"{EscapeString(kv.Value)}\",");
+                csb.AppendLine("            },");
+            }
+            else
+            {
+                csb.AppendLine("            columns: null,");
+            }
+            if (info.Permissions.DataFilters.Count > 0)
+            {
+                var filters = string.Join(", ", info.Permissions.DataFilters.Select(f => $"\"{EscapeString(f)}\""));
+                csb.AppendLine($"            dataFilters: new[] {{ {filters} }}");
+            }
+            else
+            {
+                csb.AppendLine("            dataFilters: null");
+            }
+            csb.Append("        )");
+            erpSections.Add(csb.ToString());
+        }
+
+        for (int i = 0; i < erpSections.Count; i++)
+        {
+            sb.Append(erpSections[i]);
+            if (i < erpSections.Count - 1)
+                sb.AppendLine(",");
+            else
+                sb.AppendLine();
         }
 
         sb.AppendLine("    );");
@@ -87,6 +175,18 @@ public partial class UiGenerator
         {
             var optionsStr = string.Join(", ", col.EnumValues.Select(v => $"\"{EscapeString(v)}\""));
             sb.AppendLine($"                options: new[] {{ {optionsStr} }},");
+        }
+
+        if (col.IsComputed)
+            sb.AppendLine("                isComputed: true,");
+
+        if (col.Styles.Count > 0)
+        {
+            sb.AppendLine("                styles: new ColumnStyleDescriptor[]");
+            sb.AppendLine("                {");
+            foreach (var style in col.Styles)
+                sb.AppendLine($"                    new ColumnStyleDescriptor(\"{EscapeString(style.When)}\", \"{EscapeString(style.Severity)}\"),");
+            sb.AppendLine("                },");
         }
 
         sb.AppendLine($"                isVisible: {(col.IsVisible ? "true" : "false")}),");
