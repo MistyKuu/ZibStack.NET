@@ -30,6 +30,14 @@ public class AddressInfo
 
 public class OrderService
 {
+    private readonly ILogger<OrderService> _logger;
+
+    public OrderService(ILogger<OrderService> logger)
+    {
+        _logger = logger;
+        _logger.LogInformation("Starting Order Service {asd}", "asd");
+    }
+    
 
     [Log]
     public Order PlaceOrder(int customerId, string product, int quantity)
