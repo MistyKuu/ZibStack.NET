@@ -933,7 +933,8 @@ public partial class DtoGenerator
 
     private static readonly HashSet<string> ValidationNamespaces = new()
     {
-        "System.ComponentModel.DataAnnotations"
+        "System.ComponentModel.DataAnnotations",
+        "ZibStack.NET.Validation"
     };
 
     private static List<string> GetValidationAttributes(IPropertySymbol prop)
