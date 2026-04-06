@@ -121,6 +121,8 @@ public partial class FormWithRadioAndFile
 // ─── ERP models ──────────────────────────────────────────────────────
 
 public partial class CountyView { }
+
+[Table(SchemaUrl = "/custom/postalcodes")]
 public partial class PostalCodeView { }
 
 [Table(DefaultSort = "Name", DefaultPageSize = 50)]

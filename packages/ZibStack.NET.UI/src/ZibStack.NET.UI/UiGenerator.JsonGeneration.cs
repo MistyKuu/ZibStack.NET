@@ -208,6 +208,8 @@ public partial class UiGenerator
         var sb = new StringBuilder();
         sb.Append("{");
         sb.Append($"\"name\":\"{JsonEscape(info.TableName)}\",");
+        if (info.SchemaUrl != null)
+            sb.Append($"\"schemaUrl\":\"{JsonEscape(info.SchemaUrl)}\",");
 
         // Columns
         sb.Append("\"columns\":[");

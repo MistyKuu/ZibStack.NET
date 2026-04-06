@@ -304,6 +304,8 @@ namespace ZibStack.NET.UI
         public string? DefaultSort { get; set; }
         /// <summary>Default sort direction: Asc or Desc. Default: Asc.</summary>
         public string DefaultSortDirection { get; set; } = ""Asc"";
+        /// <summary>Canonical URL where this table's schema JSON is served. Used by [ChildTable] to resolve drill-down URLs.</summary>
+        public string? SchemaUrl { get; set; }
     }
 }
 ";

@@ -14,6 +14,7 @@ internal sealed class TableClassInfo
     public int[] PageSizes { get; }
     public string? DefaultSort { get; }
     public string DefaultSortDirection { get; }
+    public string? SchemaUrl { get; }
     public List<ChildTableInfo> Children { get; } = new List<ChildTableInfo>();
     public List<RowActionInfo> RowActions { get; } = new List<RowActionInfo>();
     public List<ToolbarActionInfo> ToolbarActions { get; } = new List<ToolbarActionInfo>();
@@ -29,7 +30,8 @@ internal sealed class TableClassInfo
         int defaultPageSize,
         int[] pageSizes,
         string? defaultSort,
-        string defaultSortDirection)
+        string defaultSortDirection,
+        string? schemaUrl = null)
     {
         ClassName = className;
         Namespace = ns;
@@ -41,6 +43,7 @@ internal sealed class TableClassInfo
         PageSizes = pageSizes;
         DefaultSort = defaultSort;
         DefaultSortDirection = defaultSortDirection;
+        SchemaUrl = schemaUrl;
     }
 }
 

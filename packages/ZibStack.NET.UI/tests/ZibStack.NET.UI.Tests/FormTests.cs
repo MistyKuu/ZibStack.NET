@@ -357,7 +357,11 @@ public class ErpTests
         Assert.Equal("Powiaty", descriptor.Children[0].Label);
         Assert.Equal("CountyView", descriptor.Children[0].Target);
         Assert.Equal("voivodeshipId", descriptor.Children[0].ForeignKey);
+        // CountyView has no [Table], so convention fallback applies
+        Assert.Equal("/api/tables/county", descriptor.Children[0].SchemaUrl);
         Assert.Equal("Kody pocztowe", descriptor.Children[1].Label);
+        // PostalCodeView has [Table(SchemaUrl = "/custom/postalcodes")], resolved from target type
+        Assert.Equal("/custom/postalcodes", descriptor.Children[1].SchemaUrl);
     }
 
     [Fact]
@@ -442,6 +446,15 @@ public class ErpTests
         Assert.Contains("\"children\":[", json);
         Assert.Contains("\"target\":\"CountyView\"", json);
         Assert.Contains("\"foreignKey\":\"voivodeshipId\"", json);
+        Assert.Contains("\"schemaUrl\":\"/api/tables/county\"", json);
+        Assert.Contains("\"schemaUrl\":\"/custom/postalcodes\"", json);
+    }
+
+    [Fact]
+    public void PostalCodeView_Json_ContainsOwnSchemaUrl()
+    {
+        var json = PostalCodeView.GetTableSchemaJson();
+        Assert.Contains("\"schemaUrl\":\"/custom/postalcodes\"", json);
     }
 
     [Fact]

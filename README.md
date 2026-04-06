@@ -152,12 +152,39 @@ if (!result.IsValid) return BadRequest(result.Errors);
 ```csharp
 public enum Region { Północ, Południe, Wschód, Zachód }
 
-[Form]
-[Table(DefaultSort = "Name", DefaultPageSize = 50)]
-[FormGroup("basic", Label = "Dane podstawowe", Order = 1)]
-[FormGroup("finance", Label = "Finanse", Order = 2)]
+// ─── Child table views with their own SchemaUrl ────────────────────
+// [ChildTable] resolves SchemaUrl from the target type's [Table] attribute,
+// so you declare the URL once on the child — no need to repeat it.
 
-// ERP: hierarchical drill-down
+[Table(SchemaUrl = "/api/tables/county")]
+public partial class CountyView
+{
+    public int Id { get; set; }
+    [TableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+    public int VoivodeshipId { get; set; }
+}
+
+[Table(SchemaUrl = "/api/tables/postalcode")]
+public partial class PostalCodeView
+{
+    public int Id { get; set; }
+    [TableColumn(Sortable = true)]
+    public string Code { get; set; } = "";
+    [TableColumn(Sortable = true)]
+    public string City { get; set; } = "";
+    public int VoivodeshipId { get; set; }
+}
+
+// ─── Main view — forms + tables + ERP features ────────────────────
+
+[Form]
+[Table(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
+[FormGroup("basic", Label = "Dane podstawowe", Order = 1)]
+[FormGroup("contact", Label = "Kontakt", Order = 2)]
+[FormGroup("finance", Label = "Finanse", Order = 3)]
+
+// ERP: hierarchical drill-down — SchemaUrl resolved from child's [Table]
 [ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
 [ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
 
@@ -185,18 +212,31 @@ public partial class VoivodeshipView
     [TableColumn(IsVisible = false)]
     public int Id { get; set; }
 
+    // Validation: Required + MinLength → emitted in form JSON for client-side validation
+    [Required] [MinLength(2)] [MaxLength(100)]
     [FormField(Label = "Nazwa", Placeholder = "Nazwa województwa", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
-    public string Name { get; set; } = "";
+    public required string Name { get; set; }
 
-    [FormField(Label = "Kod", Group = "basic")]
+    [Required] [Match(@"^[A-Z]{2}$")]
+    [FormField(Label = "Kod", HelpText = "Dwuliterowy kod (np. MZ, WP)", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
-    public string Code { get; set; } = "";
+    public required string Code { get; set; }
 
     [Select(typeof(Region))]
     [FormField(Label = "Region", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
     public Region Region { get; set; }
+
+    [Required] [Email]
+    [FormField(Label = "Email kontaktowy", Placeholder = "biuro@wojewodztwo.pl", Group = "contact")]
+    [TableIgnore]
+    public required string ContactEmail { get; set; }
+
+    [Url]
+    [FormField(Label = "Strona WWW", Group = "contact")]
+    [TableIgnore]
+    public string? Website { get; set; }
 
     // Computed column with conditional styling
     [FormIgnore]
@@ -211,10 +251,24 @@ public partial class VoivodeshipView
     [Computed]
     public int CountyCount { get; set; }
 
+    [Range(1900, 2100)]
+    [FormField(Label = "Rok utworzenia", Group = "basic")]
+    [TableColumn(Sortable = true)]
+    public int EstablishedYear { get; set; }
+
+    // Conditional field — only visible when Region == Północ
+    [FormConditional("Region", "Północ")]
+    [FormField(Label = "Dostęp do morza", Group = "basic")]
+    [TableIgnore]
+    public bool HasCoastline { get; set; }
+
     [FormField(Label = "Notatki", Group = "finance")]
     [TextArea(Rows = 3)]
     [TableIgnore]
     public string? Notes { get; set; }
+
+    [FormHidden]
+    public int VoivodeshipId { get; set; }
 }
 ```
 
@@ -236,17 +290,21 @@ app.MapGet("/api/tables/voivodeship", () =>
   "layout": "vertical",
   "groups": [
     { "name": "basic", "label": "Dane podstawowe", "order": 1 },
-    { "name": "finance", "label": "Finanse", "order": 2 }
+    { "name": "contact", "label": "Kontakt", "order": 2 },
+    { "name": "finance", "label": "Finanse", "order": 3 }
   ],
   "fields": [
     {
       "name": "name", "type": "string", "uiHint": "text",
       "label": "Nazwa", "placeholder": "Nazwa województwa",
-      "group": "basic", "order": 0
+      "group": "basic", "order": 0, "required": true,
+      "validation": { "required": true, "minLength": 2, "maxLength": 100 }
     },
     {
       "name": "code", "type": "string", "uiHint": "text",
-      "label": "Kod", "group": "basic", "order": 1
+      "label": "Kod", "helpText": "Dwuliterowy kod (np. MZ, WP)",
+      "group": "basic", "order": 1, "required": true,
+      "validation": { "required": true, "pattern": "^[A-Z]{2}$" }
     },
     {
       "name": "region", "type": "enum", "uiHint": "select",
@@ -259,9 +317,34 @@ app.MapGet("/api/tables/voivodeship", () =>
       ]
     },
     {
+      "name": "contactEmail", "type": "string", "uiHint": "text",
+      "label": "Email kontaktowy", "placeholder": "biuro@wojewodztwo.pl",
+      "group": "contact", "order": 3, "required": true,
+      "validation": { "required": true, "email": true }
+    },
+    {
+      "name": "website", "type": "string", "uiHint": "text",
+      "label": "Strona WWW", "group": "contact", "order": 4, "nullable": true,
+      "validation": { "url": true }
+    },
+    {
+      "name": "establishedYear", "type": "integer", "uiHint": "number",
+      "label": "Rok utworzenia", "group": "basic", "order": 5,
+      "validation": { "min": 1900, "max": 2100 }
+    },
+    {
+      "name": "hasCoastline", "type": "boolean", "uiHint": "checkbox",
+      "label": "Dostęp do morza", "group": "basic", "order": 6,
+      "conditional": { "field": "region", "operator": "equals", "value": "Północ" }
+    },
+    {
       "name": "notes", "type": "string", "uiHint": "textarea",
-      "label": "Notatki", "group": "finance", "order": 3,
-      "props": { "rows": 3 }
+      "label": "Notatki", "group": "finance", "order": 7,
+      "props": { "rows": 3 }, "nullable": true
+    },
+    {
+      "name": "voivodeshipId", "type": "integer", "uiHint": "number",
+      "order": 8, "hidden": true
     }
   ]
 }
@@ -274,6 +357,7 @@ app.MapGet("/api/tables/voivodeship", () =>
 ```json
 {
   "name": "VoivodeshipView",
+  "schemaUrl": "/api/tables/voivodeship",
   "columns": [
     { "name": "id", "type": "integer", "visible": false },
     { "name": "name", "type": "string", "label": "Nazwa",
@@ -291,13 +375,17 @@ app.MapGet("/api/tables/voivodeship", () =>
       ]
     },
     { "name": "countyCount", "type": "integer", "label": "Liczba powiatów",
-      "sortable": true, "computed": true }
+      "sortable": true, "computed": true },
+    { "name": "establishedYear", "type": "integer", "label": "Rok utworzenia",
+      "sortable": true }
   ],
   "pagination": { "defaultPageSize": 50, "pageSizes": [10, 20, 50, 100] },
   "defaultSort": { "column": "name", "direction": "asc" },
   "children": [
-    { "label": "Powiaty", "target": "CountyView", "foreignKey": "voivodeshipId" },
-    { "label": "Kody pocztowe", "target": "PostalCodeView", "foreignKey": "voivodeshipId" }
+    { "label": "Powiaty", "target": "CountyView",
+      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/county" },
+    { "label": "Kody pocztowe", "target": "PostalCodeView",
+      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/postalcode" }
   ],
   "rowActions": [
     { "name": "showDetails", "label": "Szczegóły",

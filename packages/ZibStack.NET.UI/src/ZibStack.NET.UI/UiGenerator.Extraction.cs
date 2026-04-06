@@ -622,8 +622,10 @@ public partial class UiGenerator
                 columns.Add(col);
             }
 
+            var schemaUrl = GetNamedArgString(tableAttr!, "SchemaUrl");
+
             var result = new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
-                defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant());
+                defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant(), schemaUrl);
 
             // ERP: class-level attributes
             ExtractErpClassAttributes(symbol, result);
@@ -652,8 +654,24 @@ public partial class UiGenerator
                     {
                         var foreignKey = GetNamedArgString(attr, "ForeignKey") ?? "";
                         var label = GetNamedArgString(attr, "Label") ?? targetType.Name;
-                        var schemaUrl = GetNamedArgString(attr, "SchemaUrl");
-                        info.Children.Add(new ChildTableInfo(targetType.Name, ToCamelCase(foreignKey), label, schemaUrl));
+                        var childSchemaUrl = GetNamedArgString(attr, "SchemaUrl");
+
+                        // 1) Try target type's [Table(SchemaUrl = "...")] 
+                        if (childSchemaUrl == null)
+                        {
+                            var targetTableAttr = GetAttribute(targetType, TableAttributeFqn);
+                            if (targetTableAttr != null)
+                                childSchemaUrl = GetNamedArgString(targetTableAttr, "SchemaUrl");
+                        }
+
+                        // 2) Convention fallback: "CountyView" -> "/api/tables/county"
+                        if (childSchemaUrl == null)
+                        {
+                            var targetName = targetType.Name;
+                            if (targetName.EndsWith("View")) targetName = targetName.Substring(0, targetName.Length - 4);
+                            childSchemaUrl = "/api/tables/" + targetName.ToLowerInvariant();
+                        }
+                        info.Children.Add(new ChildTableInfo(targetType.Name, ToCamelCase(foreignKey), label, childSchemaUrl));
                     }
                     break;
 
