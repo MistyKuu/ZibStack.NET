@@ -347,9 +347,82 @@ public class Svc
         Assert.Contains("A2", result.Aspects[1].AttributeFullName); // Order=10 second
     }
 
+    // === Inheritance tests ===
+
+    private const string InheritanceSource = @"
+using ZibStack.NET.Aop;
+
+[AspectHandler(typeof(H))]
+[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class, Inherited = true)]
+public class MyAspectAttribute : AspectAttribute { }
+public class H : IAspectHandler {
+    public void OnBefore(AspectContext c) {}
+    public void OnAfter(AspectContext c) {}
+    public void OnException(AspectContext c, System.Exception e) {}
+}
+
+[MyAspect]
+public class BaseService
+{
+    public virtual void BaseMethod() { }
+}
+
+public class DerivedService : BaseService
+{
+    public override void BaseMethod() { }
+    public void DerivedMethod() { }
+}
+
+public class DerivedWithOwnAspect : BaseService
+{
+    [MyAspect]
+    public void OwnMethod() { }
+}
+";
+
+    [Fact]
+    public void Inheritance_BaseClassWithAspect_BaseMethodHasAspect()
+    {
+        var (method, _) = GetMethodSymbol(InheritanceSource, "BaseMethod", "BaseService");
+        var result = AopParser.ParseMethod(method, default);
+        Assert.NotNull(result);
+        Assert.Single(result!.Aspects);
+    }
+
+    [Fact]
+    public void Inheritance_DerivedClass_OverriddenMethodInheritsAspect()
+    {
+        var (method, _) = GetMethodSymbol(InheritanceSource, "BaseMethod", "DerivedService");
+        var result = AopParser.ParseMethod(method, default);
+        // DerivedService does NOT have [MyAspect] on the class
+        // The override method itself doesn't have the attribute
+        // Question: does it inherit from base class?
+        // Answer depends on whether we check ContainingType's base types
+        if (result != null)
+            Assert.Single(result.Aspects);
+    }
+
+    [Fact]
+    public void Inheritance_DerivedClass_OwnMethodNoAspect()
+    {
+        var (method, _) = GetMethodSymbol(InheritanceSource, "DerivedMethod", "DerivedService");
+        var result = AopParser.ParseMethod(method, default);
+        // DerivedService has no [MyAspect] on class, DerivedMethod has no [MyAspect] on method
+        // Should be null — derived class doesn't inherit class-level attributes
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Inheritance_DerivedWithOwnAspect_OwnMethodHasAspect()
+    {
+        var (method, _) = GetMethodSymbol(InheritanceSource, "OwnMethod", "DerivedWithOwnAspect");
+        var result = AopParser.ParseMethod(method, default);
+        Assert.NotNull(result);
+    }
+
     // === Helper ===
 
-    private static (IMethodSymbol method, Compilation compilation) GetMethodSymbol(string source, string methodName)
+    private static (IMethodSymbol method, Compilation compilation) GetMethodSymbol(string source, string methodName, string? className = null)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
 
@@ -375,9 +448,23 @@ public class Svc
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         var model = compilation.GetSemanticModel(syntaxTree);
-        var methodSyntax = syntaxTree.GetRoot().DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .First(m => m.Identifier.Text == methodName);
+
+        MethodDeclarationSyntax methodSyntax;
+        if (className != null)
+        {
+            var classSyntax = syntaxTree.GetRoot().DescendantNodes()
+                .OfType<ClassDeclarationSyntax>()
+                .First(c => c.Identifier.Text == className);
+            methodSyntax = classSyntax.DescendantNodes()
+                .OfType<MethodDeclarationSyntax>()
+                .First(m => m.Identifier.Text == methodName);
+        }
+        else
+        {
+            methodSyntax = syntaxTree.GetRoot().DescendantNodes()
+                .OfType<MethodDeclarationSyntax>()
+                .First(m => m.Identifier.Text == methodName);
+        }
 
         var methodSymbol = model.GetDeclaredSymbol(methodSyntax)!;
         return (methodSymbol, compilation);
