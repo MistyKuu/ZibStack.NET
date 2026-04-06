@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -157,7 +158,7 @@ public partial class DtoGenerator
             }
 
             var jsonName = GetJsonName(prop);
-            var validationAttrs = GetValidationAttributes(prop);
+            var (validationAttrs, _) = GetValidationAttributes(prop);
 
             // Check if property type (unwrap nullable) has [ResponseDto]
             var propType2 = prop.Type;
@@ -309,13 +310,14 @@ public partial class DtoGenerator
             var isRequired = requiredSet.Contains(prop.Name) || prop.IsRequired;
             var isImmutable = immutableSet.Contains(prop.Name);
 
-            var validationAttrs = GetValidationAttributes(prop);
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
             var propInfo = new DtoPropertyInfo(
                 dtoName, jsonName, displayType, isNullable,
                 isRequired, isValueType, false, false,
                 isImmutable,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
-                validationAttributes: validationAttrs);
+                validationAttributes: validationAttrs,
+                validationRules: validationRules);
 
             // DtoFor: check if nested type has explicit [CreateDto]/[UpdateDto] — use its DTO, otherwise plain type
             var unwrappedType = prop.Type;
@@ -397,7 +399,7 @@ public partial class DtoGenerator
             var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
             var isValueType = prop.Type.IsValueType;
 
-            var validationAttrs = GetValidationAttributes(prop);
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
             properties.Add(new DtoPropertyInfo(
                 prop.Name,
                 jsonName,
@@ -407,7 +409,8 @@ public partial class DtoGenerator
                 isValueType,
                 false,
                 false,
-                validationAttributes: validationAttrs));
+                validationAttributes: validationAttrs,
+                validationRules: validationRules));
         }
 
         var ns = symbol.ContainingNamespace.IsGlobalNamespace
@@ -501,12 +504,13 @@ public partial class DtoGenerator
             var displayType = prop.Type.ToDisplayString();
             var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
             var isValueType = prop.Type.IsValueType;
-            var validationAttrs = GetValidationAttributes(prop);
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
 
             properties.Add(new DtoPropertyInfo(
                 prop.Name, jsonName, displayType, isNullable,
                 false, isValueType, false, false,
-                validationAttributes: validationAttrs));
+                validationAttributes: validationAttrs,
+                validationRules: validationRules));
         }
 
         var ns = symbol.ContainingNamespace.IsGlobalNamespace
@@ -582,7 +586,7 @@ public partial class DtoGenerator
             var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
             var isValueType = prop.Type.IsValueType;
 
-            var validationAttrs = GetValidationAttributes(prop);
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
             properties.Add(new DtoPropertyInfo(
                 prop.Name,
                 jsonName,
@@ -592,7 +596,8 @@ public partial class DtoGenerator
                 isValueType,
                 false,
                 false,
-                validationAttributes: validationAttrs));
+                validationAttributes: validationAttrs,
+                validationRules: validationRules));
         }
         return properties;
     }
@@ -654,7 +659,7 @@ public partial class DtoGenerator
                 a.AttributeClass?.ToDisplayString() == UpdateOnlyAttributeFqn);
             var isImmutable = prop.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == ImmutableAttributeFqn);
-            var validationAttrs = GetValidationAttributes(prop);
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
 
             // Check for [Flatten] — expand child properties
             var hasFlatten = prop.GetAttributes().Any(a =>
@@ -688,7 +693,8 @@ public partial class DtoGenerator
                 isUpdateOnly,
                 isImmutable,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
-                validationAttributes: validationAttrs);
+                validationAttributes: validationAttrs,
+                validationRules: validationRules);
 
             // Detect nested complex types for auto-recursive DTO generation
             if (kind is null)
@@ -826,7 +832,7 @@ public partial class DtoGenerator
                 !(childType is INamedTypeSymbol { IsGenericType: true, ConstructedFrom.SpecialType: SpecialType.System_Nullable_T }))
                 childDisplayType += "?";
 
-            var validationAttrs = GetValidationAttributes(childProp);
+            var (validationAttrs, _) = GetValidationAttributes(childProp);
             properties.Add(new ResponsePropertyInfo(flatName, flatJsonName, childDisplayType, validationAttrs,
                 flattenSource: childEntityPath,
                 flattenProjection: childProjectionPath));
@@ -881,14 +887,15 @@ public partial class DtoGenerator
                 !(childType is INamedTypeSymbol { IsGenericType: true, ConstructedFrom.SpecialType: SpecialType.System_Nullable_T }))
                 childDisplayType += "?";
 
-            var childValidationAttrs = GetValidationAttributes(childProp);
+            var (childValidationAttrs, childValidationRules) = GetValidationAttributes(childProp);
             var childIsNullable = childNullable || parentNullable;
 
             var pi = new DtoPropertyInfo(
                 flatName, flatJsonName, childDisplayType,
                 childIsNullable, false, childIsValueType,
                 isCreateOnly, isUpdateOnly,
-                validationAttributes: childValidationAttrs);
+                validationAttributes: childValidationAttrs,
+                validationRules: childValidationRules);
             pi.FlattenEntityPath = childEntityPath;
             properties.Add(pi);
         }
@@ -937,9 +944,32 @@ public partial class DtoGenerator
         "ZibStack.NET.Validation"
     };
 
-    private static List<string> GetValidationAttributes(IPropertySymbol prop)
+    private static readonly Dictionary<string, ValidationRuleKind> KnownValidationAttributes = new()
+    {
+        // System.ComponentModel.DataAnnotations
+        { "System.ComponentModel.DataAnnotations.MinLengthAttribute", ValidationRuleKind.MinLength },
+        { "System.ComponentModel.DataAnnotations.MaxLengthAttribute", ValidationRuleKind.MaxLength },
+        { "System.ComponentModel.DataAnnotations.StringLengthAttribute", ValidationRuleKind.StringLength },
+        { "System.ComponentModel.DataAnnotations.RangeAttribute", ValidationRuleKind.Range },
+        { "System.ComponentModel.DataAnnotations.EmailAddressAttribute", ValidationRuleKind.Email },
+        { "System.ComponentModel.DataAnnotations.UrlAttribute", ValidationRuleKind.Url },
+        { "System.ComponentModel.DataAnnotations.RegularExpressionAttribute", ValidationRuleKind.Regex },
+        { "System.ComponentModel.DataAnnotations.PhoneAttribute", ValidationRuleKind.Phone },
+        // ZibStack.NET.Validation
+        { "ZibStack.NET.Validation.MinLengthAttribute", ValidationRuleKind.MinLength },
+        { "ZibStack.NET.Validation.MaxLengthAttribute", ValidationRuleKind.MaxLength },
+        { "ZibStack.NET.Validation.RangeAttribute", ValidationRuleKind.Range },
+        { "ZibStack.NET.Validation.EmailAttribute", ValidationRuleKind.Email },
+        { "ZibStack.NET.Validation.UrlAttribute", ValidationRuleKind.Url },
+        { "ZibStack.NET.Validation.MatchAttribute", ValidationRuleKind.Regex },
+        { "ZibStack.NET.Validation.NotEmptyAttribute", ValidationRuleKind.NotEmpty },
+    };
+
+    private static (List<string> Attributes, List<ValidationRule> Rules) GetValidationAttributes(IPropertySymbol prop)
     {
         var attrs = new List<string>();
+        var rules = new List<ValidationRule>();
+
         foreach (var attr in prop.GetAttributes())
         {
             var ns = attr.AttributeClass?.ContainingNamespace?.ToDisplayString();
@@ -964,8 +994,93 @@ public partial class DtoGenerator
 
             sb.Append("]");
             attrs.Add(sb.ToString());
+
+            if (KnownValidationAttributes.TryGetValue(name, out var ruleKind))
+            {
+                var rule = ExtractRule(ruleKind, attr);
+                if (rule is not null) rules.Add(rule);
+            }
         }
-        return attrs;
+        return (attrs, rules);
+    }
+
+    private static ValidationRule? ExtractRule(ValidationRuleKind kind, AttributeData attr)
+    {
+        string? message = null;
+        foreach (var named in attr.NamedArguments)
+        {
+            if (named.Key is "ErrorMessage" or "Message")
+                message = named.Value.Value as string;
+        }
+
+        switch (kind)
+        {
+            case ValidationRuleKind.MinLength:
+            {
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int len)
+                    return new ValidationRule(kind, intParam1: len, message: message);
+                // ZibStack.NET.Validation uses "Length" named arg sometimes
+                foreach (var n in attr.NamedArguments)
+                    if (n.Key == "Length" && n.Value.Value is int nLen)
+                        return new ValidationRule(kind, intParam1: nLen, message: message);
+                return null;
+            }
+            case ValidationRuleKind.MaxLength:
+            {
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int len)
+                    return new ValidationRule(kind, intParam1: len, message: message);
+                foreach (var n in attr.NamedArguments)
+                    if (n.Key == "Length" && n.Value.Value is int nLen)
+                        return new ValidationRule(kind, intParam1: nLen, message: message);
+                return null;
+            }
+            case ValidationRuleKind.StringLength:
+            {
+                int? max = attr.ConstructorArguments.Length >= 1 ? attr.ConstructorArguments[0].Value as int? : null;
+                int? min = null;
+                foreach (var n in attr.NamedArguments)
+                    if (n.Key == "MinimumLength" && n.Value.Value is int m)
+                        min = m;
+                if (max is not null)
+                    return new ValidationRule(kind, intParam1: max, intParam2: min, message: message);
+                return null;
+            }
+            case ValidationRuleKind.Range:
+            {
+                double? min = null, max = null;
+                if (attr.ConstructorArguments.Length >= 2)
+                {
+                    min = Convert.ToDouble(attr.ConstructorArguments[0].Value);
+                    max = Convert.ToDouble(attr.ConstructorArguments[1].Value);
+                }
+                foreach (var n in attr.NamedArguments)
+                {
+                    if (n.Key == "Min" || n.Key == "Minimum") min = Convert.ToDouble(n.Value.Value);
+                    if (n.Key == "Max" || n.Key == "Maximum") max = Convert.ToDouble(n.Value.Value);
+                }
+                if (min is not null && max is not null)
+                    return new ValidationRule(kind, doubleParam1: min, doubleParam2: max, message: message);
+                return null;
+            }
+            case ValidationRuleKind.Regex:
+            {
+                string? pattern = null;
+                if (attr.ConstructorArguments.Length >= 1)
+                    pattern = attr.ConstructorArguments[0].Value as string;
+                foreach (var n in attr.NamedArguments)
+                    if (n.Key == "Pattern") pattern = n.Value.Value as string;
+                if (pattern is not null)
+                    return new ValidationRule(kind, stringParam: pattern, message: message);
+                return null;
+            }
+            case ValidationRuleKind.Email:
+            case ValidationRuleKind.Url:
+            case ValidationRuleKind.NotEmpty:
+            case ValidationRuleKind.Phone:
+                return new ValidationRule(kind, message: message);
+            default:
+                return null;
+        }
     }
 
     private static string FormatTypedConstant(TypedConstant tc)

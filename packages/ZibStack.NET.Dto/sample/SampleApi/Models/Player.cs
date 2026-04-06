@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using ZibStack.NET.Dto;
 
 namespace ZibStack.NET.Dto.Sample.Models;
@@ -12,16 +13,25 @@ public class Player
     [DtoIgnore]
     public int Id { get; set; }
 
+    [MinLength(2)]
+    [MaxLength(50)]
     public required string Name { get; set; }
+
+    [Range(1, 100)]
     public int Level { get; set; }
+
+    [EmailAddress]
     public string? Email { get; set; }
+
     public Address? Address { get; set; }
 
     [CreateOnly]
     [ResponseIgnore]
+    [MinLength(8)]
     public required string Password { get; set; }
 
     [UpdateOnly]
+    [MaxLength(500)]
     public string? DeactivationReason { get; set; }
 
     [DtoIgnore]

@@ -108,6 +108,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"        if ({prop.PropertyName}.HasValue && {prop.PropertyName}.Value is null)");
                     sb.AppendLine($"            errors.Add(\"Property '{prop.JsonName}' cannot be null.\");");
                 }
+                EmitValidationRules(sb, prop);
             }
             sb.AppendLine("        return errors;");
         }
@@ -155,6 +156,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"        if ({prop.PropertyName}.HasValue && {prop.PropertyName}.Value is null)");
                     sb.AppendLine($"            errors.Add(\"Property '{prop.JsonName}' cannot be null.\");");
                 }
+                EmitValidationRules(sb, prop);
             }
             sb.AppendLine("        return errors;");
         }
@@ -221,6 +223,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"        if ({prop.PropertyName}.HasValue && {prop.PropertyName}.Value is null)");
                     sb.AppendLine($"            errors.Add(\"Property '{prop.JsonName}' cannot be null.\");");
                 }
+                EmitValidationRules(sb, prop);
             }
             sb.AppendLine("        return errors;");
         }
@@ -247,6 +250,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"        if ({prop.PropertyName}.HasValue && {prop.PropertyName}.Value is null)");
                     sb.AppendLine($"            errors.Add(\"Property '{prop.JsonName}' cannot be null.\");");
                 }
+                EmitValidationRules(sb, prop);
             }
             sb.AppendLine("        return errors;");
         }
@@ -294,6 +298,110 @@ public partial class DtoGenerator
         foreach (var attr in attrs)
             sb.AppendLine($"    {attr}");
     }
+
+    private static void EmitValidationRules(StringBuilder sb, DtoPropertyInfo prop)
+    {
+        if (prop.ValidationRules.Count == 0) return;
+
+        var name = prop.PropertyName;
+        var json = prop.JsonName;
+        var isString = prop.DisplayTypeName is "string" or "string?";
+
+        foreach (var rule in prop.ValidationRules)
+        {
+            var guard = prop.IsValueType && !prop.IsNullable
+                ? $"{name}.HasValue"
+                : $"{name}.HasValue && {name}.Value is not null";
+
+            var msg = rule.Message;
+
+            switch (rule.Kind)
+            {
+                case ValidationRuleKind.MinLength when rule.IntParam1 is { } minLen:
+                    msg ??= $"Property '{json}' must be at least {minLen} characters.";
+                    sb.AppendLine($"        if ({guard} && {name}.Value.Length < {minLen})");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+
+                case ValidationRuleKind.MaxLength when rule.IntParam1 is { } maxLen:
+                    msg ??= $"Property '{json}' must be at most {maxLen} characters.";
+                    sb.AppendLine($"        if ({guard} && {name}.Value.Length > {maxLen})");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+
+                case ValidationRuleKind.StringLength when rule.IntParam1 is { } sMax:
+                {
+                    msg ??= rule.IntParam2 is { } sMin
+                        ? $"Property '{json}' must be between {sMin} and {sMax} characters."
+                        : $"Property '{json}' must be at most {sMax} characters.";
+                    var lenCheck = rule.IntParam2 is { } sMin2
+                        ? $"({name}.Value.Length < {sMin2} || {name}.Value.Length > {sMax})"
+                        : $"{name}.Value.Length > {sMax}";
+                    sb.AppendLine($"        if ({guard} && {lenCheck})");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+                }
+
+                case ValidationRuleKind.Range when rule.DoubleParam1 is { } rMin && rule.DoubleParam2 is { } rMax:
+                {
+                    msg ??= $"Property '{json}' must be between {FormatDouble(rMin)} and {FormatDouble(rMax)}.";
+                    var cast = prop.IsValueType ? $"(double){name}.Value" : $"(double){name}.Value";
+                    sb.AppendLine($"        if ({guard} && ({cast} < {FormatDouble(rMin)} || {cast} > {FormatDouble(rMax)}))");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+                }
+
+                case ValidationRuleKind.Email:
+                    msg ??= $"Property '{json}' is not a valid email address.";
+                    sb.AppendLine($"        if ({guard} && !System.Text.RegularExpressions.Regex.IsMatch({name}.Value, @\"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$\"))");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+
+                case ValidationRuleKind.Url:
+                    msg ??= $"Property '{json}' is not a valid URL.";
+                    sb.AppendLine($"        if ({guard} && !System.Uri.TryCreate({name}.Value, System.UriKind.Absolute, out _))");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+
+                case ValidationRuleKind.Regex when rule.StringParam is { } pattern:
+                    msg ??= $"Property '{json}' does not match the required pattern.";
+                    sb.AppendLine($"        if ({guard} && !System.Text.RegularExpressions.Regex.IsMatch({name}.Value, @\"{EscapeVerbatim(pattern)}\"))");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+
+                case ValidationRuleKind.NotEmpty:
+                    msg ??= $"Property '{json}' must not be empty.";
+                    if (isString)
+                    {
+                        sb.AppendLine($"        if ({name}.HasValue && string.IsNullOrWhiteSpace({name}.Value))");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"        if ({guard} && ((System.Collections.ICollection){name}.Value).Count == 0)");
+                    }
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+
+                case ValidationRuleKind.Phone:
+                    msg ??= $"Property '{json}' is not a valid phone number.";
+                    sb.AppendLine($"        if ({guard} && !System.Text.RegularExpressions.Regex.IsMatch({name}.Value, @\"^\\+?[\\d\\s\\-\\(\\)]{7,15}$\"))");
+                    sb.AppendLine($"            errors.Add(\"{EscapeString(msg)}\");");
+                    break;
+            }
+        }
+    }
+
+    private static string FormatDouble(double d)
+    {
+        if (d == (int)d) return ((int)d).ToString();
+        return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string EscapeString(string s)
+        => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    private static string EscapeVerbatim(string s)
+        => s.Replace("\"", "\"\"");
 
     private static string GetPropTypeName(DtoPropertyInfo prop, bool isCreate)
     {
@@ -753,6 +861,7 @@ public partial class DtoGenerator
                 sb.AppendLine($"        if ({prop.PropertyName}.HasValue && {prop.PropertyName}.Value is null)");
                 sb.AppendLine($"            errors.Add(\"Property '{prop.JsonName}' cannot be null.\");");
             }
+            EmitValidationRules(sb, prop);
         }
         sb.AppendLine("        return errors;");
         sb.AppendLine("    }");
@@ -806,6 +915,7 @@ public partial class DtoGenerator
                 sb.AppendLine($"        if ({prop.PropertyName}.HasValue && {prop.PropertyName}.Value is null)");
                 sb.AppendLine($"            errors.Add(\"Property '{prop.JsonName}' cannot be null.\");");
             }
+            EmitValidationRules(sb, prop);
         }
         sb.AppendLine("        return errors;");
         sb.AppendLine("    }");

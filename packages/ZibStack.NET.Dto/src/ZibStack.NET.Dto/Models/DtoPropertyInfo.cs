@@ -15,12 +15,13 @@ internal sealed class DtoPropertyInfo
     public bool IsUpdateOnly { get; }
     public bool IsImmutable { get; }
     public List<string> ValidationAttributes { get; }
+    public List<ValidationRule> ValidationRules { get; }
     public string? NestedCreateDtoName { get; set; }
     public string? NestedUpdateDtoName { get; set; }
     public string? FlattenEntityPath { get; set; }
     public bool IsFlattened => FlattenEntityPath is not null;
 
-    public DtoPropertyInfo(string propertyName, string jsonName, string displayTypeName, bool isNullable, bool isRequired, bool isValueType, bool isCreateOnly, bool isUpdateOnly, bool isImmutable = false, string? sourcePropertyName = null, List<string>? validationAttributes = null)
+    public DtoPropertyInfo(string propertyName, string jsonName, string displayTypeName, bool isNullable, bool isRequired, bool isValueType, bool isCreateOnly, bool isUpdateOnly, bool isImmutable = false, string? sourcePropertyName = null, List<string>? validationAttributes = null, List<ValidationRule>? validationRules = null)
     {
         PropertyName = propertyName;
         SourcePropertyName = sourcePropertyName ?? propertyName;
@@ -33,5 +34,6 @@ internal sealed class DtoPropertyInfo
         IsUpdateOnly = isUpdateOnly;
         IsImmutable = isImmutable;
         ValidationAttributes = validationAttributes ?? new List<string>();
+        ValidationRules = validationRules ?? new List<ValidationRule>();
     }
 }
