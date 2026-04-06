@@ -42,6 +42,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     // Relationship attributes
     private const string OneToManyAttributeFqn = "ZibStack.NET.UI.OneToManyAttribute";
     private const string OneToOneAttributeFqn = "ZibStack.NET.UI.OneToOneAttribute";
+    private const string EntityAttributeFqn = "ZibStack.NET.UI.EntityAttribute";
 
     // UI control hints
     private const string TextAreaAttributeFqn = "ZibStack.NET.UI.TextAreaAttribute";
@@ -97,6 +98,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             // Relationship attributes
             ctx.AddSource("OneToManyAttribute.g.cs", OneToManyAttributeSource);
             ctx.AddSource("OneToOneAttribute.g.cs", OneToOneAttributeSource);
+            ctx.AddSource("EntityAttribute.g.cs", EntityAttributeSource);
 
             ctx.AddSource("ChildTableAttribute.g.cs", ChildTableAttributeSource);
             ctx.AddSource("RowActionAttribute.g.cs", RowActionAttributeSource);
@@ -140,6 +142,27 @@ public sealed partial class UiGenerator : IIncrementalGenerator
         {
             spc.AddSource($"{info.HintName}.Table.g.cs", GenerateTableDescriptor(info));
             spc.AddSource($"{info.HintName}.TableJson.g.cs", GenerateTableJson(info));
+        });
+
+        // ─── Entity pipeline (EF Core — opt-in via [Entity]) ────────────
+        var entityTargets = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                EntityAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => ExtractEntityInfo(ctx))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(entityTargets, static (spc, info) =>
+        {
+            spc.AddSource($"{info.HintName}.Entity.g.cs", GenerateEntityConfiguration(info));
+        });
+
+        var collectedEntities = entityTargets.Collect();
+        context.RegisterSourceOutput(collectedEntities, static (spc, infos) =>
+        {
+            if (infos.Length > 0)
+                spc.AddSource("EntityConfigurations.g.cs", GenerateEntityRegistrations(infos));
         });
     }
 }

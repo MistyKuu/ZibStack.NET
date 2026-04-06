@@ -392,6 +392,77 @@ Form JSON also includes a `children` block:
 
 `[ChildTable]` continues to work — it is mapped internally to `RelationInfo` with `OneToMany` kind. You can mix both styles in the same project.
 
+## EF Core Integration (`[Entity]`)
+
+Add `[Entity]` to any model class to generate `IEntityTypeConfiguration<T>` at compile time. The same class serves as both UI model and EF Core entity — no separate entity class needed.
+
+Requires `Microsoft.EntityFrameworkCore` and a relational provider (e.g. `Microsoft.EntityFrameworkCore.SqlServer`) in your project. Generation is skipped automatically if EF Core is not referenced.
+
+```csharp
+[Form]
+[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+[Entity(TableName = "Projects")]
+public partial class ProjectView
+{
+    public int Id { get; set; }
+
+    [FormField(Label = "Project Name")]
+    [TableColumn(Sortable = true)]
+    public string Name { get; set; } = "";
+
+    public int SettingsId { get; set; }
+
+    [Computed]
+    public int TaskCount { get; set; }
+
+    [OneToMany(Label = "Tasks")]
+    public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();
+
+    [OneToOne(Label = "Settings")]
+    public ProjectSettings? Settings { get; set; }
+}
+```
+
+Generated at compile time:
+
+```csharp
+partial class ProjectView : IEntityTypeConfiguration<ProjectView>
+{
+    void IEntityTypeConfiguration<ProjectView>.Configure(EntityTypeBuilder<ProjectView> builder)
+    {
+        builder.ToTable("Projects");
+        builder.HasKey(e => e.Id);
+        builder.Ignore(e => e.TaskCount);
+        builder.HasMany(e => e.Tasks).WithOne().HasForeignKey("ProjectId");
+        builder.HasOne(e => e.Settings).WithOne().HasForeignKey<ProjectView>(e => e.SettingsId);
+    }
+}
+```
+
+Register all generated configurations in your `DbContext`:
+
+```csharp
+public class AppDbContext : DbContext
+{
+    public DbSet<ProjectView> Projects => Set<ProjectView>();
+    public DbSet<TaskItem> Tasks => Set<TaskItem>();
+
+    protected override void OnModelCreating(ModelBuilder builder)
+        => builder.ApplyGeneratedConfigurations();
+}
+```
+
+### What gets generated
+
+| Source | EF Core output |
+|--------|---------------|
+| `[Entity(TableName = "X")]` | `builder.ToTable("X")` |
+| `[Entity(Schema = "dbo")]` | `builder.ToTable("...", "dbo")` |
+| Property named `Id` or `{Class}Id` | `builder.HasKey(e => e.Id)` |
+| `[Computed]` | `builder.Ignore(e => e.Prop)` |
+| `[OneToMany]` on `ICollection<T>` | `builder.HasMany(e => e.Nav).WithOne().HasForeignKey(...)` |
+| `[OneToOne]` on navigation prop | `builder.HasOne(e => e.Nav).WithOne().HasForeignKey<T>(...)` |
+
 ## Database Integration
 
 ZibStack.NET.UI is **DB-agnostic** — it works with any data source. The UI metadata lives on **DTOs/ViewModels**, not on entities, because forms and tables almost never map 1:1 to DB tables.
@@ -754,6 +825,12 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 |-----------|---------|-----------|
 | `[OneToMany]` | One-to-many on `ICollection<T>` | `ForeignKey?`, `Label?`, `SchemaUrl?`, `FormSchemaUrl?` |
 | `[OneToOne]` | One-to-one on navigation property | `ForeignKey?`, `Label?`, `SchemaUrl?`, `FormSchemaUrl?` |
+
+### Entity — Class-level
+
+| Attribute | Purpose | Parameters |
+|-----------|---------|-----------|
+| `[Entity]` | Generate `IEntityTypeConfiguration<T>` for EF Core | `TableName?`, `Schema?` |
 
 ### ERP — Class-level
 

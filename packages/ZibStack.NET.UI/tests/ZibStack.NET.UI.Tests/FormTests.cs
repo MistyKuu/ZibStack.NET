@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Xunit;
 using ZibStack.NET.UI;
 
@@ -593,5 +595,41 @@ public class RelationTests
         var descriptor = ProjectView.GetTableDescriptor();
         var settings = descriptor.Children.First(c => c.Target == "ProjectSettings");
         Assert.Equal("settingsId", settings.ForeignKey);
+    }
+}
+
+public class EntityTests
+{
+    [Fact]
+    public void ProjectView_ImplementsIEntityTypeConfiguration()
+    {
+        Assert.True(typeof(IEntityTypeConfiguration<ProjectView>).IsAssignableFrom(typeof(ProjectView)));
+    }
+
+    [Fact]
+    public void TaskItem_ImplementsIEntityTypeConfiguration()
+    {
+        Assert.True(typeof(IEntityTypeConfiguration<TaskItem>).IsAssignableFrom(typeof(TaskItem)));
+    }
+
+    [Fact]
+    public void ProjectSettings_ImplementsIEntityTypeConfiguration()
+    {
+        Assert.True(typeof(IEntityTypeConfiguration<ProjectSettings>).IsAssignableFrom(typeof(ProjectSettings)));
+    }
+
+    [Fact]
+    public void Attachment_ImplementsIEntityTypeConfiguration()
+    {
+        Assert.True(typeof(IEntityTypeConfiguration<Attachment>).IsAssignableFrom(typeof(Attachment)));
+    }
+
+    [Fact]
+    public void ApplyGeneratedConfigurations_ExtensionExists()
+    {
+        var method = typeof(GeneratedEntityConfigurations).GetMethod("ApplyGeneratedConfigurations");
+        Assert.NotNull(method);
+        Assert.True(method!.IsStatic);
+        Assert.Equal(typeof(ModelBuilder), method.ReturnType);
     }
 }

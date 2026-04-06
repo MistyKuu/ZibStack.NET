@@ -168,6 +168,7 @@ public partial class VoivodeshipView
 
 [Table(SchemaUrl = "/api/tables/task")]
 [Form]
+[Entity]
 public partial class TaskItem
 {
     public int Id { get; set; }
@@ -176,6 +177,7 @@ public partial class TaskItem
 }
 
 [Table(SchemaUrl = "/api/tables/attachment")]
+[Entity]
 public partial class Attachment
 {
     public int Id { get; set; }
@@ -184,6 +186,7 @@ public partial class Attachment
 }
 
 [Form]
+[Entity]
 public partial class ProjectSettings
 {
     public int Id { get; set; }
@@ -193,6 +196,7 @@ public partial class ProjectSettings
 
 [Form]
 [Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+[Entity(TableName = "Projects")]
 public partial class ProjectView
 {
     [FormIgnore]
@@ -204,6 +208,9 @@ public partial class ProjectView
     public string Name { get; set; } = "";
 
     public int SettingsId { get; set; }
+
+    [Computed]
+    public int TaskCount { get; set; }
 
     [OneToMany(Label = "Tasks")]
     public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();

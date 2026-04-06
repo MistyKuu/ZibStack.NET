@@ -868,4 +868,107 @@ public partial class UiGenerator
 
         return null;
     }
+
+    // ─── Entity extraction ──────────────────────────────────────────────
+
+    private static EntityClassInfo? ExtractEntityInfo(GeneratorAttributeSyntaxContext context)
+    {
+        try
+        {
+            var compilation = context.SemanticModel.Compilation;
+            if (compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.IEntityTypeConfiguration`1") == null)
+                return null;
+
+            var symbol = (INamedTypeSymbol)context.TargetSymbol;
+            var ns = symbol.ContainingNamespace.IsGlobalNamespace
+                ? null
+                : symbol.ContainingNamespace.ToDisplayString();
+
+            var isRecord = context.TargetNode is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax;
+            var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
+            var fqn = symbol.ToDisplayString();
+
+            var entityAttr = GetAttribute(symbol, EntityAttributeFqn)!;
+            var tableName = GetNamedArgString(entityAttr, "TableName");
+            var schema = GetNamedArgString(entityAttr, "Schema");
+
+            string? pk = null;
+            foreach (var member in symbol.GetMembers())
+            {
+                if (member is IPropertySymbol p && p.DeclaredAccessibility == Accessibility.Public)
+                {
+                    if (p.Name == "Id" || p.Name == symbol.Name + "Id")
+                    {
+                        pk = p.Name;
+                        break;
+                    }
+                }
+            }
+
+            var computedProps = new List<string>();
+            var navigationProps = new List<string>();
+            var relations = new List<EntityRelationInfo>();
+
+            foreach (var member in symbol.GetMembers())
+            {
+                if (member is not IPropertySymbol prop) continue;
+                if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+
+                if (HasAttribute(prop, ComputedAttributeFqn))
+                    computedProps.Add(prop.Name);
+
+                var oneToManyAttr = GetAttribute(prop, OneToManyAttributeFqn);
+                var oneToOneAttr = GetAttribute(prop, OneToOneAttributeFqn);
+
+                if (oneToManyAttr != null)
+                {
+                    var targetType = ExtractCollectionElementType(prop.Type);
+                    if (targetType == null) continue;
+
+                    navigationProps.Add(prop.Name);
+
+                    var fk = GetNamedArgString(oneToManyAttr, "ForeignKey");
+                    if (fk == null)
+                        fk = AutoDetectForeignKey(symbol, targetType, RelationKind.OneToMany, prop);
+
+                    relations.Add(new EntityRelationInfo(
+                        RelationKind.OneToMany,
+                        targetType.Name,
+                        targetType.ToDisplayString(),
+                        prop.Name,
+                        fk));
+                }
+                else if (oneToOneAttr != null)
+                {
+                    var targetType = prop.Type as INamedTypeSymbol;
+                    if (targetType == null) continue;
+                    if (targetType.NullableAnnotation == NullableAnnotation.Annotated && targetType.TypeArguments.Length > 0)
+                        targetType = targetType.TypeArguments[0] as INamedTypeSymbol;
+                    if (targetType == null || targetType.SpecialType != SpecialType.None) continue;
+
+                    navigationProps.Add(prop.Name);
+
+                    var fk = GetNamedArgString(oneToOneAttr, "ForeignKey");
+                    if (fk == null)
+                        fk = AutoDetectForeignKey(symbol, targetType, RelationKind.OneToOne, prop);
+
+                    relations.Add(new EntityRelationInfo(
+                        RelationKind.OneToOne,
+                        targetType.Name,
+                        targetType.ToDisplayString(),
+                        prop.Name,
+                        fk));
+                }
+            }
+
+            return new EntityClassInfo(
+                symbol.Name, ns, hintName, fqn, isRecord,
+                tableName, schema, pk,
+                relations, computedProps, navigationProps);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
