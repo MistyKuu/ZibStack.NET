@@ -1,3 +1,4 @@
+using Xunit;
 using ZibStack.NET.Result;
 
 namespace ZibStack.NET.Result.Tests;
@@ -220,7 +221,7 @@ public class ResultTests
     [Fact]
     public void NonGeneric_Success()
     {
-        var result = Result.Result.Success();
+        var result = Result.Success();
 
         Assert.True(result.IsSuccess);
     }
@@ -228,7 +229,7 @@ public class ResultTests
     [Fact]
     public void NonGeneric_Failure()
     {
-        var result = Result.Result.Failure(Error.Unexpected("boom"));
+        var result = Result.Failure(Error.Unexpected("boom"));
 
         Assert.True(result.IsFailure);
         Assert.Equal("Unexpected", result.Error.Code);
@@ -237,7 +238,7 @@ public class ResultTests
     [Fact]
     public void NonGeneric_Match()
     {
-        var result = Result.Result.Failure(Error.Conflict("dup"));
+        var result = Result.Failure(Error.Conflict("dup"));
 
         var output = result.Match(
             () => "ok",

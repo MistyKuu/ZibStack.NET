@@ -1,6 +1,6 @@
 using ZibStack.NET.Dto;
 
-namespace ZibStack.NET.Dto.Tests;
+namespace ZibStack.NET.Dto.Tests.Sortable;
 
 [QueryDto(Sortable = true, DefaultSort = "Name")]
 public class Product

@@ -582,7 +582,7 @@ public partial class DtoGenerator
             sb.AppendLine("    {");
 
             var defaultSortStr = info.DefaultSort is not null ? $"\"{info.DefaultSort}\"" : "null";
-            var defaultDirStr = info.DefaultSortDirection == 1 ? "SortDirection.Desc" : "SortDirection.Asc";
+            var defaultDirStr = info.DefaultSortDirection == 1 ? "ZibStack.NET.Dto.SortDirection.Desc" : "ZibStack.NET.Dto.SortDirection.Asc";
             sb.AppendLine($"        var sortBy = SortBy ?? {defaultSortStr};");
             sb.AppendLine($"        var direction = SortDirection ?? {defaultDirStr};");
             sb.AppendLine();

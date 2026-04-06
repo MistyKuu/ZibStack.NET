@@ -1,3 +1,4 @@
+using Xunit;
 using ZibStack.NET.Result;
 
 namespace ZibStack.NET.Result.Tests;
