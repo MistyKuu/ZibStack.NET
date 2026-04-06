@@ -11,6 +11,7 @@ A collection of .NET source generators and utilities for common application conc
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for strongly-typed Create and Update request DTOs with PatchField support. |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[Required]`, `[Email]`, `[Range]`, `[Match]`). |
+| [**ZibStack.NET.UI**](packages/ZibStack.NET.UI/) | `dotnet add package ZibStack.NET.UI` | Source generator for UI form and table metadata — forms, tables, drill-down, row/toolbar actions, permissions, conditional styling. |
 
 ## Quick Examples
 
@@ -146,6 +147,38 @@ var result = request.Validate();
 if (!result.IsValid) return BadRequest(result.Errors);
 ```
 
+### ZibStack.NET.UI
+
+```csharp
+// Annotate your model — get form + table + ERP metadata:
+[Form]
+[Table(DefaultSort = "Name")]
+[ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
+[RowAction("report", Label = "Raport", Endpoint = "/api/{id}/report", Method = "POST")]
+[ToolbarAction("export", Label = "Eksport", Endpoint = "/api/export", SelectionMode = "multiple")]
+[Permission("voivodeship.read")]
+public partial class VoivodeshipView
+{
+    [FormField(Label = "Nazwa")]
+    [TableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+
+    [Computed]
+    [ColumnStyle(When = "value < 0", Severity = "danger")]
+    [ColumnStyle(When = "value >= 0", Severity = "success")]
+    public decimal Budget { get; set; }
+
+    [Select(typeof(Region))]
+    public Region Region { get; set; }
+}
+
+// Serve JSON schema to any frontend:
+app.MapGet("/api/forms/voivodeship", () =>
+    Results.Content(VoivodeshipView.GetFormSchemaJson(), "application/json"));
+app.MapGet("/api/tables/voivodeship", () =>
+    Results.Content(VoivodeshipView.GetTableSchemaJson(), "application/json"));
+```
+
 ## Repository Structure
 
 ```
@@ -165,14 +198,21 @@ ZibStack.NET/
 │   ├── ZibStack.NET.Result/       → Result monad (Map/Bind/Match)
 │   │   ├── src/                   → Library
 │   │   └── tests/                 → Unit tests
-│   └── ZibStack.NET.Validation/   → Validation source generator
+│   ├── ZibStack.NET.Validation/   → Validation source generator
+│   │   ├── src/                   → Generator
+│   │   └── tests/                 → Unit tests
+│   └── ZibStack.NET.UI/           → UI metadata source generator
 │       ├── src/                   → Generator
-│       └── tests/                 → Unit tests
+│       ├── tests/                 → Unit tests
+│       └── sample/                → API + Blazor + React samples
 ├── .github/workflows/
 │   ├── ci.yml                     → Builds & tests all packages
 │   ├── release-aop.yml            → Release ZibStack.NET.Aop to NuGet
 │   ├── release-log.yml            → Release ZibStack.NET.Log to NuGet
-│   └── release-dto.yml            → Release ZibStack.NET.Dto to NuGet
+│   ├── release-dto.yml            → Release ZibStack.NET.Dto to NuGet
+│   ├── release-result.yml         → Release ZibStack.NET.Result to NuGet
+│   ├── release-validation.yml     → Release ZibStack.NET.Validation to NuGet
+│   └── release-ui.yml             → Release ZibStack.NET.UI to NuGet
 └── ZibStack.NET.slnx
 ```
 
