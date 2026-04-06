@@ -13,17 +13,43 @@ namespace ZibStack.NET.UI
         public string Layout { get; }
         public System.Collections.Generic.IReadOnlyList<FormGroupDescriptor> Groups { get; }
         public System.Collections.Generic.IReadOnlyList<FormFieldDescriptor> Fields { get; }
+        public System.Collections.Generic.IReadOnlyList<FormRelationDescriptor> Children { get; }
 
         public FormDescriptor(
             string name,
             string layout,
             System.Collections.Generic.IReadOnlyList<FormGroupDescriptor> groups,
-            System.Collections.Generic.IReadOnlyList<FormFieldDescriptor> fields)
+            System.Collections.Generic.IReadOnlyList<FormFieldDescriptor> fields,
+            System.Collections.Generic.IReadOnlyList<FormRelationDescriptor>? children = null)
         {
             Name = name;
             Layout = layout;
             Groups = groups;
             Fields = fields;
+            Children = children ?? System.Array.Empty<FormRelationDescriptor>();
+        }
+    }
+
+    /// <summary>Describes a relationship (child) on a form.</summary>
+    public sealed class FormRelationDescriptor
+    {
+        public string Name { get; }
+        public string Label { get; }
+        public string Target { get; }
+        public string ForeignKey { get; }
+        public string Relation { get; }
+        public string? SchemaUrl { get; }
+        public string? FormSchemaUrl { get; }
+
+        public FormRelationDescriptor(string name, string label, string target, string foreignKey, string relation, string? schemaUrl = null, string? formSchemaUrl = null)
+        {
+            Name = name;
+            Label = label;
+            Target = target;
+            ForeignKey = foreignKey;
+            Relation = relation;
+            SchemaUrl = schemaUrl;
+            FormSchemaUrl = formSchemaUrl;
         }
     }
 
@@ -231,14 +257,18 @@ namespace ZibStack.NET.UI
         public string Label { get; }
         public string Target { get; }
         public string ForeignKey { get; }
+        public string Relation { get; }
         public string? SchemaUrl { get; }
+        public string? FormSchemaUrl { get; }
 
-        public ChildTableDescriptor(string label, string target, string foreignKey, string? schemaUrl = null)
+        public ChildTableDescriptor(string label, string target, string foreignKey, string relation = ""oneToMany"", string? schemaUrl = null, string? formSchemaUrl = null)
         {
             Label = label;
             Target = target;
             ForeignKey = foreignKey;
+            Relation = relation;
             SchemaUrl = schemaUrl;
+            FormSchemaUrl = formSchemaUrl;
         }
     }
 

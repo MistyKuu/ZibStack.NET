@@ -39,6 +39,10 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     private const string ComputedAttributeFqn = "ZibStack.NET.UI.ComputedAttribute";
     private const string ColumnStyleAttributeFqn = "ZibStack.NET.UI.ColumnStyleAttribute";
 
+    // Relationship attributes
+    private const string OneToManyAttributeFqn = "ZibStack.NET.UI.OneToManyAttribute";
+    private const string OneToOneAttributeFqn = "ZibStack.NET.UI.OneToOneAttribute";
+
     // UI control hints
     private const string TextAreaAttributeFqn = "ZibStack.NET.UI.TextAreaAttribute";
     private const string SelectAttributeFqn = "ZibStack.NET.UI.SelectAttribute";
@@ -90,6 +94,10 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             ctx.AddSource("PasswordInputAttribute.g.cs", PasswordInputAttributeSource);
 
             // ERP attributes
+            // Relationship attributes
+            ctx.AddSource("OneToManyAttribute.g.cs", OneToManyAttributeSource);
+            ctx.AddSource("OneToOneAttribute.g.cs", OneToOneAttributeSource);
+
             ctx.AddSource("ChildTableAttribute.g.cs", ChildTableAttributeSource);
             ctx.AddSource("RowActionAttribute.g.cs", RowActionAttributeSource);
             ctx.AddSource("ToolbarActionAttribute.g.cs", ToolbarActionAttributeSource);

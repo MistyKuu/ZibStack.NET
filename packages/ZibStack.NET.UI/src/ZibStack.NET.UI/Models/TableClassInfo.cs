@@ -15,7 +15,7 @@ internal sealed class TableClassInfo
     public string? DefaultSort { get; }
     public string DefaultSortDirection { get; }
     public string? SchemaUrl { get; }
-    public List<ChildTableInfo> Children { get; } = new List<ChildTableInfo>();
+    public List<RelationInfo> Relations { get; } = new List<RelationInfo>();
     public List<RowActionInfo> RowActions { get; } = new List<RowActionInfo>();
     public List<ToolbarActionInfo> ToolbarActions { get; } = new List<ToolbarActionInfo>();
     public PermissionInfo? Permissions { get; set; }

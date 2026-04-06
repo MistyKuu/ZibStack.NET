@@ -260,9 +260,11 @@ app.MapGet("/api/tables/voivodeship", () =>
   "defaultSort": { "column": "name", "direction": "asc" },
   "children": [
     { "label": "Powiaty", "target": "CountyView",
-      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/county" },
+      "foreignKey": "voivodeshipId", "relation": "oneToMany",
+      "schemaUrl": "/api/tables/county" },
     { "label": "Kody pocztowe", "target": "PostalCodeView",
-      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/postalcode" }
+      "foreignKey": "voivodeshipId", "relation": "oneToMany",
+      "schemaUrl": "/api/tables/postalcode" }
   ],
   "rowActions": [
     { "name": "showDetails", "label": "Szczegóły",
@@ -288,6 +290,107 @@ app.MapGet("/api/tables/voivodeship", () =>
 }
 ```
 </details>
+
+## Relationships (`[OneToMany]` / `[OneToOne]`)
+
+Define relationships on navigation properties — a single declaration drives both table drill-down and form sub-forms:
+
+```csharp
+[Table(SchemaUrl = "/api/tables/task")]
+[Form]
+public partial class TaskItem
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public int ProjectId { get; set; }  // FK auto-detected by convention
+}
+
+[Form]
+public partial class ProjectSettings
+{
+    public int Id { get; set; }
+    public string Theme { get; set; } = "";
+}
+
+[Form]
+[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+public partial class ProjectView
+{
+    [FormIgnore]
+    [TableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [FormField(Label = "Project Name")]
+    [TableColumn(Sortable = true)]
+    public string Name { get; set; } = "";
+
+    public int SettingsId { get; set; }
+
+    // One-to-many: FK auto-detected as TaskItem.ProjectId
+    [OneToMany(Label = "Tasks")]
+    public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();
+
+    // Explicit FK via nameof() for compile-time safety
+    [OneToMany(ForeignKey = nameof(Attachment.ProjectId), Label = "Attachments")]
+    public ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
+
+    // One-to-one: FK auto-detected as ProjectView.SettingsId
+    [OneToOne(Label = "Settings")]
+    public ProjectSettings? Settings { get; set; }
+}
+```
+
+Navigation properties are automatically excluded from form fields and table columns.
+
+### Foreign Key Resolution
+
+1. **Explicit** — `[OneToMany(ForeignKey = nameof(Child.ParentId))]` (compile-time safe)
+2. **Convention (OneToMany)** — looks for `{ParentTypeName}Id` on the child type (strips `View` suffix)
+3. **Convention (OneToOne)** — looks for `{NavigationPropertyName}Id` on the parent type
+
+### SchemaUrl / FormSchemaUrl Resolution
+
+Both `[OneToMany]` and `[OneToOne]` resolve URLs with the same priority:
+1. Explicit property on the attribute
+2. From target type's `[Table]` / `[Form]` attribute
+3. Convention fallback (e.g. `/api/tables/{name}`, `/api/forms/{name}`)
+
+### Generated JSON
+
+Table JSON includes a `relation` field:
+```json
+{
+  "children": [
+    {
+      "label": "Tasks", "target": "TaskItem",
+      "foreignKey": "projectId", "relation": "oneToMany",
+      "schemaUrl": "/api/tables/task", "formSchemaUrl": "/api/forms/taskitem"
+    },
+    {
+      "label": "Settings", "target": "ProjectSettings",
+      "foreignKey": "settingsId", "relation": "oneToOne",
+      "formSchemaUrl": "/api/forms/projectsettings"
+    }
+  ]
+}
+```
+
+Form JSON also includes a `children` block:
+```json
+{
+  "children": [
+    {
+      "name": "tasks", "label": "Tasks", "target": "TaskItem",
+      "foreignKey": "projectId", "relation": "oneToMany",
+      "schemaUrl": "/api/tables/task", "formSchemaUrl": "/api/forms/taskitem"
+    }
+  ]
+}
+```
+
+### Backward Compatibility
+
+`[ChildTable]` continues to work — it is mapped internally to `RelationInfo` with `OneToMany` kind. You can mix both styles in the same project.
 
 ## Database Integration
 
@@ -645,11 +748,18 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 | `[TableColumn]` | Customize column | `Label?`, `Sortable?`, `Filterable?`, `Format?`, `Order?`, `IsVisible?`, `Width?` |
 | `[TableIgnore]` | Exclude from table | — |
 
+### Relationships — Property-level
+
+| Attribute | Purpose | Parameters |
+|-----------|---------|-----------|
+| `[OneToMany]` | One-to-many on `ICollection<T>` | `ForeignKey?`, `Label?`, `SchemaUrl?`, `FormSchemaUrl?` |
+| `[OneToOne]` | One-to-one on navigation property | `ForeignKey?`, `Label?`, `SchemaUrl?`, `FormSchemaUrl?` |
+
 ### ERP — Class-level
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[ChildTable(typeof(T))]` | Hierarchical drill-down | `ForeignKey`, `Label`, `SchemaUrl?`* (AllowMultiple) |
+| `[ChildTable(typeof(T))]` | Hierarchical drill-down (legacy, prefer `[OneToMany]`) | `ForeignKey`, `Label`, `SchemaUrl?` (AllowMultiple) |
 | `[RowAction("name")]` | Per-row action button | `Label`, `Icon?`, `Endpoint`, `Method?`, `Confirmation?`, `Permission?` (AllowMultiple) |
 | `[ToolbarAction("name")]` | Global toolbar action | `Label`, `Icon?`, `Endpoint`, `Method?`, `Confirmation?`, `Permission?`, `SelectionMode?` (AllowMultiple) |
 | `[Permission("name")]` | Required view permission | — |
@@ -665,11 +775,13 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 ## SchemaUrl Resolution
 
-`[ChildTable]` resolves `SchemaUrl` for drill-down with the following priority:
+Both `[OneToMany]`/`[OneToOne]` and legacy `[ChildTable]` resolve `SchemaUrl` for drill-down with the following priority:
 
-1. **Explicit** — `[ChildTable(typeof(T), SchemaUrl = "/custom/url")]` on the parent
+1. **Explicit** — `SchemaUrl = "/custom/url"` on the attribute itself
 2. **From target type** — `[Table(SchemaUrl = "/api/tables/county")]` on `T` itself
 3. **Convention** — strip `View` suffix, lowercase → `/api/tables/{name}` (e.g. `CountyView` → `/api/tables/county`)
+
+`FormSchemaUrl` (available on `[OneToMany]`/`[OneToOne]`) follows the same pattern but checks for `[Form]` on the target type.
 
 This means you typically declare `SchemaUrl` once on the child type's `[Table]` and it propagates to all parents that reference it.
 

@@ -48,7 +48,24 @@ public partial class UiGenerator
         {
             EmitFormField(sb, field);
         }
-        sb.AppendLine("        });");
+        if (info.Relations.Count > 0)
+        {
+            sb.AppendLine("        },");
+            sb.AppendLine("        children: new FormRelationDescriptor[]");
+            sb.AppendLine("        {");
+            foreach (var rel in info.Relations)
+            {
+                var relationStr = rel.Kind == RelationKind.OneToMany ? "oneToMany" : "oneToOne";
+                var schemaUrlArg = rel.SchemaUrl != null ? $", \"{EscapeString(rel.SchemaUrl)}\"" : ", null";
+                var formSchemaUrlArg = rel.FormSchemaUrl != null ? $", \"{EscapeString(rel.FormSchemaUrl)}\"" : ", null";
+                sb.AppendLine($"            new FormRelationDescriptor(\"{EscapeString(rel.PropertyName)}\", \"{EscapeString(rel.Label)}\", \"{EscapeString(rel.TargetTypeName)}\", \"{EscapeString(rel.ForeignKey)}\", \"{relationStr}\"{schemaUrlArg}{formSchemaUrlArg}),");
+            }
+            sb.AppendLine("        });");
+        }
+        else
+        {
+            sb.AppendLine("        });");
+        }
 
         sb.AppendLine();
         sb.AppendLine("    public static FormDescriptor GetFormDescriptor() => _formDescriptor;");

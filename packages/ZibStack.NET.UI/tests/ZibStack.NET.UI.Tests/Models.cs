@@ -118,7 +118,7 @@ public partial class FormWithRadioAndFile
     public string? LockedField { get; set; }
 }
 
-// ─── ERP models ──────────────────────────────────────────────────────
+// ─── ERP models (backward compat with [ChildTable]) ─────────────────
 
 public partial class CountyView { }
 
@@ -162,4 +162,55 @@ public partial class VoivodeshipView
     public int CountyCount { get; set; }
 
     public int VoivodeshipId { get; set; }
+}
+
+// ─── Relationship models ([OneToMany] / [OneToOne]) ─────────────────
+
+[Table(SchemaUrl = "/api/tables/task")]
+[Form]
+public partial class TaskItem
+{
+    public int Id { get; set; }
+    public string Title { get; set; } = "";
+    public int ProjectId { get; set; }
+}
+
+[Table(SchemaUrl = "/api/tables/attachment")]
+public partial class Attachment
+{
+    public int Id { get; set; }
+    public string FileName { get; set; } = "";
+    public int ProjectId { get; set; }
+}
+
+[Form]
+public partial class ProjectSettings
+{
+    public int Id { get; set; }
+    public string Theme { get; set; } = "";
+    public int ProjectId { get; set; }
+}
+
+[Form]
+[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+public partial class ProjectView
+{
+    [FormIgnore]
+    [TableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [FormField(Label = "Project Name")]
+    [TableColumn(Sortable = true)]
+    public string Name { get; set; } = "";
+
+    public int SettingsId { get; set; }
+
+    [OneToMany(Label = "Tasks")]
+    public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();
+
+    [OneToMany(ForeignKey = nameof(Attachment.ProjectId), Label = "Attachments")]
+    public ICollection<Attachment> Attachments { get; set; } = new List<Attachment>();
+
+    [OneToOne(Label = "Settings")]
+    public ProjectSettings? Settings { get; set; }
 }

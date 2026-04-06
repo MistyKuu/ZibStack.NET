@@ -152,9 +152,7 @@ if (!result.IsValid) return BadRequest(result.Errors);
 ```csharp
 public enum Region { Północ, Południe, Wschód, Zachód }
 
-// ─── Child table views with their own SchemaUrl ────────────────────
-// [ChildTable] resolves SchemaUrl from the target type's [Table] attribute,
-// so you declare the URL once on the child — no need to repeat it.
+// ─── Child views with [Table] for SchemaUrl ────────────────────────
 
 [Table(SchemaUrl = "/api/tables/county")]
 public partial class CountyView
@@ -166,6 +164,7 @@ public partial class CountyView
 }
 
 [Table(SchemaUrl = "/api/tables/postalcode")]
+[Form]
 public partial class PostalCodeView
 {
     public int Id { get; set; }
@@ -176,17 +175,13 @@ public partial class PostalCodeView
     public int VoivodeshipId { get; set; }
 }
 
-// ─── Main view — forms + tables + ERP features ────────────────────
+// ─── Main view — relationships + ERP features ──────────────────────
 
 [Form]
 [Table(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
 [FormGroup("basic", Label = "Dane podstawowe", Order = 1)]
 [FormGroup("contact", Label = "Kontakt", Order = 2)]
 [FormGroup("finance", Label = "Finanse", Order = 3)]
-
-// ERP: hierarchical drill-down — SchemaUrl resolved from child's [Table]
-[ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
-[ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
 
 // ERP: per-row action buttons
 [RowAction("showDetails", Label = "Szczegóły", Endpoint = "/api/voivodeships/{id}")]
@@ -269,6 +264,15 @@ public partial class VoivodeshipView
 
     [FormHidden]
     public int VoivodeshipId { get; set; }
+
+    // Relationships — EF Core-style navigation properties
+    // FK auto-detected: CountyView.VoivodeshipId matches parent name
+    [OneToMany(Label = "Powiaty")]
+    public ICollection<CountyView> Counties { get; set; } = new List<CountyView>();
+
+    // Explicit FK with nameof() for compile-time safety
+    [OneToMany(ForeignKey = nameof(PostalCodeView.VoivodeshipId), Label = "Kody pocztowe")]
+    public ICollection<PostalCodeView> PostalCodes { get; set; } = new List<PostalCodeView>();
 }
 ```
 
@@ -383,9 +387,12 @@ app.MapGet("/api/tables/voivodeship", () =>
   "defaultSort": { "column": "name", "direction": "asc" },
   "children": [
     { "label": "Powiaty", "target": "CountyView",
-      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/county" },
+      "foreignKey": "voivodeshipId", "relation": "oneToMany",
+      "schemaUrl": "/api/tables/county" },
     { "label": "Kody pocztowe", "target": "PostalCodeView",
-      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/postalcode" }
+      "foreignKey": "voivodeshipId", "relation": "oneToMany",
+      "schemaUrl": "/api/tables/postalcode",
+      "formSchemaUrl": "/api/forms/postalcodeview" }
   ],
   "rowActions": [
     { "name": "showDetails", "label": "Szczegóły",

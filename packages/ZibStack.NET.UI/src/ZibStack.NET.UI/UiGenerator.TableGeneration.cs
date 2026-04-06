@@ -44,7 +44,7 @@ public partial class UiGenerator
         sb.AppendLine($"        pagination: new PaginationDescriptor({info.DefaultPageSize}, new[] {{ {pageSizesStr} }}),");
 
         // DefaultSort
-        var hasErpAttrs = info.Children.Count > 0 || info.RowActions.Count > 0 || info.ToolbarActions.Count > 0 || info.Permissions != null;
+        var hasErpAttrs = info.Relations.Count > 0 || info.RowActions.Count > 0 || info.ToolbarActions.Count > 0 || info.Permissions != null;
         var sortTrail = hasErpAttrs ? "," : "";
         if (info.DefaultSort != null)
         {
@@ -59,15 +59,17 @@ public partial class UiGenerator
         // ERP sections — collect and emit with proper comma handling
         var erpSections = new System.Collections.Generic.List<string>();
 
-        if (info.Children.Count > 0)
+        if (info.Relations.Count > 0)
         {
             var csb = new StringBuilder();
             csb.AppendLine("        children: new ChildTableDescriptor[]");
             csb.AppendLine("        {");
-            foreach (var child in info.Children)
+            foreach (var child in info.Relations)
             {
-                var schemaUrlParam = child.SchemaUrl != null ? $", \"{EscapeString(child.SchemaUrl)}\"" : "";
-                csb.AppendLine($"            new ChildTableDescriptor(\"{EscapeString(child.Label)}\", \"{EscapeString(child.TargetTypeName)}\", \"{EscapeString(child.ForeignKey)}\"{schemaUrlParam}),");
+                var relationStr = child.Kind == RelationKind.OneToMany ? "oneToMany" : "oneToOne";
+                var schemaUrlParam = child.SchemaUrl != null ? $", \"{EscapeString(child.SchemaUrl)}\"" : ", null";
+                var formSchemaUrlParam = child.FormSchemaUrl != null ? $", \"{EscapeString(child.FormSchemaUrl)}\"" : ", null";
+                csb.AppendLine($"            new ChildTableDescriptor(\"{EscapeString(child.Label)}\", \"{EscapeString(child.TargetTypeName)}\", \"{EscapeString(child.ForeignKey)}\", \"{relationStr}\"{schemaUrlParam}{formSchemaUrlParam}),");
             }
             csb.Append("        }");
             erpSections.Add(csb.ToString());

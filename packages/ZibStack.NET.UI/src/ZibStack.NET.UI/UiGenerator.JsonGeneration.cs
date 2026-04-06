@@ -94,6 +94,24 @@ public partial class UiGenerator
             BuildFieldJson(sb, info.Fields[i]);
         }
         sb.Append("]");
+
+        // Children (relations)
+        if (info.Relations.Count > 0)
+        {
+            sb.Append(",\"children\":[");
+            for (int i = 0; i < info.Relations.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var c = info.Relations[i];
+                sb.Append($"{{\"name\":\"{JsonEscape(c.PropertyName)}\",\"label\":\"{JsonEscape(c.Label)}\",\"target\":\"{JsonEscape(c.TargetTypeName)}\"");
+                sb.Append($",\"foreignKey\":\"{JsonEscape(c.ForeignKey)}\",\"relation\":\"{(c.Kind == RelationKind.OneToMany ? "oneToMany" : "oneToOne")}\"");
+                if (c.SchemaUrl != null) sb.Append($",\"schemaUrl\":\"{JsonEscape(c.SchemaUrl)}\"");
+                if (c.FormSchemaUrl != null) sb.Append($",\"formSchemaUrl\":\"{JsonEscape(c.FormSchemaUrl)}\"");
+                sb.Append("}");
+            }
+            sb.Append("]");
+        }
+
         sb.Append("}");
 
         return sb.ToString();
@@ -261,16 +279,18 @@ public partial class UiGenerator
             sb.Append("\"defaultSort\":null");
         }
 
-        // Children
-        if (info.Children.Count > 0)
+        // Children (from relations)
+        if (info.Relations.Count > 0)
         {
             sb.Append(",\"children\":[");
-            for (int i = 0; i < info.Children.Count; i++)
+            for (int i = 0; i < info.Relations.Count; i++)
             {
                 if (i > 0) sb.Append(",");
-                var c = info.Children[i];
+                var c = info.Relations[i];
                 sb.Append($"{{\"label\":\"{JsonEscape(c.Label)}\",\"target\":\"{JsonEscape(c.TargetTypeName)}\",\"foreignKey\":\"{JsonEscape(c.ForeignKey)}\"");
+                sb.Append($",\"relation\":\"{(c.Kind == RelationKind.OneToMany ? "oneToMany" : "oneToOne")}\"");
                 if (c.SchemaUrl != null) sb.Append($",\"schemaUrl\":\"{JsonEscape(c.SchemaUrl)}\"");
+                if (c.FormSchemaUrl != null) sb.Append($",\"formSchemaUrl\":\"{JsonEscape(c.FormSchemaUrl)}\"");
                 sb.Append("}");
             }
             sb.Append("]");

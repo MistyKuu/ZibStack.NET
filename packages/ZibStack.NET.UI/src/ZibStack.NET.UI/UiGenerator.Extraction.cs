@@ -215,6 +215,7 @@ public partial class UiGenerator
 
                 // Check [FormIgnore]
                 if (HasAttribute(prop, FormIgnoreAttributeFqn)) continue;
+                if (HasAttribute(prop, OneToManyAttributeFqn) || HasAttribute(prop, OneToOneAttributeFqn)) continue;
 
                 var fieldType = ResolveFieldType(prop.Type);
                 var uiHint = ResolveDefaultUiHint(fieldType, prop.Type);
@@ -301,7 +302,12 @@ public partial class UiGenerator
                 fields.Add(field);
             }
 
-            return new FormClassInfo(symbol.Name, ns, hintName, formName, layout.ToLowerInvariant(), isRecord, fields, groups);
+            var formRelations = new List<RelationInfo>();
+            ExtractRelationsFromProperties(symbol, formRelations);
+
+            var formInfo = new FormClassInfo(symbol.Name, ns, hintName, formName, layout.ToLowerInvariant(), isRecord, fields, groups);
+            formInfo.Relations.AddRange(formRelations);
+            return formInfo;
         }
         catch
         {
@@ -570,6 +576,7 @@ public partial class UiGenerator
 
                 // Check [TableIgnore]
                 if (HasAttribute(prop, TableIgnoreAttributeFqn)) continue;
+                if (HasAttribute(prop, OneToManyAttributeFqn) || HasAttribute(prop, OneToOneAttributeFqn)) continue;
 
                 var fieldType = ResolveFieldType(prop.Type);
                 var jsonName = ToCamelCase(prop.Name);
@@ -627,6 +634,8 @@ public partial class UiGenerator
             var result = new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
                 defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant(), schemaUrl);
 
+            ExtractRelationsFromProperties(symbol, result.Relations);
+
             // ERP: class-level attributes
             ExtractErpClassAttributes(symbol, result);
 
@@ -656,7 +665,6 @@ public partial class UiGenerator
                         var label = GetNamedArgString(attr, "Label") ?? targetType.Name;
                         var childSchemaUrl = GetNamedArgString(attr, "SchemaUrl");
 
-                        // 1) Try target type's [Table(SchemaUrl = "...")] 
                         if (childSchemaUrl == null)
                         {
                             var targetTableAttr = GetAttribute(targetType, TableAttributeFqn);
@@ -664,14 +672,13 @@ public partial class UiGenerator
                                 childSchemaUrl = GetNamedArgString(targetTableAttr, "SchemaUrl");
                         }
 
-                        // 2) Convention fallback: "CountyView" -> "/api/tables/county"
                         if (childSchemaUrl == null)
                         {
                             var targetName = targetType.Name;
                             if (targetName.EndsWith("View")) targetName = targetName.Substring(0, targetName.Length - 4);
                             childSchemaUrl = "/api/tables/" + targetName.ToLowerInvariant();
                         }
-                        info.Children.Add(new ChildTableInfo(targetType.Name, ToCamelCase(foreignKey), label, childSchemaUrl));
+                        info.Relations.Add(new RelationInfo(RelationKind.OneToMany, targetType.Name, ToCamelCase(targetType.Name), ToCamelCase(foreignKey), label, childSchemaUrl));
                     }
                     break;
 
@@ -727,5 +734,138 @@ public partial class UiGenerator
 
         if (permissions.HasAny)
             info.Permissions = permissions;
+    }
+
+    private static void ExtractRelationsFromProperties(INamedTypeSymbol symbol, List<RelationInfo> relations)
+    {
+        foreach (var member in symbol.GetMembers())
+        {
+            if (member is not IPropertySymbol prop) continue;
+            if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+
+            var oneToManyAttr = GetAttribute(prop, OneToManyAttributeFqn);
+            var oneToOneAttr = GetAttribute(prop, OneToOneAttributeFqn);
+
+            if (oneToManyAttr != null)
+            {
+                var targetType = ExtractCollectionElementType(prop.Type);
+                if (targetType == null) continue;
+
+                var fk = GetNamedArgString(oneToManyAttr, "ForeignKey");
+                if (fk == null)
+                    fk = AutoDetectForeignKey(symbol, targetType, RelationKind.OneToMany, prop);
+                if (fk == null) fk = "";
+
+                var label = GetNamedArgString(oneToManyAttr, "Label") ?? HumanizePropertyName(prop.Name);
+                var schemaUrl = ResolveSchemaUrl(oneToManyAttr, targetType);
+                var formSchemaUrl = ResolveFormSchemaUrl(oneToManyAttr, targetType);
+
+                relations.Add(new RelationInfo(RelationKind.OneToMany, targetType.Name, ToCamelCase(prop.Name), ToCamelCase(fk), label, schemaUrl, formSchemaUrl));
+            }
+            else if (oneToOneAttr != null)
+            {
+                var targetType = prop.Type as INamedTypeSymbol;
+                if (targetType == null) continue;
+                if (targetType.NullableAnnotation == NullableAnnotation.Annotated && targetType.TypeArguments.Length > 0)
+                    targetType = targetType.TypeArguments[0] as INamedTypeSymbol;
+                if (targetType == null || targetType.SpecialType != SpecialType.None) continue;
+
+                var fk = GetNamedArgString(oneToOneAttr, "ForeignKey");
+                if (fk == null)
+                    fk = AutoDetectForeignKey(symbol, targetType, RelationKind.OneToOne, prop);
+                if (fk == null) fk = "";
+
+                var label = GetNamedArgString(oneToOneAttr, "Label") ?? HumanizePropertyName(prop.Name);
+                var schemaUrl = ResolveSchemaUrl(oneToOneAttr, targetType);
+                var formSchemaUrl = ResolveFormSchemaUrl(oneToOneAttr, targetType);
+
+                relations.Add(new RelationInfo(RelationKind.OneToOne, targetType.Name, ToCamelCase(prop.Name), ToCamelCase(fk), label, schemaUrl, formSchemaUrl));
+            }
+        }
+    }
+
+    private static INamedTypeSymbol? ExtractCollectionElementType(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol arrayType)
+            return arrayType.ElementType as INamedTypeSymbol;
+
+        if (type is INamedTypeSymbol named)
+        {
+            foreach (var iface in named.AllInterfaces)
+            {
+                if (iface.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>"
+                    && iface.TypeArguments.Length == 1)
+                    return iface.TypeArguments[0] as INamedTypeSymbol;
+            }
+            if (named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>"
+                && named.TypeArguments.Length == 1)
+                return named.TypeArguments[0] as INamedTypeSymbol;
+        }
+
+        return null;
+    }
+
+    private static string? AutoDetectForeignKey(INamedTypeSymbol parentSymbol, INamedTypeSymbol targetType, RelationKind kind, IPropertySymbol navProp)
+    {
+        if (kind == RelationKind.OneToMany)
+        {
+            var parentName = parentSymbol.Name;
+            if (parentName.EndsWith("View")) parentName = parentName.Substring(0, parentName.Length - 4);
+
+            foreach (var m in targetType.GetMembers())
+            {
+                if (m is IPropertySymbol p && p.Name == parentName + "Id")
+                    return p.Name;
+            }
+            foreach (var m in targetType.GetMembers())
+            {
+                if (m is IPropertySymbol p && p.Name == parentSymbol.Name + "Id")
+                    return p.Name;
+            }
+        }
+        else if (kind == RelationKind.OneToOne)
+        {
+            var propName = navProp.Name;
+            foreach (var m in parentSymbol.GetMembers())
+            {
+                if (m is IPropertySymbol p && p.Name == propName + "Id")
+                    return p.Name;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveSchemaUrl(AttributeData attr, INamedTypeSymbol targetType)
+    {
+        var explicit_ = GetNamedArgString(attr, "SchemaUrl");
+        if (explicit_ != null) return explicit_;
+
+        var targetTableAttr = GetAttribute(targetType, TableAttributeFqn);
+        if (targetTableAttr != null)
+        {
+            var fromTable = GetNamedArgString(targetTableAttr, "SchemaUrl");
+            if (fromTable != null) return fromTable;
+        }
+
+        var targetName = targetType.Name;
+        if (targetName.EndsWith("View")) targetName = targetName.Substring(0, targetName.Length - 4);
+        return "/api/tables/" + targetName.ToLowerInvariant();
+    }
+
+    private static string? ResolveFormSchemaUrl(AttributeData attr, INamedTypeSymbol targetType)
+    {
+        var explicit_ = GetNamedArgString(attr, "FormSchemaUrl");
+        if (explicit_ != null) return explicit_;
+
+        var targetFormAttr = GetAttribute(targetType, FormAttributeFqn);
+        if (targetFormAttr != null)
+        {
+            var targetName = targetType.Name;
+            if (targetName.EndsWith("View")) targetName = targetName.Substring(0, targetName.Length - 4);
+            return "/api/forms/" + targetName.ToLowerInvariant();
+        }
+
+        return null;
     }
 }

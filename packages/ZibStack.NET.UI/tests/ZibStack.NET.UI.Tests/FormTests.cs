@@ -357,10 +357,9 @@ public class ErpTests
         Assert.Equal("Powiaty", descriptor.Children[0].Label);
         Assert.Equal("CountyView", descriptor.Children[0].Target);
         Assert.Equal("voivodeshipId", descriptor.Children[0].ForeignKey);
-        // CountyView has no [Table], so convention fallback applies
+        Assert.Equal("oneToMany", descriptor.Children[0].Relation);
         Assert.Equal("/api/tables/county", descriptor.Children[0].SchemaUrl);
         Assert.Equal("Kody pocztowe", descriptor.Children[1].Label);
-        // PostalCodeView has [Table(SchemaUrl = "/custom/postalcodes")], resolved from target type
         Assert.Equal("/custom/postalcodes", descriptor.Children[1].SchemaUrl);
     }
 
@@ -490,5 +489,109 @@ public class ErpTests
         Assert.Contains("\"computed\":true", json);
         Assert.Contains("\"styles\":[", json);
         Assert.Contains("\"severity\":\"danger\"", json);
+    }
+}
+
+public class RelationTests
+{
+    [Fact]
+    public void Project_TableDescriptor_HasOneToManyRelations()
+    {
+        var descriptor = ProjectView.GetTableDescriptor();
+        var tasks = descriptor.Children.First(c => c.Target == "TaskItem");
+        Assert.Equal("Tasks", tasks.Label);
+        Assert.Equal("projectId", tasks.ForeignKey);
+        Assert.Equal("oneToMany", tasks.Relation);
+        Assert.Equal("/api/tables/task", tasks.SchemaUrl);
+    }
+
+    [Fact]
+    public void Project_TableDescriptor_HasOneToManyWithExplicitFk()
+    {
+        var descriptor = ProjectView.GetTableDescriptor();
+        var attachments = descriptor.Children.First(c => c.Target == "Attachment");
+        Assert.Equal("Attachments", attachments.Label);
+        Assert.Equal("projectId", attachments.ForeignKey);
+        Assert.Equal("/api/tables/attachment", attachments.SchemaUrl);
+    }
+
+    [Fact]
+    public void Project_TableDescriptor_HasOneToOneRelation()
+    {
+        var descriptor = ProjectView.GetTableDescriptor();
+        var settings = descriptor.Children.First(c => c.Target == "ProjectSettings");
+        Assert.Equal("Settings", settings.Label);
+        Assert.Equal("settingsId", settings.ForeignKey);
+        Assert.Equal("oneToOne", settings.Relation);
+    }
+
+    [Fact]
+    public void Project_FormDescriptor_HasRelationChildren()
+    {
+        var descriptor = ProjectView.GetFormDescriptor();
+        Assert.Equal(3, descriptor.Children.Count);
+
+        var tasks = descriptor.Children.First(c => c.Target == "TaskItem");
+        Assert.Equal("tasks", tasks.Name);
+        Assert.Equal("Tasks", tasks.Label);
+        Assert.Equal("oneToMany", tasks.Relation);
+        Assert.Equal("/api/forms/taskitem", tasks.FormSchemaUrl);
+
+        var settings = descriptor.Children.First(c => c.Target == "ProjectSettings");
+        Assert.Equal("settings", settings.Name);
+        Assert.Equal("oneToOne", settings.Relation);
+        Assert.Equal("/api/forms/projectsettings", settings.FormSchemaUrl);
+    }
+
+    [Fact]
+    public void Project_FormDescriptor_ExcludesNavPropsFromFields()
+    {
+        var descriptor = ProjectView.GetFormDescriptor();
+        Assert.DoesNotContain(descriptor.Fields, f => f.Name == "tasks");
+        Assert.DoesNotContain(descriptor.Fields, f => f.Name == "attachments");
+        Assert.DoesNotContain(descriptor.Fields, f => f.Name == "settings");
+    }
+
+    [Fact]
+    public void Project_TableDescriptor_ExcludesNavPropsFromColumns()
+    {
+        var descriptor = ProjectView.GetTableDescriptor();
+        Assert.DoesNotContain(descriptor.Columns, c => c.Name == "tasks");
+        Assert.DoesNotContain(descriptor.Columns, c => c.Name == "attachments");
+        Assert.DoesNotContain(descriptor.Columns, c => c.Name == "settings");
+    }
+
+    [Fact]
+    public void Project_FormJson_ContainsChildren()
+    {
+        var json = ProjectView.GetFormSchemaJson();
+        Assert.Contains("\"children\":[", json);
+        Assert.Contains("\"relation\":\"oneToMany\"", json);
+        Assert.Contains("\"relation\":\"oneToOne\"", json);
+        Assert.Contains("\"formSchemaUrl\":\"/api/forms/taskitem\"", json);
+    }
+
+    [Fact]
+    public void Project_TableJson_ContainsRelationType()
+    {
+        var json = ProjectView.GetTableSchemaJson();
+        Assert.Contains("\"relation\":\"oneToMany\"", json);
+        Assert.Contains("\"relation\":\"oneToOne\"", json);
+    }
+
+    [Fact]
+    public void Project_FkAutoDetect_OneToMany_FindsProjectId()
+    {
+        var descriptor = ProjectView.GetTableDescriptor();
+        var tasks = descriptor.Children.First(c => c.Target == "TaskItem");
+        Assert.Equal("projectId", tasks.ForeignKey);
+    }
+
+    [Fact]
+    public void Project_FkAutoDetect_OneToOne_FindsSettingsId()
+    {
+        var descriptor = ProjectView.GetTableDescriptor();
+        var settings = descriptor.Children.First(c => c.Target == "ProjectSettings");
+        Assert.Equal("settingsId", settings.ForeignKey);
     }
 }
