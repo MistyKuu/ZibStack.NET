@@ -67,6 +67,199 @@ app.MapGet("/api/tables/player", () =>
     Results.Content(Player.GetTableSchemaJson(), "application/json"));
 ```
 
+## Generated JSON
+
+### Form Schema
+
+```json
+{
+  "name": "Player",
+  "layout": "vertical",
+  "groups": [
+    { "name": "basic", "label": "Basic Info", "order": 1 }
+  ],
+  "fields": [
+    {
+      "name": "name",
+      "type": "string",
+      "uiHint": "text",
+      "label": "Player Name",
+      "placeholder": "Enter name...",
+      "group": "basic",
+      "order": 0,
+      "required": true,
+      "validation": { "required": true, "minLength": 2 }
+    },
+    {
+      "name": "level",
+      "type": "integer",
+      "uiHint": "slider",
+      "group": "basic",
+      "order": 1,
+      "props": { "min": 1, "max": 100, "step": 1 }
+    },
+    {
+      "name": "role",
+      "type": "enum",
+      "uiHint": "select",
+      "label": "Role",
+      "group": "basic",
+      "order": 2,
+      "options": [
+        { "value": "Player", "label": "Player" },
+        { "value": "Moderator", "label": "Moderator" },
+        { "value": "Admin", "label": "Admin" }
+      ]
+    },
+    {
+      "name": "biography",
+      "type": "string",
+      "uiHint": "textarea",
+      "order": 3,
+      "props": { "rows": 3 }
+    },
+    {
+      "name": "adminNotes",
+      "type": "string",
+      "uiHint": "text",
+      "label": "Admin Notes",
+      "order": 5,
+      "conditional": { "field": "role", "operator": "equals", "value": "Admin" }
+    }
+  ]
+}
+```
+
+### Table Schema
+
+```json
+{
+  "name": "Player",
+  "columns": [
+    { "name": "name",  "type": "string",  "label": "Name",  "sortable": true, "filterable": true },
+    { "name": "level", "type": "integer", "label": "Level", "sortable": true, "filterable": false },
+    { "name": "role",  "type": "enum",    "label": "Role",  "sortable": true, "filterable": true,
+      "options": ["Player", "Moderator", "Admin"] }
+  ],
+  "pagination": { "defaultPageSize": 20, "pageSizes": [10, 20, 50, 100] },
+  "defaultSort": { "column": "name", "direction": "asc" }
+}
+```
+
+## Frontend Integration
+
+### Blazor
+
+```razor
+@* Fetch schema once, render form dynamically *@
+@inject HttpClient Http
+
+@if (_schema is not null)
+{
+    @foreach (var field in _schema.Fields.OrderBy(f => f.Order))
+    {
+        <div class="form-group">
+            <label>@field.Label</label>
+            @switch (field.UiHint)
+            {
+                case "text":
+                    <input type="text" placeholder="@field.Placeholder"
+                           @oninput="e => _values[field.Name] = e.Value" />
+                    break;
+                case "select":
+                    <select @onchange="e => _values[field.Name] = e.Value">
+                        @foreach (var opt in field.Options ?? [])
+                        {
+                            <option value="@opt.Value">@opt.Label</option>
+                        }
+                    </select>
+                    break;
+                case "slider":
+                    <input type="range" min="@field.Props["min"]" max="@field.Props["max"]"
+                           @oninput="e => _values[field.Name] = e.Value" />
+                    break;
+                case "textarea":
+                    <textarea rows="@field.Props["rows"]"
+                              @oninput="e => _values[field.Name] = e.Value" />
+                    break;
+                case "checkbox":
+                    <input type="checkbox"
+                           @onchange="e => _values[field.Name] = e.Value" />
+                    break;
+            }
+        </div>
+    }
+}
+
+@code {
+    private FormSchema? _schema;
+    private Dictionary<string, object?> _values = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _schema = await Http.GetFromJsonAsync<FormSchema>("/api/forms/player");
+    }
+}
+```
+
+See [SampleBlazor](sample/SampleBlazor/) for full DynamicField/DynamicForm components with conditional visibility, grouping, mode filtering, and all UI hints.
+
+### React
+
+```tsx
+import { useForm, Controller } from 'react-hook-form';
+
+function DynamicForm({ schemaUrl, onSubmit }) {
+  const [schema, setSchema] = useState(null);
+  const { control, handleSubmit, watch } = useForm();
+  const values = watch();
+
+  useEffect(() => {
+    fetch(schemaUrl).then(r => r.json()).then(setSchema);
+  }, [schemaUrl]);
+
+  if (!schema) return <div>Loading...</div>;
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      {schema.fields
+        .filter(f => !f.hidden)
+        .filter(f => !f.conditional || values[f.conditional.field] === f.conditional.value)
+        .sort((a, b) => a.order - b.order)
+        .map(field => (
+          <Controller key={field.name} name={field.name} control={control}
+            rules={{ required: field.required && `${field.label} is required` }}
+            render={({ field: f, fieldState: { error } }) => (
+              <div>
+                <label>{field.label}</label>
+                {field.uiHint === 'select' ? (
+                  <select {...f}>
+                    {field.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                ) : field.uiHint === 'slider' ? (
+                  <input type="range" {...f} min={field.props?.min} max={field.props?.max} />
+                ) : field.uiHint === 'textarea' ? (
+                  <textarea {...f} rows={field.props?.rows} />
+                ) : (
+                  <input type={field.uiHint === 'password' ? 'password' : 'text'} {...f}
+                         placeholder={field.placeholder} />
+                )}
+                {error && <span>{error.message}</span>}
+              </div>
+            )}
+          />
+        ))}
+      <button type="submit">Save</button>
+    </form>
+  );
+}
+
+// Usage
+<DynamicForm schemaUrl="/api/forms/player" onSubmit={data => console.log(data)} />
+```
+
+See [react-app](sample/react-app/) for full implementation with DynamicField, DynamicForm, DynamicTable components, validation mapping, and all UI hints.
+
 ## Form Attributes
 
 | Attribute | Target | Purpose |
