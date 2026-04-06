@@ -17,12 +17,39 @@ Source generator for **UI form and table metadata**. Annotate your models and ge
 ```csharp
 public enum Region { Północ, Południe, Wschód, Zachód }
 
-[Form]
-[Table(DefaultSort = "Name", DefaultPageSize = 50)]
-[FormGroup("basic", Label = "Dane podstawowe", Order = 1)]
-[FormGroup("finance", Label = "Finanse", Order = 2)]
+// ─── Child table views with their own SchemaUrl ────────────────────
+// [ChildTable] resolves SchemaUrl from the target type's [Table] attribute,
+// so you declare the URL once on the child — no need to repeat it.
 
-// Hierarchical drill-down
+[Table(SchemaUrl = "/api/tables/county")]
+public partial class CountyView
+{
+    public int Id { get; set; }
+    [TableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+    public int VoivodeshipId { get; set; }
+}
+
+[Table(SchemaUrl = "/api/tables/postalcode")]
+public partial class PostalCodeView
+{
+    public int Id { get; set; }
+    [TableColumn(Sortable = true)]
+    public string Code { get; set; } = "";
+    [TableColumn(Sortable = true)]
+    public string City { get; set; } = "";
+    public int VoivodeshipId { get; set; }
+}
+
+// ─── Main view — forms + tables + ERP features ────────────────────
+
+[Form]
+[Table(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
+[FormGroup("basic", Label = "Dane podstawowe", Order = 1)]
+[FormGroup("contact", Label = "Kontakt", Order = 2)]
+[FormGroup("finance", Label = "Finanse", Order = 3)]
+
+// Hierarchical drill-down — SchemaUrl resolved from child's [Table]
 [ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
 [ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
 
@@ -50,18 +77,31 @@ public partial class VoivodeshipView
     [TableColumn(IsVisible = false)]
     public int Id { get; set; }
 
+    // Validation: cross-package with ZibStack.NET.Validation / DataAnnotations
+    [Required] [MinLength(2)] [MaxLength(100)]
     [FormField(Label = "Nazwa", Placeholder = "Nazwa województwa", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
-    public string Name { get; set; } = "";
+    public required string Name { get; set; }
 
-    [FormField(Label = "Kod", Group = "basic")]
+    [Required] [Match(@"^[A-Z]{2}$")]
+    [FormField(Label = "Kod", HelpText = "Dwuliterowy kod (np. MZ, WP)", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
-    public string Code { get; set; } = "";
+    public required string Code { get; set; }
 
     [Select(typeof(Region))]
     [FormField(Label = "Region", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
     public Region Region { get; set; }
+
+    [Required] [Email]
+    [FormField(Label = "Email kontaktowy", Placeholder = "biuro@wojewodztwo.pl", Group = "contact")]
+    [TableIgnore]
+    public required string ContactEmail { get; set; }
+
+    [Url]
+    [FormField(Label = "Strona WWW", Group = "contact")]
+    [TableIgnore]
+    public string? Website { get; set; }
 
     // Computed column with conditional styling
     [FormIgnore]
@@ -76,14 +116,24 @@ public partial class VoivodeshipView
     [Computed]
     public int CountyCount { get; set; }
 
-    [FormField(Label = "Populacja", Group = "basic")]
-    [TableColumn(Sortable = true, Format = "N0")]
-    public int Population { get; set; }
+    [Range(1900, 2100)]
+    [FormField(Label = "Rok utworzenia", Group = "basic")]
+    [TableColumn(Sortable = true)]
+    public int EstablishedYear { get; set; }
+
+    // Conditional field — only visible when Region == Północ
+    [FormConditional("Region", "Północ")]
+    [FormField(Label = "Dostęp do morza", Group = "basic")]
+    [TableIgnore]
+    public bool HasCoastline { get; set; }
 
     [FormField(Label = "Notatki", Group = "finance")]
     [TextArea(Rows = 3)]
     [TableIgnore]
     public string? Notes { get; set; }
+
+    [FormHidden]
+    public int VoivodeshipId { get; set; }
 }
 ```
 
@@ -117,17 +167,21 @@ app.MapGet("/api/tables/voivodeship", () =>
   "layout": "vertical",
   "groups": [
     { "name": "basic", "label": "Dane podstawowe", "order": 1 },
-    { "name": "finance", "label": "Finanse", "order": 2 }
+    { "name": "contact", "label": "Kontakt", "order": 2 },
+    { "name": "finance", "label": "Finanse", "order": 3 }
   ],
   "fields": [
     {
       "name": "name", "type": "string", "uiHint": "text",
       "label": "Nazwa", "placeholder": "Nazwa województwa",
-      "group": "basic", "order": 0
+      "group": "basic", "order": 0, "required": true,
+      "validation": { "required": true, "minLength": 2, "maxLength": 100 }
     },
     {
       "name": "code", "type": "string", "uiHint": "text",
-      "label": "Kod", "group": "basic", "order": 1
+      "label": "Kod", "helpText": "Dwuliterowy kod (np. MZ, WP)",
+      "group": "basic", "order": 1, "required": true,
+      "validation": { "required": true, "pattern": "^[A-Z]{2}$" }
     },
     {
       "name": "region", "type": "enum", "uiHint": "select",
@@ -140,13 +194,34 @@ app.MapGet("/api/tables/voivodeship", () =>
       ]
     },
     {
-      "name": "population", "type": "integer", "uiHint": "number",
-      "label": "Populacja", "group": "basic", "order": 3
+      "name": "contactEmail", "type": "string", "uiHint": "text",
+      "label": "Email kontaktowy", "placeholder": "biuro@wojewodztwo.pl",
+      "group": "contact", "order": 3, "required": true,
+      "validation": { "required": true, "email": true }
+    },
+    {
+      "name": "website", "type": "string", "uiHint": "text",
+      "label": "Strona WWW", "group": "contact", "order": 4, "nullable": true,
+      "validation": { "url": true }
+    },
+    {
+      "name": "establishedYear", "type": "integer", "uiHint": "number",
+      "label": "Rok utworzenia", "group": "basic", "order": 5,
+      "validation": { "min": 1900, "max": 2100 }
+    },
+    {
+      "name": "hasCoastline", "type": "boolean", "uiHint": "checkbox",
+      "label": "Dostęp do morza", "group": "basic", "order": 6,
+      "conditional": { "field": "region", "operator": "equals", "value": "Północ" }
     },
     {
       "name": "notes", "type": "string", "uiHint": "textarea",
-      "label": "Notatki", "group": "finance", "order": 4,
-      "props": { "rows": 3 }
+      "label": "Notatki", "group": "finance", "order": 7,
+      "props": { "rows": 3 }, "nullable": true
+    },
+    {
+      "name": "voivodeshipId", "type": "integer", "uiHint": "number",
+      "order": 8, "hidden": true
     }
   ]
 }
@@ -159,6 +234,7 @@ app.MapGet("/api/tables/voivodeship", () =>
 ```json
 {
   "name": "VoivodeshipView",
+  "schemaUrl": "/api/tables/voivodeship",
   "columns": [
     { "name": "id", "type": "integer", "visible": false },
     { "name": "name", "type": "string", "label": "Nazwa",
@@ -177,14 +253,16 @@ app.MapGet("/api/tables/voivodeship", () =>
     },
     { "name": "countyCount", "type": "integer", "label": "Liczba powiatów",
       "sortable": true, "computed": true },
-    { "name": "population", "type": "integer", "label": "Population",
+    { "name": "establishedYear", "type": "integer", "label": "Rok utworzenia",
       "sortable": true }
   ],
   "pagination": { "defaultPageSize": 50, "pageSizes": [10, 20, 50, 100] },
   "defaultSort": { "column": "name", "direction": "asc" },
   "children": [
-    { "label": "Powiaty", "target": "CountyView", "foreignKey": "voivodeshipId" },
-    { "label": "Kody pocztowe", "target": "PostalCodeView", "foreignKey": "voivodeshipId" }
+    { "label": "Powiaty", "target": "CountyView",
+      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/county" },
+    { "label": "Kody pocztowe", "target": "PostalCodeView",
+      "foreignKey": "voivodeshipId", "schemaUrl": "/api/tables/postalcode" }
   ],
   "rowActions": [
     { "name": "showDetails", "label": "Szczegóły",
@@ -252,23 +330,39 @@ public class County
 #### 2. Define view models with UI metadata
 
 ```csharp
-// Create form — only fields the user should fill in
+// Create form — only fields the user should fill in, with validation
 [Form]
 [FormGroup("basic", Label = "Dane podstawowe")]
 public partial class CreateVoivodeshipRequest
 {
+    [Required] [MinLength(2)] [MaxLength(100)]
     [FormField(Label = "Nazwa", Placeholder = "np. Wielkopolskie")]
     public required string Name { get; set; }
 
-    [FormField(Label = "Kod", Placeholder = "np. WP")]
+    [Required] [Match(@"^[A-Z]{2}$")]
+    [FormField(Label = "Kod", Placeholder = "np. WP", HelpText = "Dwuliterowy kod")]
     public required string Code { get; set; }
 
+    [Range(0, 100_000_000)]
     [FormField(Label = "Populacja")]
     public int Population { get; set; }
 }
 
-// Table view — includes computed columns, excludes internal fields
-[Table(DefaultSort = "Name", DefaultPageSize = 50)]
+// Child table — declares its own SchemaUrl
+[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/county")]
+public partial class CountyTableView
+{
+    [TableColumn(IsVisible = false)]
+    public int Id { get; set; }
+    public int VoivodeshipId { get; set; }
+    [TableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+    [TableColumn(Sortable = true, Format = "N0")]
+    public int Population { get; set; }
+}
+
+// Parent table — [ChildTable] resolves SchemaUrl from CountyTableView's [Table]
+[Table(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
 [ChildTable(typeof(CountyTableView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
 [RowAction("edit", Label = "Edytuj", Endpoint = "/api/voivodeships/{id}")]
 [ToolbarAction("export", Label = "Eksport", Endpoint = "/api/voivodeships/export",
@@ -287,25 +381,12 @@ public partial class VoivodeshipTableView
     [TableColumn(Sortable = true, Format = "N0")]
     public int Population { get; set; }
 
-    // Computed — not in DB, calculated in query
     [TableColumn(Sortable = true)]
     [Computed]
     public int CountyCount { get; set; }
 
     [TableColumn(Sortable = true, Format = "yyyy-MM-dd")]
     public DateTime CreatedAt { get; set; }
-}
-
-[Table(DefaultSort = "Name")]
-public partial class CountyTableView
-{
-    [TableColumn(IsVisible = false)]
-    public int Id { get; set; }
-    public int VoivodeshipId { get; set; }
-    [TableColumn(Sortable = true, Filterable = true)]
-    public string Name { get; set; } = "";
-    [TableColumn(Sortable = true, Format = "N0")]
-    public int Population { get; set; }
 }
 ```
 
@@ -555,7 +636,7 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[Table]` | Mark for table generation | `Name?`, `DefaultPageSize?`, `PageSizes?`, `DefaultSort?`, `DefaultSortDirection?` |
+| `[Table]` | Mark for table generation | `Name?`, `DefaultPageSize?`, `PageSizes?`, `DefaultSort?`, `DefaultSortDirection?`, `SchemaUrl?` |
 
 ### Table — Property-level
 
@@ -568,7 +649,7 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[ChildTable(typeof(T))]` | Hierarchical drill-down | `ForeignKey`, `Label`, `SchemaUrl?` (AllowMultiple) |
+| `[ChildTable(typeof(T))]` | Hierarchical drill-down | `ForeignKey`, `Label`, `SchemaUrl?`* (AllowMultiple) |
 | `[RowAction("name")]` | Per-row action button | `Label`, `Icon?`, `Endpoint`, `Method?`, `Confirmation?`, `Permission?` (AllowMultiple) |
 | `[ToolbarAction("name")]` | Global toolbar action | `Label`, `Icon?`, `Endpoint`, `Method?`, `Confirmation?`, `Permission?`, `SelectionMode?` (AllowMultiple) |
 | `[Permission("name")]` | Required view permission | — |
@@ -582,6 +663,16 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 | `[Computed]` | Marks virtual/calculated column | — |
 | `[ColumnStyle]` | Conditional styling | `When`, `Severity` (danger/warning/success/info/muted) (AllowMultiple) |
 
+## SchemaUrl Resolution
+
+`[ChildTable]` resolves `SchemaUrl` for drill-down with the following priority:
+
+1. **Explicit** — `[ChildTable(typeof(T), SchemaUrl = "/custom/url")]` on the parent
+2. **From target type** — `[Table(SchemaUrl = "/api/tables/county")]` on `T` itself
+3. **Convention** — strip `View` suffix, lowercase → `/api/tables/{name}` (e.g. `CountyView` → `/api/tables/county`)
+
+This means you typically declare `SchemaUrl` once on the child type's `[Table]` and it propagates to all parents that reference it.
+
 ## Default Behavior
 
 - All public properties included unless `[FormIgnore]` / `[TableIgnore]`
@@ -591,8 +682,25 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 ## Cross-Package Integration
 
-When `ZibStack.NET.Validation` is referenced, validation attributes (`[Required]`, `[Email]`, `[Range]`, etc.) are automatically included in form metadata.
+### ZibStack.NET.Validation
 
-When `ZibStack.NET.Dto` is referenced, `[CreateOnly]` and `[UpdateOnly]` flags appear in form field descriptors.
+When referenced, validation attributes are automatically included in form field metadata:
+
+| Attribute | JSON output |
+|-----------|-------------|
+| `[Required]` | `"validation": { "required": true }` |
+| `[MinLength(n)]` | `"validation": { "minLength": n }` |
+| `[MaxLength(n)]` | `"validation": { "maxLength": n }` |
+| `[Range(min, max)]` | `"validation": { "min": min, "max": max }` |
+| `[Email]` | `"validation": { "email": true }` |
+| `[Url]` | `"validation": { "url": true }` |
+| `[Match("regex")]` | `"validation": { "pattern": "regex" }` |
+| `[NotEmpty]` | `"validation": { "notEmpty": true }` |
+
+Also recognizes `System.ComponentModel.DataAnnotations` equivalents (`[Required]`, `[MinLength]`, `[MaxLength]`, `[Range]`, `[StringLength]`).
+
+### ZibStack.NET.Dto
+
+When referenced, `[CreateOnly]` and `[UpdateOnly]` flags appear in form field descriptors — the client can show/hide fields based on create vs. update mode.
 
 No project-level dependencies — detection is by attribute FQN at compile time.
