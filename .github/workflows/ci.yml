@@ -33,6 +33,9 @@ jobs:
       - name: Test Result
         run: dotnet test packages/ZibStack.NET.Result/tests/ZibStack.NET.Result.Tests/ZibStack.NET.Result.Tests.csproj -c Release --no-build
 
+      - name: Test Log Analyzers
+        run: dotnet test packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Analyzers.Tests/ZibStack.NET.Log.Analyzers.Tests.csproj -c Release --no-build
+
       - name: Benchmark Log
         run: dotnet run --project packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj -c Release -- --filter "*" --exporters json
 

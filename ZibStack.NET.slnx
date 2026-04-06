@@ -28,10 +28,12 @@
   <Folder Name="/packages/ZibStack.NET.Log/src/">
     <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log.Abstractions/ZibStack.NET.Log.Abstractions.csproj" />
     <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log/ZibStack.NET.Log.csproj" />
+    <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log.Analyzers/ZibStack.NET.Log.Analyzers.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Log/tests/">
     <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj" />
     <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Tests/ZibStack.NET.Log.Tests.csproj" />
+    <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Analyzers.Tests/ZibStack.NET.Log.Analyzers.Tests.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Result/" />
   <Folder Name="/packages/ZibStack.NET.Result/src/">
