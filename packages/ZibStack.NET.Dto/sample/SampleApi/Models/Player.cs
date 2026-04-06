@@ -5,6 +5,8 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [CreateDto]
 [UpdateDto]
 [ResponseDto]
+[QueryDto(Sortable = true, DefaultSort = "Name")]
+[CrudApi(Style = ApiStyle.Both)]
 public class Player
 {
     [DtoIgnore]

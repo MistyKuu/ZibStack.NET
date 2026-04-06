@@ -3,6 +3,8 @@ using ZibStack.NET.Dto;
 namespace ZibStack.NET.Dto.Sample.Models;
 
 [CreateOrUpdateDto]
+[ResponseDto]
+[CrudApi(Style = ApiStyle.MinimalApi)]
 public class Team
 {
     [DtoIgnore]

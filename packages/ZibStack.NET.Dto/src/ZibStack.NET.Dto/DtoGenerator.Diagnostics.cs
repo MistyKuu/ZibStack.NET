@@ -49,6 +49,21 @@ public partial class DtoGenerator
             "SDTO008", "Duplicate rename target",
             "Multiple [RenameProperty] attributes target the same name '{0}'",
             "ZibStack.NET.Dto", DiagnosticSeverity.Error, true);
+
+        public static readonly DiagnosticDescriptor CrudApiMissingResponseDto = new(
+            "SDTO009", "CrudApi without ResponseDto",
+            "Type '{0}' has [CrudApi] but no [ResponseDto] — GET endpoints will return raw entity",
+            "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
+
+        public static readonly DiagnosticDescriptor CrudApiMissingWriteDto = new(
+            "SDTO010", "CrudApi without write DTOs",
+            "Type '{0}' has [CrudApi] but no [CreateDto]/[UpdateDto]/[CreateOrUpdateDto] — write endpoints will not be generated",
+            "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
+
+        public static readonly DiagnosticDescriptor CrudApiKeyNotFound = new(
+            "SDTO011", "CrudApi key property not found",
+            "Type '{0}' has [CrudApi(KeyProperty = \"{1}\")] but no such property exists",
+            "ZibStack.NET.Dto", DiagnosticSeverity.Error, true);
     }
 
     private static void RunDiagnostics(SourceProductionContext spc, INamedTypeSymbol symbol, TypeDeclarationSyntax syntax)
@@ -158,6 +173,33 @@ public partial class DtoGenerator
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.RequiredPropertyIgnored,
                     prop.Locations.FirstOrDefault() ?? syntax.Identifier.GetLocation(),
                     prop.Name));
+            }
+        }
+
+        // SDTO009-011: CrudApi diagnostics
+        var hasCrudApi = attrs.Any(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
+        if (hasCrudApi)
+        {
+            if (!hasCreateDto && !hasUpdateDto && !hasCombined)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CrudApiMissingWriteDto,
+                    syntax.Identifier.GetLocation(), symbol.Name));
+            }
+
+            var hasResponseDto2 = attrs.Any(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
+            if (!hasResponseDto2)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CrudApiMissingResponseDto,
+                    syntax.Identifier.GetLocation(), symbol.Name));
+            }
+
+            var crudAttr = attrs.First(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
+            var keyPropName = crudAttr.NamedArguments.FirstOrDefault(a => a.Key == "KeyProperty").Value.Value as string ?? "Id";
+            var keyExists = GetAllProperties(symbol).Any(p => p.Name == keyPropName);
+            if (!keyExists)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CrudApiKeyNotFound,
+                    syntax.Identifier.GetLocation(), symbol.Name, keyPropName));
             }
         }
 

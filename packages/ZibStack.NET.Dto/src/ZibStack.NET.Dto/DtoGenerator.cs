@@ -28,6 +28,7 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
     private const string ResponseDtoAttributeFqn = "ZibStack.NET.Dto.ResponseDtoAttribute";
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
+    private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -56,6 +57,10 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("UpdateDtoForAttribute.g.cs", UpdateDtoForAttributeSource);
             ctx.AddSource("PartialFromAttribute.g.cs", PartialFromAttributeSource);
             ctx.AddSource("IntersectFromAttribute.g.cs", IntersectFromAttributeSource);
+            ctx.AddSource("CrudOperations.g.cs", CrudOperationsSource);
+            ctx.AddSource("ApiStyle.g.cs", ApiStyleSource);
+            ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
+            ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
         });
 
         // Detect available serializers and emit PatchField + converters
@@ -296,6 +301,48 @@ public partial class DtoGenerator : IIncrementalGenerator
         {
             var source = GenerateQueryDtoSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Query.g.cs", source);
+        });
+
+        // Detect EF Core and emit EfCrudStore base class
+        var hasEfCore = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext") is not null);
+
+        context.RegisterSourceOutput(hasEfCore, static (spc, has) =>
+        {
+            if (has)
+                spc.AddSource("EfCrudStore.g.cs", EfCrudStoreSource);
+        });
+
+        // Detect ASP.NET Core for CRUD API generation
+        var hasAspNetCore = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Http.Results") is not null);
+
+        // Find [CrudApi] classes
+        var crudApiDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                CrudApiAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetCrudApiInfo(ctx))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(crudApiDeclarations.Combine(hasAspNetCore), static (spc, pair) =>
+        {
+            var (info, hasAsp) = pair;
+            if (!hasAsp) return;
+
+            // ApiStyle: 0=MinimalApi, 1=Controller, 2=Both
+            if (info.Style == StyleMinimalApi || info.Style == StyleBoth)
+            {
+                var source = GenerateMinimalApiSource(info);
+                spc.AddSource($"{info.FullyQualifiedName}.Endpoints.g.cs", source);
+            }
+
+            if (info.Style == StyleController || info.Style == StyleBoth)
+            {
+                var source = GenerateControllerSource(info);
+                spc.AddSource($"{info.FullyQualifiedName}.Controller.g.cs", source);
+            }
         });
     }
 
