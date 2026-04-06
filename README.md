@@ -150,34 +150,179 @@ if (!result.IsValid) return BadRequest(result.Errors);
 ### ZibStack.NET.UI
 
 ```csharp
-// Annotate your model — get form + table + ERP metadata:
+public enum Region { Północ, Południe, Wschód, Zachód }
+
 [Form]
-[Table(DefaultSort = "Name")]
+[Table(DefaultSort = "Name", DefaultPageSize = 50)]
+[FormGroup("basic", Label = "Dane podstawowe", Order = 1)]
+[FormGroup("finance", Label = "Finanse", Order = 2)]
+
+// ERP: hierarchical drill-down
 [ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
-[RowAction("report", Label = "Raport", Endpoint = "/api/{id}/report", Method = "POST")]
-[ToolbarAction("export", Label = "Eksport", Endpoint = "/api/export", SelectionMode = "multiple")]
+[ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
+
+// ERP: per-row action buttons
+[RowAction("showDetails", Label = "Szczegóły", Endpoint = "/api/voivodeships/{id}")]
+[RowAction("generateReport", Label = "Raport", Icon = "file",
+           Endpoint = "/api/voivodeships/{id}/report", Method = "POST",
+           Confirmation = "Wygenerować raport?")]
+
+// ERP: global toolbar actions
+[ToolbarAction("export", Label = "Eksport do Excel", Icon = "download",
+               Endpoint = "/api/voivodeships/export", Method = "GET",
+               SelectionMode = "multiple")]
+[ToolbarAction("recalculate", Label = "Przelicz salda",
+               Endpoint = "/api/voivodeships/recalculate", Method = "POST",
+               Confirmation = "Przeliczyć salda?", Permission = "finance.write")]
+
+// ERP: permission metadata
 [Permission("voivodeship.read")]
+[ColumnPermission("Budget", "finance.read")]
+[DataFilter("VoivodeshipId")]
 public partial class VoivodeshipView
 {
-    [FormField(Label = "Nazwa")]
+    [FormIgnore]
+    [TableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [FormField(Label = "Nazwa", Placeholder = "Nazwa województwa", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
 
+    [FormField(Label = "Kod", Group = "basic")]
+    [TableColumn(Sortable = true, Filterable = true)]
+    public string Code { get; set; } = "";
+
+    [Select(typeof(Region))]
+    [FormField(Label = "Region", Group = "basic")]
+    [TableColumn(Sortable = true, Filterable = true)]
+    public Region Region { get; set; }
+
+    // Computed column with conditional styling
+    [FormIgnore]
+    [TableColumn(Sortable = true, Label = "Budżet")]
     [Computed]
     [ColumnStyle(When = "value < 0", Severity = "danger")]
     [ColumnStyle(When = "value >= 0", Severity = "success")]
     public decimal Budget { get; set; }
 
-    [Select(typeof(Region))]
-    public Region Region { get; set; }
-}
+    [FormIgnore]
+    [TableColumn(Sortable = true, Label = "Liczba powiatów")]
+    [Computed]
+    public int CountyCount { get; set; }
 
-// Serve JSON schema to any frontend:
+    [FormField(Label = "Notatki", Group = "finance")]
+    [TextArea(Rows = 3)]
+    [TableIgnore]
+    public string? Notes { get; set; }
+}
+```
+
+Serve the generated JSON to any frontend (React, Vue, Angular, Blazor):
+
+```csharp
 app.MapGet("/api/forms/voivodeship", () =>
     Results.Content(VoivodeshipView.GetFormSchemaJson(), "application/json"));
 app.MapGet("/api/tables/voivodeship", () =>
     Results.Content(VoivodeshipView.GetTableSchemaJson(), "application/json"));
 ```
+
+<details>
+<summary><strong>Generated Form JSON</strong> (click to expand)</summary>
+
+```json
+{
+  "name": "VoivodeshipView",
+  "layout": "vertical",
+  "groups": [
+    { "name": "basic", "label": "Dane podstawowe", "order": 1 },
+    { "name": "finance", "label": "Finanse", "order": 2 }
+  ],
+  "fields": [
+    {
+      "name": "name", "type": "string", "uiHint": "text",
+      "label": "Nazwa", "placeholder": "Nazwa województwa",
+      "group": "basic", "order": 0
+    },
+    {
+      "name": "code", "type": "string", "uiHint": "text",
+      "label": "Kod", "group": "basic", "order": 1
+    },
+    {
+      "name": "region", "type": "enum", "uiHint": "select",
+      "label": "Region", "group": "basic", "order": 2,
+      "options": [
+        { "value": "Północ", "label": "Północ" },
+        { "value": "Południe", "label": "Południe" },
+        { "value": "Wschód", "label": "Wschód" },
+        { "value": "Zachód", "label": "Zachód" }
+      ]
+    },
+    {
+      "name": "notes", "type": "string", "uiHint": "textarea",
+      "label": "Notatki", "group": "finance", "order": 3,
+      "props": { "rows": 3 }
+    }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong>Generated Table JSON</strong> (click to expand)</summary>
+
+```json
+{
+  "name": "VoivodeshipView",
+  "columns": [
+    { "name": "id", "type": "integer", "visible": false },
+    { "name": "name", "type": "string", "label": "Nazwa",
+      "sortable": true, "filterable": true },
+    { "name": "code", "type": "string", "label": "Kod",
+      "sortable": true, "filterable": true },
+    { "name": "region", "type": "enum", "label": "Region",
+      "sortable": true, "filterable": true,
+      "options": ["Północ", "Południe", "Wschód", "Zachód"] },
+    { "name": "budget", "type": "decimal", "label": "Budżet",
+      "sortable": true, "computed": true,
+      "styles": [
+        { "when": "value < 0", "severity": "danger" },
+        { "when": "value >= 0", "severity": "success" }
+      ]
+    },
+    { "name": "countyCount", "type": "integer", "label": "Liczba powiatów",
+      "sortable": true, "computed": true }
+  ],
+  "pagination": { "defaultPageSize": 50, "pageSizes": [10, 20, 50, 100] },
+  "defaultSort": { "column": "name", "direction": "asc" },
+  "children": [
+    { "label": "Powiaty", "target": "CountyView", "foreignKey": "voivodeshipId" },
+    { "label": "Kody pocztowe", "target": "PostalCodeView", "foreignKey": "voivodeshipId" }
+  ],
+  "rowActions": [
+    { "name": "showDetails", "label": "Szczegóły",
+      "endpoint": "/api/voivodeships/{id}", "method": "GET" },
+    { "name": "generateReport", "label": "Raport", "icon": "file",
+      "endpoint": "/api/voivodeships/{id}/report", "method": "POST",
+      "confirmation": "Wygenerować raport?" }
+  ],
+  "toolbarActions": [
+    { "name": "export", "label": "Eksport do Excel", "icon": "download",
+      "endpoint": "/api/voivodeships/export", "method": "GET",
+      "selectionMode": "multiple" },
+    { "name": "recalculate", "label": "Przelicz salda",
+      "endpoint": "/api/voivodeships/recalculate", "method": "POST",
+      "confirmation": "Przeliczyć salda?", "permission": "finance.write",
+      "selectionMode": "none" }
+  ],
+  "permissions": {
+    "view": "voivodeship.read",
+    "columns": { "budget": "finance.read" },
+    "dataFilters": ["voivodeshipId"]
+  }
+}
+```
+</details>
 
 ## Repository Structure
 
