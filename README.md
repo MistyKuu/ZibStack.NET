@@ -8,7 +8,7 @@ A collection of .NET source generators and utilities for common application conc
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. AOP framework with C# interceptors. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
-| [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField, validation, and full CRUD API endpoint generation (Minimal API + Controllers). |
+| [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField support and full CRUD API generation. |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[Required]`, `[Email]`, `[Range]`, `[Match]`). |
 | [**ZibStack.NET.UI**](packages/ZibStack.NET.UI/) | `dotnet add package ZibStack.NET.UI` | Source generator for UI form and table metadata — forms, tables, drill-down, row/toolbar actions, permissions, conditional styling. |
@@ -91,14 +91,12 @@ public class MetricsHandler : IAsyncAspectHandler
 
 ### ZibStack.NET.Dto
 
-**Annotate your entity — get DTOs, mapping, query, and full CRUD API:**
-
 ```csharp
 [CreateDto]                                        // → CreatePlayerRequest with ToEntity()
 [UpdateDto]                                        // → UpdatePlayerRequest with ApplyTo()
 [ResponseDto]                                      // → PlayerResponse with FromEntity() + ProjectFrom()
 [QueryDto(Sortable = true, DefaultSort = "Name")]  // → PlayerQuery with Apply(IQueryable)
-[CrudApi(Style = ApiStyle.Both)]                   // → Minimal API endpoints + MVC Controller
+[CrudApi(Style = ApiStyle.Both)]                   // → Minimal API + MVC Controller
 public class Player
 {
     [DtoIgnore]  public int Id { get; set; }
@@ -106,189 +104,16 @@ public class Player
     public int Level { get; set; }
     public string? Email { get; set; }
 
-    [CreateOnly]       public required string Password { get; set; }
-    [UpdateOnly]       public string? DeactivationReason { get; set; }
-    [DtoIgnore]        public bool IsAdmin { get; set; }
-    [ResponseIgnore]   public DateTime CreatedAt { get; set; }
-}
-```
-
-**What gets generated:**
-
-```csharp
-// Create request with PatchField<T> for partial payloads + validation:
-public record CreatePlayerRequest : ICanCreate<Player>, ICanValidate
-{
-    public PatchField<string> Name { get; init; }
-    public PatchField<int> Level { get; init; }
-    public PatchField<string> Email { get; init; }
-    public PatchField<string> Password { get; init; }       // CreateOnly
-    public List<string> Validate() { ... }
-    public Player ToEntity() { ... }
+    [CreateOnly]     public required string Password { get; set; }
+    [UpdateOnly]     public string? DeactivationReason { get; set; }
+    [ResponseIgnore] public DateTime CreatedAt { get; set; }
 }
 
-// Update request (no Password — CreateOnly; has DeactivationReason — UpdateOnly):
-public record UpdatePlayerRequest : ICanApply<Player>, ICanValidate
-{
-    public PatchField<int> Level { get; init; }
-    public PatchField<string> Email { get; init; }
-    public PatchField<string> DeactivationReason { get; init; }
-    public List<string> Validate() { ... }
-    public void ApplyTo(Player target) { ... }
-    public List<string> Diff(Player entity) { ... }
-}
-
-// Response DTO (no Password — ResponseIgnore):
-public record PlayerResponse
-{
-    public string Name { get; init; }
-    public int Level { get; init; }
-    public string? Email { get; init; }
-    public static PlayerResponse FromEntity(Player entity) { ... }
-    public static IQueryable<PlayerResponse> ProjectFrom(IQueryable<Player> query) { ... }
-}
-
-// Query DTO — all properties nullable + filter/sort/paginate IQueryable:
-public record PlayerQuery
-{
-    public string? Name { get; init; }
-    public int? Level { get; init; }
-    public string? SortBy { get; init; }
-    public SortDirection? SortDirection { get; init; }
-    public IQueryable<Player> Apply(IQueryable<Player> query) { ... }
-}
-```
-
-**CRUD API — generated endpoints (Minimal API):**
-
-```csharp
-// Generated static class — just call app.MapPlayerEndpoints() in Program.cs:
-public static class PlayerEndpoints
-{
-    public static IEndpointRouteBuilder MapPlayerEndpoints(this IEndpointRouteBuilder app, string? prefix = null)
-    {
-        var group = app.MapGroup(prefix ?? "api/players").WithTags("Player");
-        group.MapGet("{id}", ...)     // GET    /api/players/{id}     → PlayerResponse
-        group.MapGet("", ...)         // GET    /api/players?name=...&sortBy=level&page=2
-                                      //        → PaginatedResponse<PlayerResponse>
-        group.MapPost("", ...)        // POST   /api/players          → validate + create
-        group.MapPatch("{id}", ...)   // PATCH  /api/players/{id}     → validate + apply
-        group.MapDelete("{id}", ...)  // DELETE /api/players/{id}
-        return app;
-    }
-}
-```
-
-**CRUD API — generated controller (when `Style = ApiStyle.Both` or `Controller`):**
-
-```csharp
-[ApiController]
-[Route("api/players")]
-public partial class PlayerCrudController : ControllerBase
-{
-    private readonly ICrudStore<Player, int> _store;
-    // GetById, GetList, Create, Update, Delete — same logic as Minimal API
-}
-```
-
-**Setup in Program.cs:**
-
-```csharp
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddControllers()
-    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
-
-// Register your data access implementation:
+// Program.cs — that's it:
 builder.Services.AddScoped<ICrudStore<Player, int>, PlayerStore>();
-
-var app = builder.Build();
-app.MapPlayerEndpoints();   // generated Minimal API
-app.MapControllers();       // picks up generated PlayerCrudController
-app.Run();
+app.MapPlayerEndpoints();   // GET/POST/PATCH/DELETE api/players
+app.MapControllers();       // generated PlayerCrudController
 ```
-
-**ICrudStore — implement or use the EF Core base class:**
-
-```csharp
-// Option 1: Implement the interface directly
-public class PlayerStore : ICrudStore<Player, int>
-{
-    public ValueTask<Player?> GetByIdAsync(int id, CancellationToken ct) { ... }
-    public IQueryable<Player> Query() { ... }
-    public ValueTask CreateAsync(Player entity, CancellationToken ct) { ... }
-    public ValueTask UpdateAsync(Player entity, CancellationToken ct) { ... }
-    public ValueTask DeleteAsync(Player entity, CancellationToken ct) { ... }
-}
-
-// Option 2: EF Core — generated base class when EF Core is referenced:
-public class PlayerStore : EfCrudStore<Player, int, AppDbContext>
-{
-    public PlayerStore(AppDbContext db) : base(db) { }
-    protected override DbSet<Player> Set => Db.Players;
-}
-```
-
-<details>
-<summary><strong>More DTO features</strong> (click to expand)</summary>
-
-**Combined Create/Update DTO** — single type for both operations:
-
-```csharp
-[CreateOrUpdateDto]
-public class Team { ... }
-// → TeamRequest with ValidateForCreate(), ValidateForUpdate(), ToEntity(), ApplyTo()
-```
-
-**External types** — generate DTOs for types you don't control:
-
-```csharp
-[CreateDtoFor(typeof(ExternalOrder), Ignore = new[] { "Id" }, Required = new[] { "ProductName" })]
-public partial record CreateOrderRequest;
-
-[UpdateDtoFor(typeof(ExternalOrder), Ignore = new[] { "Id" }, Immutable = new[] { "ProductName" })]
-public partial record UpdateOrderRequest;
-```
-
-**TypeScript-style utilities:**
-
-```csharp
-[PartialFrom(typeof(Player))]       // Partial<Player> — all PatchField
-public partial record PartialPlayer;
-
-[PickFrom(typeof(Player), "Name", "Email")]   // Pick<Player, "Name" | "Email">
-public partial record PlayerContact;
-
-[OmitFrom(typeof(Player), "Password")]        // Omit<Player, "Password">
-public partial record SafePlayer;
-
-[IntersectFrom(typeof(Player))]               // Player & Audit
-[IntersectFrom(typeof(Audit))]
-public partial record PlayerWithAudit;
-```
-
-**Flatten nested objects:**
-
-```csharp
-public class Player
-{
-    [Flatten] public Address? Address { get; set; }
-    // → AddressStreet, AddressCity, AddressZipCode in generated DTOs
-}
-```
-
-**CrudApi options:**
-
-```csharp
-[CrudApi(
-    Route = "api/v2/players",              // custom route
-    KeyProperty = "PlayerId",              // non-default key
-    Operations = CrudOperations.Read,      // read-only API
-    Style = ApiStyle.MinimalApi,           // or Controller, Both
-    AuthorizePolicy = "admin"              // require authorization
-)]
-```
-
-</details>
 
 ### ZibStack.NET.Result
 

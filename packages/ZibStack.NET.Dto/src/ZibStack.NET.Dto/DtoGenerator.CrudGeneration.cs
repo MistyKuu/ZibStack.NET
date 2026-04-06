@@ -46,7 +46,7 @@ public partial class DtoGenerator
         sb.AppendLine();
         sb.AppendLine($"public static class {entity}Endpoints");
         sb.AppendLine("{");
-        sb.AppendLine($"    public static IEndpointRouteBuilder Map{entity}Endpoints(this IEndpointRouteBuilder app, string? prefix = null)");
+        sb.AppendLine($"    public static RouteGroupBuilder Map{entity}Endpoints(this IEndpointRouteBuilder app, string? prefix = null, Action<RouteGroupBuilder>? configure = null)");
         sb.AppendLine("    {");
         sb.AppendLine($"        var group = app.MapGroup(prefix ?? \"{info.Route}\")");
         sb.AppendLine($"            .WithTags(\"{entity}\");");
@@ -57,6 +57,9 @@ public partial class DtoGenerator
             sb.AppendLine($"        group.RequireAuthorization(\"{info.AuthorizePolicy}\");");
             sb.AppendLine();
         }
+
+        sb.AppendLine("        configure?.Invoke(group);");
+        sb.AppendLine();
 
         // GET {id}
         if ((info.Operations & OpGetById) != 0)
@@ -183,7 +186,7 @@ public partial class DtoGenerator
             sb.AppendLine();
         }
 
-        sb.AppendLine("        return app;");
+        sb.AppendLine("        return group;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 

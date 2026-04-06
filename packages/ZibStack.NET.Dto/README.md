@@ -1,6 +1,6 @@
 # ZibStack.NET.Dto
 
-A C# source generator that produces strongly-typed **Create**, **Update**, and **Response** DTOs from your domain models. No reflection, no runtime overhead. Supports generics, inheritance, nested types, flattening, validation propagation, and more.
+A C# source generator that produces strongly-typed **Create**, **Update**, **Response**, and **Query** DTOs from your domain models, and optionally generates **full CRUD API endpoints** (Minimal API + MVC Controllers). No reflection, no runtime overhead. Supports generics, inheritance, nested types, flattening, validation propagation, and more.
 
 ## Install
 
@@ -199,6 +199,7 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[OmitFrom(typeof(T), ...)]` | Record (partial) | Like TS `Omit<T, K>` — exclude listed properties |
 | `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
 | `[QueryDto(Sortable = true)]` | Class | Adds `SortBy`, `SortDirection`, `ApplySort()`, `Apply()` to query DTO |
+| `[CrudApi]` | Class | Generates full CRUD API endpoints (Minimal API and/or Controller) using `ICrudStore<T,TKey>` |
 | `PaginatedResponse<T>` | — | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` |
 | `[PartialFrom(typeof(T))]` | Record (partial) | Generates `PatchField` properties + `ApplyTo()` for all properties of `T` |
 | `[IntersectFrom(typeof(T))]` | Record (partial) | Combine multiple types into one (like TS `&`). Apply multiple times. |
@@ -441,6 +442,140 @@ public async Task<IActionResult> List([FromQuery] ProductQuery query, int page =
     return Ok(response);
 }
 ```
+
+## CRUD API generation (`[CrudApi]`)
+
+Add `[CrudApi]` to your entity alongside other DTO attributes to generate complete CRUD API endpoints — Minimal API, MVC Controller, or both:
+
+```csharp
+[CreateDto]
+[UpdateDto]
+[ResponseDto]
+[QueryDto(Sortable = true, DefaultSort = "Name")]
+[CrudApi(Style = ApiStyle.Both)]
+public class Player
+{
+    [DtoIgnore]  public int Id { get; set; }
+    public required string Name { get; set; }
+    public int Level { get; set; }
+    public string? Email { get; set; }
+    [DtoIgnore]  public DateTime CreatedAt { get; set; }
+}
+```
+
+This generates:
+
+- `PlayerEndpoints` — static class with `MapPlayerEndpoints()` extension method (Minimal API)
+- `PlayerCrudController` — partial `[ApiController]` (MVC)
+
+Both use `ICrudStore<Player, int>` from DI and wire up the full pipeline: validation → entity mapping → store → response mapping → pagination.
+
+### Generated endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/players/{id}` | Get by ID → `PlayerResponse` |
+| `GET` | `/api/players?name=...&sortBy=level&page=2` | List with filter + sort + pagination → `PaginatedResponse<PlayerResponse>` |
+| `POST` | `/api/players` | Create → validate → `ToEntity()` → store |
+| `PATCH` | `/api/players/{id}` | Update → validate → `ApplyTo()` → store |
+| `DELETE` | `/api/players/{id}` | Delete |
+
+### Setup
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
+
+// Register your data store implementation
+builder.Services.AddScoped<ICrudStore<Player, int>, PlayerStore>();
+
+var app = builder.Build();
+app.MapPlayerEndpoints();   // generated Minimal API
+app.MapControllers();       // picks up generated PlayerCrudController
+app.Run();
+```
+
+### `ICrudStore<TEntity, TKey>`
+
+The generated endpoints depend on this interface for data access. Implement it for your storage layer:
+
+```csharp
+public interface ICrudStore<TEntity, TKey>
+{
+    ValueTask<TEntity?> GetByIdAsync(TKey id, CancellationToken ct = default);
+    IQueryable<TEntity> Query();
+    ValueTask CreateAsync(TEntity entity, CancellationToken ct = default);
+    ValueTask UpdateAsync(TEntity entity, CancellationToken ct = default);
+    ValueTask DeleteAsync(TEntity entity, CancellationToken ct = default);
+}
+```
+
+**EF Core** — when EF Core is referenced, the generator emits an `EfCrudStore<TEntity, TKey, TContext>` base class:
+
+```csharp
+public class PlayerStore : EfCrudStore<Player, int, AppDbContext>
+{
+    public PlayerStore(AppDbContext db) : base(db) { }
+    protected override DbSet<Player> Set => Db.Players;
+}
+```
+
+### Smart DTO detection
+
+The generator analyzes which DTO attributes are present and adapts the generated endpoints:
+
+| Attributes on entity | Effect |
+|---|---|
+| `[ResponseDto]` | GET endpoints return `{Entity}Response` via `FromEntity()` / `ProjectFrom()` |
+| No `[ResponseDto]` | GET endpoints return raw entity |
+| `[QueryDto]` | GET list uses query parameters for filtering + sorting via `Apply()` |
+| No `[QueryDto]` | GET list returns all items (with pagination only) |
+| `[CreateDto]` or `[CreateOrUpdateDto]` | POST endpoint generated |
+| `[UpdateDto]` or `[CreateOrUpdateDto]` | PATCH endpoint generated |
+| `[CreateOrUpdateDto]` | Uses `ValidateForCreate()` / `ValidateForUpdate()` instead of `Validate()` |
+| No create/update DTOs | Write endpoints not generated (warning SDTO010) |
+
+### Attribute options
+
+```csharp
+[CrudApi(
+    Route = "api/v2/players",              // custom route (default: api/{pluralized-name})
+    KeyProperty = "PlayerId",              // key property name (default: "Id")
+    Operations = CrudOperations.Read,      // which operations (default: All)
+    Style = ApiStyle.MinimalApi,           // MinimalApi, Controller, or Both
+    AuthorizePolicy = "admin"              // adds RequireAuthorization / [Authorize]
+)]
+```
+
+**`CrudOperations`** flags:
+
+| Flag | Value | Description |
+|------|-------|-------------|
+| `GetById` | 1 | GET by ID |
+| `GetList` | 2 | GET list |
+| `Create` | 4 | POST |
+| `Update` | 8 | PATCH |
+| `Delete` | 16 | DELETE |
+| `Read` | 3 | GetById + GetList |
+| `Write` | 28 | Create + Update + Delete |
+| `All` | 31 | Everything |
+
+### Conditional emission
+
+CRUD endpoints are only generated when the consuming project references ASP.NET Core (detected at compile time). The `EfCrudStore` base class is only emitted when EF Core is referenced. This means:
+
+- Library projects that only use DTOs → no endpoint code emitted
+- Web API projects → full CRUD generation
+- No extra dependencies needed in the generator package
+
+### Diagnostics
+
+| Code | Severity | Description |
+|------|----------|-------------|
+| SDTO009 | Warning | `[CrudApi]` without `[ResponseDto]` — GET endpoints return raw entity |
+| SDTO010 | Warning | `[CrudApi]` without any create/update DTO — write endpoints not generated |
+| SDTO011 | Error | `KeyProperty` value does not match any property on the type |
 
 ## `ApplyWithChanges()` (Update DTOs only)
 
