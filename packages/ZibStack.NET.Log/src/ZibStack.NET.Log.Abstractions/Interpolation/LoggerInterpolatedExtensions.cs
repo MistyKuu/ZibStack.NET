@@ -21,10 +21,22 @@ public static class LoggerInterpolatedExtensions
             logger.Log(LogLevel.Trace, handler.GetTemplate(), handler.GetArgs());
     }
 
+    public static void LogTraceEx(this ILogger logger, Exception exception, ref ZibLogInterpolatedStringHandler handler)
+    {
+        if (logger.IsEnabled(LogLevel.Trace))
+            logger.Log(LogLevel.Trace, exception, handler.GetTemplate(), handler.GetArgs());
+    }
+
     public static void LogDebugEx(this ILogger logger, ref ZibLogInterpolatedStringHandler handler)
     {
         if (logger.IsEnabled(LogLevel.Debug))
             logger.Log(LogLevel.Debug, handler.GetTemplate(), handler.GetArgs());
+    }
+
+    public static void LogDebugEx(this ILogger logger, Exception exception, ref ZibLogInterpolatedStringHandler handler)
+    {
+        if (logger.IsEnabled(LogLevel.Debug))
+            logger.Log(LogLevel.Debug, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogInformationEx(this ILogger logger, ref ZibLogInterpolatedStringHandler handler)
@@ -33,10 +45,22 @@ public static class LoggerInterpolatedExtensions
             logger.Log(LogLevel.Information, handler.GetTemplate(), handler.GetArgs());
     }
 
+    public static void LogInformationEx(this ILogger logger, Exception exception, ref ZibLogInterpolatedStringHandler handler)
+    {
+        if (logger.IsEnabled(LogLevel.Information))
+            logger.Log(LogLevel.Information, exception, handler.GetTemplate(), handler.GetArgs());
+    }
+
     public static void LogWarningEx(this ILogger logger, ref ZibLogInterpolatedStringHandler handler)
     {
         if (logger.IsEnabled(LogLevel.Warning))
             logger.Log(LogLevel.Warning, handler.GetTemplate(), handler.GetArgs());
+    }
+
+    public static void LogWarningEx(this ILogger logger, Exception exception, ref ZibLogInterpolatedStringHandler handler)
+    {
+        if (logger.IsEnabled(LogLevel.Warning))
+            logger.Log(LogLevel.Warning, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogErrorEx(this ILogger logger, ref ZibLogInterpolatedStringHandler handler)

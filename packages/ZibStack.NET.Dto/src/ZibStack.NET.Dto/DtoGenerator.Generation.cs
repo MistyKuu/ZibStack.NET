@@ -529,6 +529,8 @@ public partial class DtoGenerator
         sb.AppendLine();
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Linq;");
+        if (info.Sortable)
+            sb.AppendLine("using ZibStack.NET.Dto;");
         sb.AppendLine();
 
         if (info.Namespace is not null)
@@ -546,6 +548,16 @@ public partial class DtoGenerator
             sb.AppendLine($"    public {prop.NullableTypeName} {prop.PropertyName} {{ get; init; }}");
         }
 
+        // Sorting properties
+        if (info.Sortable)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>Property name to sort by. Case-insensitive.</summary>");
+            sb.AppendLine("    public string? SortBy { get; init; }");
+            sb.AppendLine("    /// <summary>Sort direction. Defaults to Asc.</summary>");
+            sb.AppendLine("    public SortDirection? SortDirection { get; init; }");
+        }
+
         sb.AppendLine();
 
         // ApplyFilter
@@ -561,6 +573,42 @@ public partial class DtoGenerator
         }
         sb.AppendLine("        return query;");
         sb.AppendLine("    }");
+
+        // ApplySort
+        if (info.Sortable)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"    public IQueryable<{info.ClassName}> ApplySort(IQueryable<{info.ClassName}> query)");
+            sb.AppendLine("    {");
+
+            var defaultSortStr = info.DefaultSort is not null ? $"\"{info.DefaultSort}\"" : "null";
+            var defaultDirStr = info.DefaultSortDirection == 1 ? "SortDirection.Desc" : "SortDirection.Asc";
+            sb.AppendLine($"        var sortBy = SortBy ?? {defaultSortStr};");
+            sb.AppendLine($"        var direction = SortDirection ?? {defaultDirStr};");
+            sb.AppendLine();
+            sb.AppendLine("        if (sortBy is null) return query;");
+            sb.AppendLine();
+            sb.AppendLine("        return (sortBy.ToLowerInvariant(), direction) switch");
+            sb.AppendLine("        {");
+            foreach (var prop in info.Properties)
+            {
+                var lower = prop.PropertyName.ToLowerInvariant();
+                sb.AppendLine($"            (\"{lower}\", ZibStack.NET.Dto.SortDirection.Asc) => query.OrderBy(x => x.{prop.PropertyName}),");
+                sb.AppendLine($"            (\"{lower}\", ZibStack.NET.Dto.SortDirection.Desc) => query.OrderByDescending(x => x.{prop.PropertyName}),");
+            }
+            sb.AppendLine("            _ => query,");
+            sb.AppendLine("        };");
+            sb.AppendLine("    }");
+
+            // Convenience: ApplyFilterAndSort
+            sb.AppendLine();
+            sb.AppendLine($"    public IQueryable<{info.ClassName}> Apply(IQueryable<{info.ClassName}> query)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        query = ApplyFilter(query);");
+            sb.AppendLine("        query = ApplySort(query);");
+            sb.AppendLine("        return query;");
+            sb.AppendLine("    }");
+        }
 
         sb.AppendLine("}");
         return sb.ToString();

@@ -528,6 +528,10 @@ public partial class DtoGenerator
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == QueryDtoAttributeFqn);
 
         var nameArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
+        var sortable = attr.NamedArguments.FirstOrDefault(a => a.Key == "Sortable").Value.Value is true;
+        var defaultSort = attr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSort").Value.Value as string;
+        var defaultSortDirectionRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSortDirection").Value.Value;
+        var defaultSortDirection = defaultSortDirectionRaw is int d ? d : 0;
 
         var properties = new List<QueryPropertyInfo>();
         foreach (var prop in GetAllProperties(symbol))
@@ -559,7 +563,10 @@ public partial class DtoGenerator
             symbol.Name, ns,
             SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
             nameArg ?? $"{symbol.Name}Query",
-            properties);
+            properties,
+            sortable,
+            defaultSort,
+            defaultSortDirection);
     } catch { return null; } }
 
     private static List<DtoPropertyInfo> CollectPropertiesFromType(INamedTypeSymbol type)
@@ -926,7 +933,8 @@ public partial class DtoGenerator
 
     private static readonly HashSet<string> ValidationNamespaces = new()
     {
-        "System.ComponentModel.DataAnnotations"
+        "System.ComponentModel.DataAnnotations",
+        "ZibStack.NET.Validation"
     };
 
     private static List<string> GetValidationAttributes(IPropertySymbol prop)

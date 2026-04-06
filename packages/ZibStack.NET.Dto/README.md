@@ -198,6 +198,8 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[PickFrom(typeof(T), ...)]` | Record (partial) | Like TS `Pick<T, K>` — whitelist of properties |
 | `[OmitFrom(typeof(T), ...)]` | Record (partial) | Like TS `Omit<T, K>` — exclude listed properties |
 | `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
+| `[QueryDto(Sortable = true)]` | Class | Adds `SortBy`, `SortDirection`, `ApplySort()`, `Apply()` to query DTO |
+| `PaginatedResponse<T>` | — | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` |
 | `[PartialFrom(typeof(T))]` | Record (partial) | Generates `PatchField` properties + `ApplyTo()` for all properties of `T` |
 | `[IntersectFrom(typeof(T))]` | Record (partial) | Combine multiple types into one (like TS `&`). Apply multiple times. |
 | `[DtoIgnore]` | Property | Excludes from generated DTOs |
@@ -360,6 +362,83 @@ public IActionResult List([FromQuery] ProductQuery query)
 {
     var results = query.ApplyFilter(_db.Products).ToList();
     return Ok(results);
+}
+```
+
+### Sortable queries
+
+Add `Sortable = true` to get `SortBy`, `SortDirection` properties and `ApplySort(IQueryable<T>)`:
+
+```csharp
+[QueryDto(Sortable = true, DefaultSort = "Name")]
+public class Product
+{
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+    public int Stock { get; set; }
+}
+```
+
+```csharp
+// Generated
+public record ProductQuery
+{
+    public string? Name { get; init; }
+    public decimal? Price { get; init; }
+    public int? Stock { get; init; }
+    public string? SortBy { get; init; }
+    public SortDirection? SortDirection { get; init; }
+
+    public IQueryable<Product> ApplyFilter(IQueryable<Product> query) { ... }
+    public IQueryable<Product> ApplySort(IQueryable<Product> query) { ... }
+    public IQueryable<Product> Apply(IQueryable<Product> query) { ... } // filter + sort
+}
+
+// Usage
+[HttpGet]
+public IActionResult List([FromQuery] ProductQuery query)
+{
+    var results = query.Apply(_db.Products).ToList();
+    return Ok(results);
+}
+```
+
+`SortBy` is case-insensitive and matches property names. Unknown values are ignored (no sort applied). `DefaultSort` and `DefaultSortDirection` set fallback behavior when `SortBy`/`SortDirection` are not provided.
+
+## Paginated response (`PaginatedResponse<T>`)
+
+Generic wrapper for paginated results:
+
+```csharp
+// Simple creation
+var page = PaginatedResponse<ProductResponse>.Create(items, totalCount: 100, page: 2, pageSize: 10);
+
+// From IQueryable (handles Skip/Take automatically)
+var page = await PaginatedResponse<Product>.CreateAsync(_db.Products, page: 1, pageSize: 20);
+
+// Map items (e.g. entity → response DTO)
+var response = page.Map(p => ProductResponse.FromEntity(p));
+
+// Properties
+page.Items        // IReadOnlyList<T>
+page.TotalCount   // int
+page.Page         // int
+page.PageSize     // int
+page.TotalPages   // computed
+page.HasNextPage  // computed
+page.HasPreviousPage // computed
+```
+
+Full example with `[QueryDto]` + `[ResponseDto]`:
+
+```csharp
+[HttpGet]
+public async Task<IActionResult> List([FromQuery] ProductQuery query, int page = 1, int pageSize = 20)
+{
+    var filtered = query.Apply(_db.Products);
+    var paginated = await PaginatedResponse<Product>.CreateAsync(filtered, page, pageSize);
+    var response = paginated.Map(p => ProductResponse.FromEntity(p));
+    return Ok(response);
 }
 ```
 
