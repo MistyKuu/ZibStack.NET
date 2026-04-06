@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <NoWarn>RS2008;RSEXPERIMENTAL002;NU5128</NoWarn>
+    <IsRoslynComponent>true</IsRoslynComponent>
+
+    <PackageId>ZibStack.NET.Validation</PackageId>
+    <Description>Source-generated validation for .NET. Add validation attributes and get a compile-time Validate() method — no reflection, no runtime overhead.</Description>
+    <Authors>$(Authors)</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
+    <PackageTags>source-generator;validation;csharp;codegen</PackageTags>
+    <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')">README.md</PackageReadmeFile>
+
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(MSBuildProjectDirectory)\..\..\README.md" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')" />
+  </ItemGroup>
+
+</Project>

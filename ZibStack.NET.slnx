@@ -35,6 +35,13 @@
     <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Tests/ZibStack.NET.Log.Tests.csproj" />
     <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Analyzers.Tests/ZibStack.NET.Log.Analyzers.Tests.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.Validation/" />
+  <Folder Name="/packages/ZibStack.NET.Validation/src/">
+    <Project Path="packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Validation/tests/">
+    <Project Path="packages/ZibStack.NET.Validation/tests/ZibStack.NET.Validation.Tests/ZibStack.NET.Validation.Tests.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Result/" />
   <Folder Name="/packages/ZibStack.NET.Result/src/">
     <Project Path="packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj" />
