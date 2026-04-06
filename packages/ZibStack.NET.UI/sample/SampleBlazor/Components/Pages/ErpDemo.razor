@@ -1,0 +1,207 @@
+@page "/erp"
+@using SampleBlazor.Models
+@using System.Text.Json
+
+<h2>ERP Demo — Voivodeship Table with Drill-Down</h2>
+
+<p>This view is generated from <code>VoivodeshipView</code> which uses ERP attributes:
+<code>[ChildTable]</code>, <code>[RowAction]</code>, <code>[ToolbarAction]</code>,
+<code>[Permission]</code>, <code>[Computed]</code>, <code>[ColumnStyle]</code>.</p>
+
+@if (_tableSchema is not null)
+{
+    @* ── Toolbar Actions ──────────────────────────────────────────── *@
+    @if (_tableSchema.RootElement.TryGetProperty("toolbarActions", out var toolbarActions))
+    {
+        <div class="toolbar" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            @foreach (var action in toolbarActions.EnumerateArray())
+            {
+                <button class="btn" @onclick="() => HandleToolbarAction(action)"
+                        title="@(action.TryGetProperty("permission", out var p) ? $"Requires: {p}" : "")">
+                    @if (action.TryGetProperty("icon", out var icon))
+                    {
+                        <span>[@icon] </span>
+                    }
+                    @action.GetProperty("label").GetString()
+                </button>
+            }
+        </div>
+    }
+
+    @* ── Table ────────────────────────────────────────────────────── *@
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                @foreach (var col in GetVisibleColumns())
+                {
+                    <th style="padding: 0.5rem; border-bottom: 2px solid #ddd; text-align: left;">
+                        @(col.TryGetProperty("label", out var lbl) ? lbl.GetString() : col.GetProperty("name").GetString())
+                        @if (col.TryGetProperty("computed", out _))
+                        {
+                            <span title="Computed column" style="color: #999;"> (calc)</span>
+                        }
+                    </th>
+                }
+                <th style="padding: 0.5rem; border-bottom: 2px solid #ddd;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _sampleData)
+            {
+                <tr style="border-bottom: 1px solid #eee;">
+                    @foreach (var col in GetVisibleColumns())
+                    {
+                        var colName = col.GetProperty("name").GetString()!;
+                        var value = row.GetValueOrDefault(colName, "");
+                        var style = GetCellStyle(col, value);
+                        <td style="padding: 0.5rem; @style">@value</td>
+                    }
+                    <td style="padding: 0.5rem;">
+                        @* Row Actions *@
+                        @if (_tableSchema.RootElement.TryGetProperty("rowActions", out var rowActions))
+                        {
+                            @foreach (var action in rowActions.EnumerateArray())
+                            {
+                                var endpoint = action.GetProperty("endpoint").GetString()!
+                                    .Replace("{id}", row["id"]);
+                                <button class="btn-sm" style="margin-right: 0.25rem;"
+                                        @onclick="() => HandleRowAction(action, row)">
+                                    @action.GetProperty("label").GetString()
+                                </button>
+                            }
+                        }
+                        @* Child Table Drill-Down *@
+                        @if (_tableSchema.RootElement.TryGetProperty("children", out var children))
+                        {
+                            @foreach (var child in children.EnumerateArray())
+                            {
+                                <button class="btn-sm btn-outline" style="margin-right: 0.25rem;"
+                                        @onclick="() => DrillDown(child, row)">
+                                    @child.GetProperty("label").GetString() →
+                                </button>
+                            }
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @* ── Permissions Info ─────────────────────────────────────────── *@
+    @if (_tableSchema.RootElement.TryGetProperty("permissions", out var perms))
+    {
+        <details style="margin-top: 1rem;">
+            <summary>Permission metadata</summary>
+            <pre>@JsonSerializer.Serialize(perms, new JsonSerializerOptions { WriteIndented = true })</pre>
+        </details>
+    }
+}
+
+@if (_actionLog.Count > 0)
+{
+    <h4 style="margin-top: 1.5rem;">Action Log</h4>
+    <ul>
+        @foreach (var log in _actionLog)
+        {
+            <li>@log</li>
+        }
+    </ul>
+}
+
+<hr style="margin: 2rem 0;" />
+
+<h3>Raw JSON Schema</h3>
+<pre>@_prettyJson</pre>
+
+@code {
+    private JsonDocument? _tableSchema;
+    private string _prettyJson = "";
+    private List<string> _actionLog = new();
+
+    private List<Dictionary<string, string>> _sampleData = new()
+    {
+        new() { ["id"] = "1", ["name"] = "Wielkopolskie", ["code"] = "WP", ["capital"] = "Poznań",
+                ["budget"] = "1250000", ["countyCount"] = "35", ["population"] = "3498733" },
+        new() { ["id"] = "2", ["name"] = "Mazowieckie", ["code"] = "MZ", ["capital"] = "Warszawa",
+                ["budget"] = "-500000", ["countyCount"] = "42", ["population"] = "5411446" },
+        new() { ["id"] = "3", ["name"] = "Małopolskie", ["code"] = "MA", ["capital"] = "Kraków",
+                ["budget"] = "750000", ["countyCount"] = "22", ["population"] = "3400577" },
+    };
+
+    protected override void OnInitialized()
+    {
+        var json = VoivodeshipView.GetTableSchemaJson();
+        _tableSchema = JsonDocument.Parse(json);
+        _prettyJson = JsonSerializer.Serialize(_tableSchema, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private IEnumerable<JsonElement> GetVisibleColumns()
+    {
+        if (_tableSchema is null) yield break;
+        foreach (var col in _tableSchema.RootElement.GetProperty("columns").EnumerateArray())
+        {
+            if (col.TryGetProperty("visible", out var vis) && !vis.GetBoolean()) continue;
+            yield return col;
+        }
+    }
+
+    private string GetCellStyle(JsonElement col, string value)
+    {
+        if (!col.TryGetProperty("styles", out var styles)) return "";
+        if (!decimal.TryParse(value, out var numValue)) return "";
+
+        foreach (var style in styles.EnumerateArray())
+        {
+            var when = style.GetProperty("when").GetString() ?? "";
+            var severity = style.GetProperty("severity").GetString() ?? "";
+            // Simple expression evaluation for "value < 0" / "value >= 0"
+            bool matches = when switch
+            {
+                "value < 0" => numValue < 0,
+                "value >= 0" => numValue >= 0,
+                "value > 1000" => numValue > 1000,
+                _ => false
+            };
+            if (matches)
+            {
+                return severity switch
+                {
+                    "danger" => "color: red; font-weight: bold;",
+                    "warning" => "color: orange;",
+                    "success" => "color: green; font-weight: bold;",
+                    "info" => "color: blue;",
+                    "muted" => "color: #999;",
+                    _ => ""
+                };
+            }
+        }
+        return "";
+    }
+
+    private void HandleRowAction(JsonElement action, Dictionary<string, string> row)
+    {
+        var label = action.GetProperty("label").GetString();
+        var endpoint = action.GetProperty("endpoint").GetString()!.Replace("{id}", row["id"]);
+        var method = action.GetProperty("method").GetString();
+
+        if (action.TryGetProperty("confirmation", out var conf))
+            _actionLog.Add($"[Confirm: {conf}] {method} {endpoint}");
+        else
+            _actionLog.Add($"{method} {endpoint} — {label}");
+    }
+
+    private void HandleToolbarAction(JsonElement action)
+    {
+        var label = action.GetProperty("label").GetString();
+        var endpoint = action.GetProperty("endpoint").GetString();
+        _actionLog.Add($"Toolbar: {label} → {endpoint}");
+    }
+
+    private void DrillDown(JsonElement child, Dictionary<string, string> row)
+    {
+        var label = child.GetProperty("label").GetString();
+        var fk = child.GetProperty("foreignKey").GetString();
+        var target = child.GetProperty("target").GetString();
+        _actionLog.Add($"Drill-down: {label} → {target}?{fk}={row["id"]}");
+    }
+}
