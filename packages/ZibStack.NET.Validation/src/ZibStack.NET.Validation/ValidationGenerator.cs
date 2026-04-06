@@ -394,7 +394,7 @@ namespace ZibStack.NET.Validation
             case ValidationRuleKind.Match:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} does not match the required pattern.";
-                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"{EscapeString(rule.Pattern!)}\")) errors.Add(\"{EscapeString(msg)}\");");
+                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"{rule.Pattern!.Replace("\"", "\"\"")}\")) errors.Add(\"{EscapeString(msg)}\");");
                 break;
             }
 

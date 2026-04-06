@@ -47,6 +47,12 @@ jobs:
       - name: Pack 5 — Dto
         run: dotnet pack packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
+      - name: Pack 6 — Result
+        run: dotnet pack packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 7 — Validation
+        run: dotnet pack packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
       # Push all at once (NuGet resolves deps from same push)
       - name: Push to NuGet
         run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

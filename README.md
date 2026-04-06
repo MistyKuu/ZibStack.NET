@@ -9,6 +9,8 @@ A collection of .NET source generators and utilities for common application conc
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. AOP framework with C# interceptors. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for strongly-typed Create and Update request DTOs with PatchField support. |
+| [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
+| [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[Required]`, `[Email]`, `[Range]`, `[Match]`). |
 
 ## Quick Examples
 
@@ -108,6 +110,42 @@ public partial class PlayerDto { }
 //   with PatchField<T> support for PATCH endpoints
 ```
 
+### ZibStack.NET.Result
+
+```csharp
+public Result<Order> GetOrder(int id)
+{
+    if (id <= 0) return Result<Order>.Failure(Error.Validation("Invalid ID"));
+    var order = _repo.Find(id);
+    return order is null ? Result<Order>.Failure(Error.NotFound("Order not found")) 
+                         : Result<Order>.Success(order);
+}
+
+// Usage with Map/Bind/Match:
+var result = GetOrder(42)
+    .Map(o => o.Total)
+    .Match(
+        onSuccess: total => $"Total: {total}",
+        onFailure: error => $"Error: {error.Message}");
+```
+
+### ZibStack.NET.Validation
+
+```csharp
+[Validate]
+public partial class CreateUserRequest
+{
+    [Required] [MinLength(2)] public string Name { get; set; } = "";
+    [Required] [Email]        public string Email { get; set; } = "";
+    [Range(18, 120)]          public int Age { get; set; }
+    [Match(@"^\+?\d{7,15}$")] public string? Phone { get; set; }
+}
+
+// Generated Validate() method:
+var result = request.Validate();
+if (!result.IsValid) return BadRequest(result.Errors);
+```
+
 ## Repository Structure
 
 ```
@@ -120,10 +158,16 @@ ZibStack.NET/
 │   │   ├── src/                   → Generator + Abstractions
 │   │   ├── tests/                 → Unit tests + Benchmarks
 │   │   └── sample/                → Sample API
-│   └── ZibStack.NET.Dto/          → DTO source generator
+│   ├── ZibStack.NET.Dto/          → DTO source generator
+│   │   ├── src/                   → Generator
+│   │   ├── tests/                 → Unit tests
+│   │   └── sample/                → Sample API
+│   ├── ZibStack.NET.Result/       → Result monad (Map/Bind/Match)
+│   │   ├── src/                   → Library
+│   │   └── tests/                 → Unit tests
+│   └── ZibStack.NET.Validation/   → Validation source generator
 │       ├── src/                   → Generator
-│       ├── tests/                 → Unit tests
-│       └── sample/                → Sample API
+│       └── tests/                 → Unit tests
 ├── .github/workflows/
 │   ├── ci.yml                     → Builds & tests all packages
 │   ├── release-aop.yml            → Release ZibStack.NET.Aop to NuGet
