@@ -49,6 +49,8 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("OmitFromAttribute.g.cs", OmitFromAttributeSource);
             ctx.AddSource("QueryDtoAttribute.g.cs", QueryDtoAttributeSource);
             ctx.AddSource("ResponseIgnoreAttribute.g.cs", ResponseIgnoreAttributeSource);
+            ctx.AddSource("PaginatedResponse.g.cs", PaginatedResponseSource);
+            ctx.AddSource("SortDirection.g.cs", SortDirectionSource);
             ctx.AddSource("IDtoValidator.g.cs", DtoValidatorInterfaceSource);
             ctx.AddSource("CreateDtoForAttribute.g.cs", CreateDtoForAttributeSource);
             ctx.AddSource("UpdateDtoForAttribute.g.cs", UpdateDtoForAttributeSource);

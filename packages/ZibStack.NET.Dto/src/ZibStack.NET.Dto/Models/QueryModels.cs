@@ -27,13 +27,19 @@ internal sealed class QueryDtoInfo
     public string FullyQualifiedName { get; }
     public string QueryName { get; }
     public List<QueryPropertyInfo> Properties { get; }
+    public bool Sortable { get; }
+    public string? DefaultSort { get; }
+    public int DefaultSortDirection { get; } // 0 = Asc, 1 = Desc
 
-    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties)
+    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0)
     {
         ClassName = className;
         Namespace = ns;
         FullyQualifiedName = fullyQualifiedName;
         QueryName = queryName;
         Properties = properties;
+        Sortable = sortable;
+        DefaultSort = defaultSort;
+        DefaultSortDirection = defaultSortDirection;
     }
 }
