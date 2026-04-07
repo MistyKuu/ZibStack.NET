@@ -6,7 +6,10 @@ A C# source generator that produces strongly-typed **Create**, **Update**, **Res
 
 ```
 dotnet add package ZibStack.NET.Dto
+dotnet add package ZibStack.NET.Utils
 ```
+
+`ZibStack.NET.Utils` provides TypeScript-style utility types (`[PartialFrom]`, `[IntersectFrom]`, `[PickFrom]`, `[OmitFrom]`).
 
 ## Quick start
 
@@ -289,11 +292,13 @@ public partial record CreateUserRequest;
 // DTO has "Name" property, ToEntity() writes to "FirstName"
 ```
 
-## Partial types (`[PartialFrom]`)
+## Partial types (`[PartialFrom]`, from `ZibStack.NET.Utils`)
 
 Like TypeScript's `Partial<T>` -- generates a class where every property is optional:
 
 ```csharp
+using ZibStack.NET.Utils;
+
 [PartialFrom(typeof(Player))]
 public partial record PartialPlayer;
 ```
@@ -314,11 +319,13 @@ public partial record PartialPlayer
 
 All properties from the target type are included (no `[DtoIgnore]` filtering). The record is `partial` so you can add your own methods and properties. No `Validate()` or `ToEntity()` -- just `ApplyTo()`.
 
-## Pick / Omit (TypeScript-style)
+## Pick / Omit (TypeScript-style, from `ZibStack.NET.Utils`)
 
 ### `[PickFrom]` — whitelist properties
 
 ```csharp
+using ZibStack.NET.Utils;
+
 [PickFrom(typeof(Player), nameof(Player.Name), nameof(Player.Level))]
 public partial record PlayerSummary;
 // Only Name and Level — with ApplyTo(Player)
@@ -587,11 +594,13 @@ var (changedFields, entity) = request.ApplyWithChanges(existingProduct);
 // Useful for audit logs, webhooks, selective cache invalidation
 ```
 
-## Intersection types (`[IntersectFrom]`)
+## Intersection types (`[IntersectFrom]`, from `ZibStack.NET.Utils`)
 
 Like TypeScript's `&` operator -- combine properties from multiple types into one:
 
 ```csharp
+using ZibStack.NET.Utils;
+
 [IntersectFrom(typeof(Player))]
 [IntersectFrom(typeof(Address))]
 public partial record PlayerWithAddress;

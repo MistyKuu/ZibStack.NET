@@ -72,12 +72,12 @@ public partial class DtoGenerator
         var hasCreateDto = attrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateDtoAttributeFqn);
         var hasUpdateDto = attrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateDtoAttributeFqn);
         var hasCombined = attrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateOrUpdateDtoAttributeFqn);
-        var hasPartialFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == PartialFromAttributeFqn);
-        var hasIntersectFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == IntersectFromAttributeFqn);
+        var hasPartialFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.PartialFromAttribute");
+        var hasIntersectFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.IntersectFromAttribute");
         var hasCreateDtoFor = attrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateDtoForAttributeFqn);
         var hasUpdateDtoFor = attrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateDtoForAttributeFqn);
-        var hasPickFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == PickFromAttributeFqn);
-        var hasOmitFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == OmitFromAttributeFqn);
+        var hasPickFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.PickFromAttribute");
+        var hasOmitFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.OmitFromAttribute");
 
         var isPartial = syntax.Modifiers.Any(SyntaxKind.PartialKeyword);
 
@@ -212,8 +212,8 @@ public partial class DtoGenerator
 
             // Also count IntersectFrom/PartialFrom target properties
             var hasExtraProps = attrs.Any(a =>
-                a.AttributeClass?.ToDisplayString() == IntersectFromAttributeFqn ||
-                a.AttributeClass?.ToDisplayString() == PartialFromAttributeFqn);
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.IntersectFromAttribute" ||
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.PartialFromAttribute");
 
             if (!props.Any() && !hasExtraProps)
             {

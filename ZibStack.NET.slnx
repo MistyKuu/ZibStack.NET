@@ -11,6 +11,10 @@
   <Folder Name="/packages/ZibStack.NET.Aop/tests/">
     <Project Path="packages/ZibStack.NET.Aop/tests/ZibStack.NET.Aop.Tests/ZibStack.NET.Aop.Tests.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.Utils/" />
+  <Folder Name="/packages/ZibStack.NET.Utils/src/">
+    <Project Path="packages/ZibStack.NET.Utils/src/ZibStack.NET.Utils/ZibStack.NET.Utils.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Dto/" />
   <Folder Name="/packages/ZibStack.NET.Dto/sample/">
     <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />
