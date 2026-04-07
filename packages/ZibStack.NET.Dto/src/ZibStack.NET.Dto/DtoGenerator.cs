@@ -14,6 +14,8 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string CreateOrUpdateDtoAttributeFqn = "ZibStack.NET.Dto.CreateOrUpdateDtoAttribute";
     private const string CreateDtoForAttributeFqn = "ZibStack.NET.Dto.CreateDtoForAttribute";
     private const string UpdateDtoForAttributeFqn = "ZibStack.NET.Dto.UpdateDtoForAttribute";
+    private const string PartialFromAttributeFqn = "ZibStack.NET.Dto.PartialFromAttribute";
+    private const string IntersectFromAttributeFqn = "ZibStack.NET.Dto.IntersectFromAttribute";
     private const string DtoIgnoreAttributeFqn = "ZibStack.NET.Dto.DtoIgnoreAttribute";
     private const string DtoNameAttributeFqn = "ZibStack.NET.Dto.DtoNameAttribute";
     private const string CreateOnlyAttributeFqn = "ZibStack.NET.Dto.CreateOnlyAttribute";
@@ -21,11 +23,8 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string ImmutableAttributeFqn = "ZibStack.NET.Dto.ImmutableAttribute";
     private const string FlattenAttributeFqn = "ZibStack.NET.Dto.FlattenAttribute";
     private const string RenamePropertyAttributeFqn = "ZibStack.NET.Dto.RenamePropertyAttribute";
-    // Utils namespace — referenced in extraction/diagnostics for cross-generator awareness
-    private const string PartialFromAttributeFqn = "ZibStack.NET.Utils.PartialFromAttribute";
-    private const string IntersectFromAttributeFqn = "ZibStack.NET.Utils.IntersectFromAttribute";
-    private const string PickFromAttributeFqn = "ZibStack.NET.Utils.PickFromAttribute";
-    private const string OmitFromAttributeFqn = "ZibStack.NET.Utils.OmitFromAttribute";
+    private const string PickFromAttributeFqn = "ZibStack.NET.Dto.PickFromAttribute";
+    private const string OmitFromAttributeFqn = "ZibStack.NET.Dto.OmitFromAttribute";
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
     private const string ResponseDtoAttributeFqn = "ZibStack.NET.Dto.ResponseDtoAttribute";
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
@@ -47,15 +46,44 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("FlattenAttribute.g.cs", FlattenAttributeSource);
             ctx.AddSource("RenamePropertyAttribute.g.cs", RenamePropertyAttributeSource);
             ctx.AddSource("ResponseDtoAttribute.g.cs", ResponseDtoAttributeSource);
+            ctx.AddSource("PickFromAttribute.g.cs", PickFromAttributeSource);
+            ctx.AddSource("OmitFromAttribute.g.cs", OmitFromAttributeSource);
             ctx.AddSource("QueryDtoAttribute.g.cs", QueryDtoAttributeSource);
             ctx.AddSource("ResponseIgnoreAttribute.g.cs", ResponseIgnoreAttributeSource);
+            ctx.AddSource("PaginatedResponse.g.cs", PaginatedResponseSource);
+            ctx.AddSource("SortDirection.g.cs", SortDirectionSource);
             ctx.AddSource("IDtoValidator.g.cs", DtoValidatorInterfaceSource);
             ctx.AddSource("CreateDtoForAttribute.g.cs", CreateDtoForAttributeSource);
             ctx.AddSource("UpdateDtoForAttribute.g.cs", UpdateDtoForAttributeSource);
+            ctx.AddSource("PartialFromAttribute.g.cs", PartialFromAttributeSource);
+            ctx.AddSource("IntersectFromAttribute.g.cs", IntersectFromAttributeSource);
             ctx.AddSource("CrudOperations.g.cs", CrudOperationsSource);
             ctx.AddSource("ApiStyle.g.cs", ApiStyleSource);
             ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
+        });
+
+        // Detect available serializers and emit PatchField + converters
+        var serializerFlags = context.CompilationProvider.Select(static (compilation, _) =>
+        {
+            var hasStj = compilation.GetTypeByMetadataName("System.Text.Json.Serialization.JsonConverter") is not null;
+            var hasNewtonsoft = compilation.GetTypeByMetadataName("Newtonsoft.Json.JsonConverter") is not null;
+            return (hasStj, hasNewtonsoft);
+        });
+
+        context.RegisterSourceOutput(serializerFlags, static (spc, flags) =>
+        {
+            spc.AddSource("PatchField.g.cs", GeneratePatchFieldSource(flags.hasStj, flags.hasNewtonsoft));
+        });
+
+        // Detect Swashbuckle and emit schema filter
+        var hasSwashbuckle = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("Swashbuckle.AspNetCore.SwaggerGen.ISchemaFilter") is not null);
+
+        context.RegisterSourceOutput(hasSwashbuckle, static (spc, has) =>
+        {
+            if (has)
+                spc.AddSource("PatchFieldSchemaFilter.g.cs", PatchFieldSchemaFilterSource);
         });
 
         // Detect FluentValidation and emit adapter
@@ -191,6 +219,73 @@ public partial class DtoGenerator : IIncrementalGenerator
         {
             var source = GenerateUpdateDtoForSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.UpdateDtoFor.g.cs", source);
+        });
+
+        // Find [PartialFrom(typeof(...))] classes and generate partial with PatchField props + ApplyTo
+        var partialFromDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                PartialFromAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetPartialFromInfo(ctx))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(partialFromDeclarations, static (spc, info) =>
+        {
+            var source = GeneratePartialFromSource(info);
+            spc.AddSource($"{info.FullyQualifiedName}.Partial.g.cs", source);
+        });
+
+        // Find [IntersectFrom(...)] classes — collect and deduplicate
+        var intersectRaw = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                IntersectFromAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetIntersectFromInfo(ctx))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(intersectRaw.Collect(), static (spc, infos) =>
+        {
+            var seen = new HashSet<string>();
+            foreach (var info in infos)
+            {
+                if (seen.Add(info.FullyQualifiedName))
+                {
+                    var source = GenerateIntersectSource(info);
+                    spc.AddSource($"{info.FullyQualifiedName}.Intersect.g.cs", source);
+                }
+            }
+        });
+
+        // Find [PickFrom] classes
+        var pickFromDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                PickFromAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetPickOmitInfo(ctx, PickFromAttributeFqn, isPick: true))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(pickFromDeclarations, static (spc, info) =>
+        {
+            var source = GeneratePartialFromSource(info);
+            spc.AddSource($"{info.FullyQualifiedName}.Pick.g.cs", source);
+        });
+
+        // Find [OmitFrom] classes
+        var omitFromDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                OmitFromAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetPickOmitInfo(ctx, OmitFromAttributeFqn, isPick: false))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(omitFromDeclarations, static (spc, info) =>
+        {
+            var source = GeneratePartialFromSource(info);
+            spc.AddSource($"{info.FullyQualifiedName}.Omit.g.cs", source);
         });
 
         // Find [QueryDto] classes

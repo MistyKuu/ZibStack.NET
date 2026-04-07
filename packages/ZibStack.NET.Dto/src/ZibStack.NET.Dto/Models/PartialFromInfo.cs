@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ZibStack.NET.Utils;
+namespace ZibStack.NET.Dto;
 
 internal sealed class PartialFromInfo
 {
@@ -9,9 +9,9 @@ internal sealed class PartialFromInfo
     public string FullyQualifiedName { get; }
     public string TargetTypeName { get; }
     public string TypeKeyword { get; }
-    public List<UtilsPropertyInfo> Properties { get; }
+    public List<DtoPropertyInfo> Properties { get; }
 
-    public PartialFromInfo(string className, string? ns, string fullyQualifiedName, string targetTypeName, List<UtilsPropertyInfo> properties, string typeKeyword = "record")
+    public PartialFromInfo(string className, string? ns, string fullyQualifiedName, string targetTypeName, List<DtoPropertyInfo> properties, string typeKeyword = "record")
     {
         ClassName = className;
         Namespace = ns;

@@ -6,10 +6,7 @@ A C# source generator that produces strongly-typed **Create**, **Update**, **Res
 
 ```
 dotnet add package ZibStack.NET.Dto
-dotnet add package ZibStack.NET.Utils
 ```
-
-`ZibStack.NET.Utils` provides the core utility types (`PatchField<T>`, `PaginatedResponse<T>`, `SortDirection`, `PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`).
 
 ## Quick start
 
@@ -17,7 +14,6 @@ Mark your model with `[CreateDto]` and/or `[UpdateDto]`:
 
 ```csharp
 using ZibStack.NET.Dto;
-using ZibStack.NET.Utils;
 
 [CreateDto]
 [UpdateDto]
@@ -32,11 +28,9 @@ public class Player
 }
 ```
 
-Register the JSON converter (from `ZibStack.NET.Utils`):
+Register the JSON converter:
 
 ```csharp
-using ZibStack.NET.Utils;
-
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
         new PatchFieldJsonConverterFactory()));
@@ -201,14 +195,14 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[ResponseDto]` | Class | Generates read-only Response DTO with `FromEntity()` + `ProjectFrom()` |
 | `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` with `Validate()` + `ToEntity()` |
 | `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` with `Validate()` + `ApplyTo()` |
-| `[PickFrom(typeof(T), ...)]` | Record (partial) | Like TS `Pick<T, K>` — whitelist of properties *(from `ZibStack.NET.Utils`)* |
-| `[OmitFrom(typeof(T), ...)]` | Record (partial) | Like TS `Omit<T, K>` — exclude listed properties *(from `ZibStack.NET.Utils`)* |
+| `[PickFrom(typeof(T), ...)]` | Record (partial) | Like TS `Pick<T, K>` — whitelist of properties |
+| `[OmitFrom(typeof(T), ...)]` | Record (partial) | Like TS `Omit<T, K>` — exclude listed properties |
 | `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
 | `[QueryDto(Sortable = true)]` | Class | Adds `SortBy`, `SortDirection`, `ApplySort()`, `Apply()` to query DTO |
 | `[CrudApi]` | Class | Generates full CRUD API endpoints (Minimal API and/or Controller) using `ICrudStore<T,TKey>` |
-| `PaginatedResponse<T>` | — | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` *(from `ZibStack.NET.Utils`)* |
-| `[PartialFrom(typeof(T))]` | Record (partial) | Generates `PatchField` properties + `ApplyTo()` for all properties of `T` *(from `ZibStack.NET.Utils`)* |
-| `[IntersectFrom(typeof(T))]` | Record (partial) | Combine multiple types into one (like TS `&`). Apply multiple times. *(from `ZibStack.NET.Utils`)* |
+| `PaginatedResponse<T>` | — | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` |
+| `[PartialFrom(typeof(T))]` | Record (partial) | Generates `PatchField` properties + `ApplyTo()` for all properties of `T` |
+| `[IntersectFrom(typeof(T))]` | Record (partial) | Combine multiple types into one (like TS `&`). Apply multiple times. |
 | `[DtoIgnore]` | Property | Excludes from generated DTOs |
 | `[DtoName("json_name")]` | Property | Overrides the JSON property name |
 | `[CreateOnly]` | Property | Only included in Create (or `ValidateForCreate`/`ToEntity` in Combined) |
@@ -297,11 +291,9 @@ public partial record CreateUserRequest;
 
 ## Partial types (`[PartialFrom]`)
 
-Like TypeScript's `Partial<T>` -- generates a class where every property is optional (from `ZibStack.NET.Utils`):
+Like TypeScript's `Partial<T>` -- generates a class where every property is optional:
 
 ```csharp
-using ZibStack.NET.Utils;
-
 [PartialFrom(typeof(Player))]
 public partial record PartialPlayer;
 ```
@@ -322,13 +314,11 @@ public partial record PartialPlayer
 
 All properties from the target type are included (no `[DtoIgnore]` filtering). The record is `partial` so you can add your own methods and properties. No `Validate()` or `ToEntity()` -- just `ApplyTo()`.
 
-## Pick / Omit (TypeScript-style, from `ZibStack.NET.Utils`)
+## Pick / Omit (TypeScript-style)
 
 ### `[PickFrom]` — whitelist properties
 
 ```csharp
-using ZibStack.NET.Utils;
-
 [PickFrom(typeof(Player), nameof(Player.Name), nameof(Player.Level))]
 public partial record PlayerSummary;
 // Only Name and Level — with ApplyTo(Player)
@@ -416,7 +406,7 @@ public IActionResult List([FromQuery] ProductQuery query)
 
 `SortBy` is case-insensitive and matches property names. Unknown values are ignored (no sort applied). `DefaultSort` and `DefaultSortDirection` set fallback behavior when `SortBy`/`SortDirection` are not provided.
 
-## Paginated response (`PaginatedResponse<T>`, from `ZibStack.NET.Utils`)
+## Paginated response (`PaginatedResponse<T>`)
 
 Generic wrapper for paginated results:
 
@@ -493,8 +483,6 @@ Both use `ICrudStore<Player, int>` from DI and wire up the full pipeline: valida
 ### Setup
 
 ```csharp
-using ZibStack.NET.Utils;
-
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
@@ -599,13 +587,11 @@ var (changedFields, entity) = request.ApplyWithChanges(existingProduct);
 // Useful for audit logs, webhooks, selective cache invalidation
 ```
 
-## Intersection types (`[IntersectFrom]`, from `ZibStack.NET.Utils`)
+## Intersection types (`[IntersectFrom]`)
 
 Like TypeScript's `&` operator -- combine properties from multiple types into one:
 
 ```csharp
-using ZibStack.NET.Utils;
-
 [IntersectFrom(typeof(Player))]
 [IntersectFrom(typeof(Address))]
 public partial record PlayerWithAddress;
@@ -784,9 +770,18 @@ var changes = request.Diff(existingProduct);
 if (changes.Count == 0) return NoContent(); // nothing actually changed
 ```
 
+### `DtoMapper`
+
+Generic runtime mapper for copying properties between objects by matching names:
+
+```csharp
+var copy = DtoMapper.Map<Product, ProductDto>(product);
+DtoMapper.MapTo(source, target);
+```
+
 ### Swagger / OpenAPI support
 
-When Swashbuckle is detected, `ZibStack.NET.Utils` emits a `PatchFieldSchemaFilter` that unwraps `PatchField<T>` to its inner type in the Swagger schema:
+When Swashbuckle is detected, the generator emits a `PatchFieldSchemaFilter` that unwraps `PatchField<T>` to its inner type in the Swagger schema:
 
 ```csharp
 builder.Services.AddSwaggerGen(c => c.SchemaFilter<PatchFieldSchemaFilter>());

@@ -8,8 +8,7 @@ A collection of .NET source generators and utilities for common application conc
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
-| [**ZibStack.NET.Utils**](packages/ZibStack.NET.Utils/) | `dotnet add package ZibStack.NET.Utils` | Source generator for utility types: `PatchField<T>`, `PaginatedResponse<T>`, `PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`. |
-| [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField support and full CRUD API generation. Requires `ZibStack.NET.Utils`. |
+| [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField support and full CRUD API generation. |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[Required]`, `[Email]`, `[Range]`, `[Match]`). |
 
@@ -164,9 +163,7 @@ ZibStack.NET/
 │   │   ├── src/                   → Generator + Abstractions
 │   │   ├── tests/                 → Unit tests + Benchmarks
 │   │   └── sample/                → Sample API
-│   ├── ZibStack.NET.Utils/         → Utility types (PatchField, PaginatedResponse, etc.)
-│   │   └── src/                   → Generator
-│   ├── ZibStack.NET.Dto/          → DTO source generator (uses Utils)
+│   ├── ZibStack.NET.Dto/          → DTO source generator
 │   │   ├── src/                   → Generator
 │   │   ├── tests/                 → Unit tests
 │   │   └── sample/                → Sample API
@@ -180,7 +177,6 @@ ZibStack.NET/
 │   ├── ci.yml                     → Builds & tests all packages
 │   ├── release-aop.yml            → Release ZibStack.NET.Aop to NuGet
 │   ├── release-log.yml            → Release ZibStack.NET.Log to NuGet
-│   ├── release-utils.yml           → Release ZibStack.NET.Utils to NuGet
 │   ├── release-dto.yml            → Release ZibStack.NET.Dto to NuGet
 │   ├── release-result.yml         → Release ZibStack.NET.Result to NuGet
 │   └── release-validation.yml     → Release ZibStack.NET.Validation to NuGet

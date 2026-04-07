@@ -370,6 +370,160 @@ public partial class DtoGenerator
         return info;
     } catch { return null; } }
 
+    private static PartialFromInfo? GetPartialFromInfo(GeneratorAttributeSyntaxContext context)
+    { try {
+        var symbol = (INamedTypeSymbol)context.TargetSymbol;
+        var syntax = (TypeDeclarationSyntax)context.TargetNode;
+
+        if (!syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
+            return null;
+
+        var attr = symbol.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == PartialFromAttributeFqn);
+
+        if (attr.ConstructorArguments.Length == 0) return null;
+        var targetType = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
+        if (targetType is null) return null;
+
+        var targetFqn = targetType.ToDisplayString();
+
+        // Collect properties from the target type
+        var properties = new List<DtoPropertyInfo>();
+        foreach (var prop in GetAllProperties(targetType))
+        {
+            if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+            if (prop.SetMethod is null || prop.GetMethod is null) continue;
+
+            var jsonName = GetJsonName(prop);
+            var displayType = prop.Type.ToDisplayString();
+            var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
+            var isValueType = prop.Type.IsValueType;
+
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
+            properties.Add(new DtoPropertyInfo(
+                prop.Name,
+                jsonName,
+                displayType,
+                isNullable,
+                false,
+                isValueType,
+                false,
+                false,
+                validationAttributes: validationAttrs,
+                validationRules: validationRules));
+        }
+
+        var ns = symbol.ContainingNamespace.IsGlobalNamespace
+            ? null
+            : symbol.ContainingNamespace.ToDisplayString();
+
+        var typeKeyword = syntax is RecordDeclarationSyntax ? "record" : "class";
+        return new PartialFromInfo(
+            symbol.Name,
+            ns,
+            SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
+            targetFqn,
+            properties,
+            typeKeyword);
+    } catch { return null; } }
+
+    private static IntersectInfo? GetIntersectFromInfo(GeneratorAttributeSyntaxContext context)
+    { try {
+        var symbol = (INamedTypeSymbol)context.TargetSymbol;
+        var syntax = (TypeDeclarationSyntax)context.TargetNode;
+
+        if (!syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
+            return null;
+
+        var ns = symbol.ContainingNamespace.IsGlobalNamespace
+            ? null
+            : symbol.ContainingNamespace.ToDisplayString();
+
+        // Collect ALL [IntersectFrom] attributes on this class
+        var targetTypes = new List<IntersectTargetInfo>();
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() != IntersectFromAttributeFqn) continue;
+            if (attr.ConstructorArguments.Length == 0) continue;
+            if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol targetType) continue;
+
+            var targetFqn = targetType.ToDisplayString();
+            var props = CollectPropertiesFromType(targetType);
+            targetTypes.Add(new IntersectTargetInfo(targetFqn, props));
+        }
+
+        if (targetTypes.Count == 0) return null;
+
+        var typeKeyword = syntax is RecordDeclarationSyntax ? "record" : "class";
+        return new IntersectInfo(
+            symbol.Name,
+            ns,
+            SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
+            targetTypes,
+            typeKeyword);
+    } catch { return null; } }
+
+    private static PartialFromInfo? GetPickOmitInfo(GeneratorAttributeSyntaxContext context, string attributeFqn, bool isPick)
+    { try {
+        var symbol = (INamedTypeSymbol)context.TargetSymbol;
+        var syntax = (TypeDeclarationSyntax)context.TargetNode;
+
+        if (!syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
+            return null;
+
+        var attr = symbol.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attributeFqn);
+
+        if (attr.ConstructorArguments.Length == 0) return null;
+        var targetType = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
+        if (targetType is null) return null;
+
+        // Second constructor arg is string[] of property names
+        var propNames = new HashSet<string>();
+        if (attr.ConstructorArguments.Length >= 2 && !attr.ConstructorArguments[1].IsNull)
+        {
+            foreach (var val in attr.ConstructorArguments[1].Values)
+            {
+                if (val.Value is string s)
+                    propNames.Add(s);
+            }
+        }
+
+        var targetFqn = targetType.ToDisplayString();
+        var properties = new List<DtoPropertyInfo>();
+
+        foreach (var prop in GetAllProperties(targetType))
+        {
+            if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+            if (prop.SetMethod is null || prop.GetMethod is null) continue;
+
+            var include = isPick ? propNames.Contains(prop.Name) : !propNames.Contains(prop.Name);
+            if (!include) continue;
+
+            var jsonName = GetJsonName(prop);
+            var displayType = prop.Type.ToDisplayString();
+            var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
+            var isValueType = prop.Type.IsValueType;
+            var (validationAttrs, validationRules) = GetValidationAttributes(prop);
+
+            properties.Add(new DtoPropertyInfo(
+                prop.Name, jsonName, displayType, isNullable,
+                false, isValueType, false, false,
+                validationAttributes: validationAttrs,
+                validationRules: validationRules));
+        }
+
+        var ns = symbol.ContainingNamespace.IsGlobalNamespace
+            ? null
+            : symbol.ContainingNamespace.ToDisplayString();
+
+        var typeKeyword = syntax is RecordDeclarationSyntax ? "record" : "class";
+        return new PartialFromInfo(
+            symbol.Name, ns,
+            SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
+            targetFqn, properties, typeKeyword);
+    } catch { return null; } }
+
     private static QueryDtoInfo? GetQueryDtoInfo(GeneratorAttributeSyntaxContext context)
     { try {
         var symbol = (INamedTypeSymbol)context.TargetSymbol;

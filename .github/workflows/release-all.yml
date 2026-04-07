@@ -44,16 +44,13 @@ jobs:
       - name: Pack 4 — Log
         run: dotnet pack packages/ZibStack.NET.Log/src/ZibStack.NET.Log/ZibStack.NET.Log.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 5 — Utils
-        run: dotnet pack packages/ZibStack.NET.Utils/src/ZibStack.NET.Utils/ZibStack.NET.Utils.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
-
-      - name: Pack 6 — Dto
+      - name: Pack 5 — Dto
         run: dotnet pack packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 7 — Result
+      - name: Pack 6 — Result
         run: dotnet pack packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 8 — Validation
+      - name: Pack 7 — Validation
         run: dotnet pack packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       # Push all at once (NuGet resolves deps from same push)

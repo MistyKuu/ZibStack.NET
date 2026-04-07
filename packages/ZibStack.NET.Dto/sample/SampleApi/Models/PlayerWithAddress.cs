@@ -1,4 +1,4 @@
-using ZibStack.NET.Utils;
+using ZibStack.NET.Dto;
 
 namespace ZibStack.NET.Dto.Sample.Models;
 
