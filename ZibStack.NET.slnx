@@ -49,15 +49,4 @@
   <Folder Name="/packages/ZibStack.NET.Result/tests/">
     <Project Path="packages/ZibStack.NET.Result/tests/ZibStack.NET.Result.Tests/ZibStack.NET.Result.Tests.csproj" />
   </Folder>
-  <Folder Name="/packages/ZibStack.NET.UI/" />
-  <Folder Name="/packages/ZibStack.NET.UI/src/">
-    <Project Path="packages/ZibStack.NET.UI/src/ZibStack.NET.UI/ZibStack.NET.UI.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.UI/tests/">
-    <Project Path="packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.UI/sample/">
-    <Project Path="packages/ZibStack.NET.UI/sample/SampleApi/SampleApi.csproj" />
-    <Project Path="packages/ZibStack.NET.UI/sample/SampleBlazor/SampleBlazor.csproj" />
-  </Folder>
 </Solution>

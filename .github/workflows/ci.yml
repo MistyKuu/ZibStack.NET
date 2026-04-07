@@ -39,9 +39,6 @@ jobs:
       - name: Test Validation
         run: dotnet test packages/ZibStack.NET.Validation/tests/ZibStack.NET.Validation.Tests/ZibStack.NET.Validation.Tests.csproj -c Release --no-build
 
-      - name: Test UI
-        run: dotnet test packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj -c Release --no-build
-
       - name: Benchmark Log
         run: dotnet run --project packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj -c Release -- --filter "*" --exporters json
 
