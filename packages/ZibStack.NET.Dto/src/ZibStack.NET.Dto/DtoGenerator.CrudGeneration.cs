@@ -35,6 +35,7 @@ public partial class DtoGenerator
         sb.AppendLine("using Microsoft.AspNetCore.Http;");
         sb.AppendLine("using Microsoft.AspNetCore.Routing;");
         sb.AppendLine("using ZibStack.NET.Dto;");
+        sb.AppendLine("using ZibStack.NET.Utils;");
 
         if (info.Namespace is not null)
         {
@@ -212,6 +213,7 @@ public partial class DtoGenerator
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc;");
         sb.AppendLine("using ZibStack.NET.Dto;");
+        sb.AppendLine("using ZibStack.NET.Utils;");
 
         if (info.Namespace is not null)
         {

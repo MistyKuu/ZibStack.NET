@@ -1,13 +1,13 @@
 using System.Collections.Generic;
 
-namespace ZibStack.NET.Dto;
+namespace ZibStack.NET.Utils;
 
 internal sealed class IntersectTargetInfo
 {
     public string TypeName { get; }
-    public List<DtoPropertyInfo> Properties { get; }
+    public List<UtilsPropertyInfo> Properties { get; }
 
-    public IntersectTargetInfo(string typeName, List<DtoPropertyInfo> properties)
+    public IntersectTargetInfo(string typeName, List<UtilsPropertyInfo> properties)
     {
         TypeName = typeName;
         Properties = properties;

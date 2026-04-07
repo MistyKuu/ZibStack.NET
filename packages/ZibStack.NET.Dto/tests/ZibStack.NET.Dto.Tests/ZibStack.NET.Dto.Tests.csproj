@@ -18,6 +18,9 @@
     <ProjectReference Include="..\..\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Utils\src\ZibStack.NET.Utils\ZibStack.NET.Utils.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
