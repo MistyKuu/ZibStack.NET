@@ -1,0 +1,104 @@
+---
+title: Getting Started
+description: Install and start using ZibStack.NET source generators.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+ZibStack.NET is a collection of **source generators** for .NET. Each package is independent — install only what you need.
+
+## Quick Install
+
+<Tabs>
+  <TabItem label="CRUD API (most popular)">
+    ```bash
+    dotnet add package ZibStack.NET.Dto
+    dotnet add package ZibStack.NET.EntityFramework
+    dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+    ```
+  </TabItem>
+  <TabItem label="Logging">
+    ```bash
+    dotnet add package ZibStack.NET.Log
+    ```
+  </TabItem>
+  <TabItem label="AOP">
+    ```bash
+    dotnet add package ZibStack.NET.Aop
+    ```
+  </TabItem>
+  <TabItem label="Validation">
+    ```bash
+    dotnet add package ZibStack.NET.Validation
+    ```
+  </TabItem>
+</Tabs>
+
+## Minimal CRUD API Example
+
+Define a model, add one attribute, and get a full REST API with database persistence:
+
+```csharp
+// Models/Player.cs
+using ZibStack.NET.Dto;
+
+[CrudApi]
+public class Player
+{
+    [DtoIgnore] public int Id { get; set; }
+    public required string Name { get; set; }
+    public int Level { get; set; }
+    public string? Email { get; set; }
+}
+```
+
+```csharp
+// AppDbContext.cs
+using ZibStack.NET.EntityFramework;
+
+[GenerateCrudStores]
+public class AppDbContext : DbContext
+{
+    public DbSet<Player> Players => Set<Player>();
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+}
+```
+
+```csharp
+// Program.cs
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite("Data Source=app.db"));
+builder.Services.AddAppDbContextCrudStores();   // auto-generated
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
+
+var app = builder.Build();
+using (var scope = app.Services.CreateScope())
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+
+app.MapPlayerEndpoints();  // auto-generated: GET, POST, PATCH, DELETE
+app.Run();
+```
+
+That's it. You now have:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/players` | GET | List with pagination |
+| `/api/players/{id}` | GET | Get by ID |
+| `/api/players` | POST | Create with validation |
+| `/api/players/{id}` | PATCH | Partial update |
+| `/api/players/{id}` | DELETE | Delete |
+
+All responses use **ProblemDetails** (RFC 9110) for errors, and **PatchField** for true partial updates.
+
+## What are Source Generators?
+
+Source generators run at **compile time** and emit C# code into your project. No reflection, no runtime overhead, full IntelliSense support. The generated code is visible in `obj/` — you can inspect exactly what's produced.
+
+## Next Steps
+
+- [Dto — CRUD API & DTOs](/ZibStack.NET/packages/dto/) — the full reference
+- [Full CRUD with SQLite Guide](/ZibStack.NET/guides/crud-sqlite/) — step-by-step tutorial
+- [EntityFramework](/ZibStack.NET/packages/entityframework/) — auto-generated stores
+- [Log](/ZibStack.NET/packages/log/) — zero-allocation logging

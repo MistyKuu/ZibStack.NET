@@ -1,0 +1,60 @@
+---
+title: ZibStack.NET
+description: A collection of .NET source generators for logging, AOP, DTOs, CRUD APIs, validation, and more.
+template: splash
+hero:
+  tagline: Source generators that write the boilerplate so you don't have to. Zero reflection, zero runtime overhead.
+  actions:
+    - text: Get Started
+      link: /ZibStack.NET/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/MistyKuu/ZibStack.NET
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+	<Card title="Dto — CRUD API" icon="rocket">
+		One attribute, full CRUD. `[CrudApi]` generates endpoints, DTOs, validation, and ProblemDetails responses.
+
+		[Learn more](/ZibStack.NET/packages/dto/)
+	</Card>
+	<Card title="Log" icon="document">
+		`[Log]` on a method or class — compile-time entry/exit/exception logging with zero allocation.
+
+		[Learn more](/ZibStack.NET/packages/log/)
+	</Card>
+	<Card title="Aop" icon="setting">
+		Custom aspects via interceptors. `[Timing]`, `[Trace]`, or build your own `IAspectHandler`.
+
+		[Learn more](/ZibStack.NET/packages/aop/)
+	</Card>
+	<Card title="Validation" icon="approve-check">
+		`[Required]`, `[Email]`, `[Range]` — compile-time validation with `Validate()` method generated.
+
+		[Learn more](/ZibStack.NET/packages/validation/)
+	</Card>
+	<Card title="EntityFramework" icon="seti:db">
+		`[GenerateCrudStores]` on DbContext — auto-generates EfCrudStore implementations + DI registration.
+
+		[Learn more](/ZibStack.NET/packages/entityframework/)
+	</Card>
+	<Card title="UI" icon="laptop">
+		Form + table metadata from attributes. Framework-agnostic JSON for Blazor, React, Vue.
+
+		[Learn more](/ZibStack.NET/packages/ui/)
+	</Card>
+	<Card title="Result" icon="random">
+		Functional `Result&lt;T&gt;` monad with Map/Bind/Match — error handling without exceptions.
+
+		[Learn more](/ZibStack.NET/packages/result/)
+	</Card>
+	<Card title="Utils" icon="puzzle">
+		TypeScript-style utility types: `[PartialFrom]`, `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]`.
+
+		[Learn more](/ZibStack.NET/packages/utils/)
+	</Card>
+</CardGrid>
