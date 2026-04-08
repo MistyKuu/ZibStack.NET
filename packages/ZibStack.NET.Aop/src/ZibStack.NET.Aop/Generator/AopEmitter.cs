@@ -171,7 +171,19 @@ public static class AopEmitter
                     var handlerVar = GetHandlerVarName(aspect);
                     var ctxVar = GetContextVarName(aspect);
                     sb.AppendLine($"{indent}var __prevProceed_{handlerVar} = __proceed;");
-                    if (aspect.IsAsyncAroundHandler)
+                    if (aspect.GenericAroundTypeArg is not null && aspect.IsAsyncAroundHandler)
+                    {
+                        // Generic async: IAsyncAroundAspectHandler<T>
+                        var t = aspect.GenericAroundTypeArg;
+                        sb.AppendLine($"{indent}__proceed = async () => await {handlerVar}.AroundAsync({ctxVar}, async () => ({t}?)await __prevProceed_{handlerVar}());");
+                    }
+                    else if (aspect.GenericAroundTypeArg is not null)
+                    {
+                        // Generic sync: IAroundAspectHandler<T>
+                        var t = aspect.GenericAroundTypeArg;
+                        sb.AppendLine($"{indent}__proceed = () => new global::System.Threading.Tasks.ValueTask<object?>({handlerVar}.Around({ctxVar}, () => ({t}?)__prevProceed_{handlerVar}().GetAwaiter().GetResult()));");
+                    }
+                    else if (aspect.IsAsyncAroundHandler)
                         sb.AppendLine($"{indent}__proceed = () => {handlerVar}.AroundAsync({ctxVar}, __prevProceed_{handlerVar});");
                     else
                         sb.AppendLine($"{indent}__proceed = () => new global::System.Threading.Tasks.ValueTask<object?>({handlerVar}.Around({ctxVar}, () => __prevProceed_{handlerVar}().GetAwaiter().GetResult()));");
@@ -204,7 +216,15 @@ public static class AopEmitter
                     var handlerVar = GetHandlerVarName(aspect);
                     var ctxVar = GetContextVarName(aspect);
                     sb.AppendLine($"{indent}var __prevProceed_{handlerVar} = __proceed;");
-                    sb.AppendLine($"{indent}__proceed = () => {handlerVar}.Around({ctxVar}, __prevProceed_{handlerVar});");
+                    if (aspect.GenericAroundTypeArg is not null)
+                    {
+                        var t = aspect.GenericAroundTypeArg;
+                        sb.AppendLine($"{indent}__proceed = () => {handlerVar}.Around({ctxVar}, () => ({t}?)__prevProceed_{handlerVar}());");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"{indent}__proceed = () => {handlerVar}.Around({ctxVar}, __prevProceed_{handlerVar});");
+                    }
                 }
 
                 sb.AppendLine($"{indent}try");

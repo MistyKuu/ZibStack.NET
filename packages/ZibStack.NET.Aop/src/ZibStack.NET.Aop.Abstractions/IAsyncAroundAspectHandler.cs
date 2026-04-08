@@ -28,3 +28,16 @@ public interface IAsyncAroundAspectHandler
     /// </summary>
     ValueTask<object?> AroundAsync(AspectContext context, Func<ValueTask<object?>> proceed);
 }
+
+/// <summary>
+/// Strongly-typed async version of <see cref="IAsyncAroundAspectHandler"/>. The generator will use
+/// this when the handler's type parameter matches the intercepted method's return type.
+/// </summary>
+/// <typeparam name="T">The return type of the intercepted async method (unwrapped from Task/ValueTask).</typeparam>
+public interface IAsyncAroundAspectHandler<T>
+{
+    /// <summary>
+    /// Wraps the async method execution with strongly-typed proceed and return value.
+    /// </summary>
+    ValueTask<T?> AroundAsync(AspectContext context, Func<ValueTask<T?>> proceed);
+}

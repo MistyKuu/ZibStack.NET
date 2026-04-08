@@ -140,6 +140,12 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
     public bool IsAsyncAroundHandler { get; }
 
     /// <summary>
+    /// For generic around handlers (IAroundAspectHandler&lt;T&gt; / IAsyncAroundAspectHandler&lt;T&gt;),
+    /// the fully qualified type argument. Null for non-generic handlers.
+    /// </summary>
+    public string? GenericAroundTypeArg { get; }
+
+    /// <summary>
     /// Return-value attributes: [return: Sensitive], [return: NoLog]
     /// </summary>
     public bool SensitiveReturn { get; }
@@ -151,7 +157,8 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
         bool isAsyncHandler = false,
         bool isAroundHandler = false,
         bool isAsyncAroundHandler = false,
-        bool sensitiveReturn = false, bool noLogReturn = false)
+        bool sensitiveReturn = false, bool noLogReturn = false,
+        string? genericAroundTypeArg = null)
     {
         AttributeFullName = attributeFullName;
         Order = order;
@@ -162,6 +169,7 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
         IsAsyncAroundHandler = isAsyncAroundHandler;
         SensitiveReturn = sensitiveReturn;
         NoLogReturn = noLogReturn;
+        GenericAroundTypeArg = genericAroundTypeArg;
     }
 
     public bool Equals(AspectInfo? other)

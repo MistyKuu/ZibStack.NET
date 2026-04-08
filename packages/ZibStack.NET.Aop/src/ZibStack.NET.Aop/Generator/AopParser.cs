@@ -266,6 +266,7 @@ public static class AopParser
             }
 
             string? handlerTypeName = null;
+            string? genericAroundTypeArg = null;
             bool isAsyncHandler = false, isAroundHandler = false, isAsyncAroundHandler = false;
             foreach (var classAttr in attr.AttributeClass.GetAttributes())
             {
@@ -274,10 +275,28 @@ public static class AopParser
                     && classAttr.ConstructorArguments[0].Value is INamedTypeSymbol handlerType)
                 {
                     handlerTypeName = handlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    var ifaces = handlerType.AllInterfaces.Select(i => i.ToDisplayString()).ToList();
-                    isAsyncHandler = ifaces.Contains("ZibStack.NET.Aop.IAsyncAspectHandler");
-                    isAroundHandler = ifaces.Contains("ZibStack.NET.Aop.IAroundAspectHandler");
-                    isAsyncAroundHandler = ifaces.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler");
+                    var ifaces = handlerType.AllInterfaces;
+                    var ifaceNames = ifaces.Select(i => i.ToDisplayString()).ToList();
+                    isAsyncHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAspectHandler");
+                    isAroundHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAroundAspectHandler");
+                    isAsyncAroundHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler");
+
+                    // Detect generic around handlers: IAroundAspectHandler<T> / IAsyncAroundAspectHandler<T>
+                    foreach (var iface in ifaces)
+                    {
+                        if (iface.IsGenericType && iface.TypeArguments.Length == 1)
+                        {
+                            var def = iface.OriginalDefinition.ToDisplayString();
+                            if (def == "ZibStack.NET.Aop.IAroundAspectHandler<T>" ||
+                                def == "ZibStack.NET.Aop.IAsyncAroundAspectHandler<T>")
+                            {
+                                genericAroundTypeArg = iface.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                                isAroundHandler = true;
+                                if (def.Contains("Async"))
+                                    isAsyncAroundHandler = true;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -286,7 +305,8 @@ public static class AopParser
             bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
 
             aspects.Add(new AspectInfo(typeName, order, props, handlerTypeName, isAsyncHandler,
-                isAroundHandler || isAsyncAroundHandler, isAsyncAroundHandler, sensitiveReturn, noLogReturn));
+                isAroundHandler || isAsyncAroundHandler, isAsyncAroundHandler, sensitiveReturn, noLogReturn,
+                genericAroundTypeArg));
         }
     }
 

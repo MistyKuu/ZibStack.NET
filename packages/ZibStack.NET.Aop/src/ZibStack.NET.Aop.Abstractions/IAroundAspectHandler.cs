@@ -29,3 +29,17 @@ public interface IAroundAspectHandler
     /// </summary>
     object? Around(AspectContext context, Func<object?> proceed);
 }
+
+/// <summary>
+/// Strongly-typed version of <see cref="IAroundAspectHandler"/>. The generator will use
+/// this when the handler's type parameter matches the intercepted method's return type.
+/// Falls back to the non-generic version for void methods or type mismatches.
+/// </summary>
+/// <typeparam name="T">The return type of the intercepted method.</typeparam>
+public interface IAroundAspectHandler<T>
+{
+    /// <summary>
+    /// Wraps the method execution with strongly-typed proceed and return value.
+    /// </summary>
+    T? Around(AspectContext context, Func<T?> proceed);
+}
