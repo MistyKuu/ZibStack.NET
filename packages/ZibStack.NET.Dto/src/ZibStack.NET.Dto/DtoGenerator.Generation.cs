@@ -775,6 +775,65 @@ public partial class DtoGenerator
             sb.AppendLine("        }");
             sb.AppendLine("        return query;");
             sb.AppendLine("    }");
+
+            // ─── ProjectFields: compile-time field projection ────────────
+            sb.AppendLine();
+            sb.AppendLine($"    /// <summary>Projects entity fields to a dictionary based on selected field names. No reflection.</summary>");
+            sb.AppendLine($"    public static System.Collections.Generic.Dictionary<string, object?> ProjectFields({info.ClassName} entity, System.Collections.Generic.HashSet<string> fields)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        var result = new System.Collections.Generic.Dictionary<string, object?>();");
+            foreach (var prop in info.Properties)
+            {
+                var lower = prop.PropertyName.ToLowerInvariant();
+                var jsonName = prop.JsonName;
+                sb.AppendLine($"        if (fields.Contains(\"{lower}\")) result[\"{jsonName}\"] = entity.{prop.PropertyName};");
+            }
+            // Navigation sub-properties
+            var navGroups = new Dictionary<string, List<QueryNavigationPath>>();
+            foreach (var nav in info.NavigationPaths)
+            {
+                var dot = nav.DotPath.IndexOf('.');
+                var prefix = nav.DotPath.Substring(0, dot);
+                if (!navGroups.ContainsKey(prefix))
+                    navGroups[prefix] = new List<QueryNavigationPath>();
+                navGroups[prefix].Add(nav);
+            }
+            foreach (var kv in navGroups)
+            {
+                var navName = info.NavigationNames.FirstOrDefault(n => n.ToLowerInvariant() == kv.Key) ?? kv.Key;
+                var jsonNavName = char.ToLowerInvariant(navName[0]) + navName.Substring(1);
+                sb.AppendLine($"        if (fields.Any(f => f.StartsWith(\"{kv.Key}.\")))");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            var nav = new System.Collections.Generic.Dictionary<string, object?>();");
+                foreach (var nav in kv.Value)
+                {
+                    var subField = nav.DotPath.Substring(kv.Key.Length + 1);
+                    var subExpr = nav.ExpressionPath.Substring(nav.ExpressionPath.IndexOf('.') + 1);
+                    var jsonSubName = char.ToLowerInvariant(subExpr[0]) + subExpr.Substring(1);
+                    sb.AppendLine($"            if (fields.Contains(\"{nav.DotPath}\")) nav[\"{jsonSubName}\"] = entity.{nav.ExpressionPath};");
+                }
+                sb.AppendLine($"            result[\"{jsonNavName}\"] = nav;");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("        return result;");
+            sb.AppendLine("    }");
+
+            // ─── ApplyIncludes: EF Core Include for navigation fields ────
+            sb.AppendLine();
+            sb.AppendLine($"    /// <summary>Adds EF Core Include() calls for navigation properties referenced in the select fields.</summary>");
+            sb.AppendLine($"    public static IQueryable<{info.ClassName}> ApplyIncludes(IQueryable<{info.ClassName}> query, System.Collections.Generic.HashSet<string> fields)");
+            sb.AppendLine("    {");
+            if (info.HasEfCore)
+            {
+                foreach (var navName in info.NavigationNames)
+                {
+                    var lower = navName.ToLowerInvariant();
+                    sb.AppendLine($"        if (fields.Any(f => f.StartsWith(\"{lower}.\")))");
+                    sb.AppendLine($"            query = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.Include(query, x => x.{navName});");
+                }
+            }
+            sb.AppendLine("        return query;");
+            sb.AppendLine("    }");
         }
 
         sb.AppendLine("}");

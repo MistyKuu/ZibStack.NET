@@ -94,9 +94,13 @@ public partial class DtoGenerator : IIncrementalGenerator
         var hasFluentValidation = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("FluentValidation.AbstractValidator`1") is not null);
 
-        // Detect ZibStack.NET.Query for DSL filter/sort support
+        // Detect ZibStack.NET.Query for DSL filter/sort/select support
         var hasQueryDsl = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null);
+
+        // Detect EF Core for Include generation in select
+        var hasEfCore = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions") is not null);
 
         context.RegisterSourceOutput(hasFluentValidation, static (spc, hasFluent) =>
         {
@@ -261,9 +265,9 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl), static (spc, pair) =>
+        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore), static (spc, pair) =>
         {
-            var ((implied, hasFluent), hasDsl) = pair;
+            var (((implied, hasFluent), hasDsl), hasEf) = pair;
             var nestedSeen = new HashSet<string>();
 
             foreach (var classInfo in implied.CreateDtos)
@@ -293,6 +297,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             foreach (var queryInfo in implied.QueryDtos)
             {
                 queryInfo.HasQueryDsl = hasDsl;
+                queryInfo.HasEfCore = hasEf;
                 var source = GenerateQueryDtoSource(queryInfo);
                 spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.CrudImplied.g.cs", source);
             }
@@ -313,9 +318,9 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl), static (spc, pair) =>
+        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore), static (spc, pair) =>
         {
-            var ((implied, hasFluent), hasDsl) = pair;
+            var (((implied, hasFluent), hasDsl), hasEf) = pair;
             var nestedSeen = new HashSet<string>();
             foreach (var classInfo in implied.CreateDtos)
             {
@@ -344,6 +349,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             foreach (var queryInfo in implied.QueryDtos)
             {
                 queryInfo.HasQueryDsl = hasDsl;
+                queryInfo.HasEfCore = hasEf;
                 var source = GenerateQueryDtoSource(queryInfo);
                 spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.Model.g.cs", source);
             }

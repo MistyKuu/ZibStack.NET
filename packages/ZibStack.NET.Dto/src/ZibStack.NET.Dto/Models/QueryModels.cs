@@ -48,12 +48,15 @@ internal sealed class QueryDtoInfo
     public string QueryName { get; }
     public List<QueryPropertyInfo> Properties { get; }
     public List<QueryNavigationPath> NavigationPaths { get; }
+    /// <summary>Top-level navigation property names (e.g. "Team") for Include generation.</summary>
+    public List<string> NavigationNames { get; }
     public bool Sortable { get; }
     public string? DefaultSort { get; }
     public int DefaultSortDirection { get; } // 0 = Asc, 1 = Desc
     public bool HasQueryDsl { get; set; }
+    public bool HasEfCore { get; set; }
 
-    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0, List<QueryNavigationPath>? navigationPaths = null)
+    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0, List<QueryNavigationPath>? navigationPaths = null, List<string>? navigationNames = null)
     {
         ClassName = className;
         Namespace = ns;
@@ -61,6 +64,7 @@ internal sealed class QueryDtoInfo
         QueryName = queryName;
         Properties = properties;
         NavigationPaths = navigationPaths ?? new List<QueryNavigationPath>();
+        NavigationNames = navigationNames ?? new List<string>();
         Sortable = sortable;
         DefaultSort = defaultSort;
         DefaultSortDirection = defaultSortDirection;

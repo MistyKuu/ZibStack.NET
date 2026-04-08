@@ -344,8 +344,9 @@ public partial class DtoGenerator
                     : displayType + "?";
                 queryProps.Add(new QueryPropertyInfo(prop.Name, jsonName, displayType, nullableType, isValueType));
             }
-            // Collect navigation property paths for DSL filtering
+            // Collect navigation property paths for DSL filtering and select
             var navPaths = new List<QueryNavigationPath>();
+            var navNames = new List<string>();
             foreach (var prop in GetAllProperties(symbol))
             {
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
@@ -370,6 +371,7 @@ public partial class DtoGenerator
                     }
                 }
                 if (!isNav) continue;
+                navNames.Add(prop.Name);
 
                 var navTypeSymbol = pType as INamedTypeSymbol;
                 if (navTypeSymbol is null) continue;
@@ -397,7 +399,7 @@ public partial class DtoGenerator
             result.QueryDtos.Add(new QueryDtoInfo(symbol.Name, ns, fqn,
                 $"{symbol.Name}Query", queryProps, sortable: true,
                 defaultSort: tableDefaultSort, defaultSortDirection: 0,
-                navigationPaths: navPaths));
+                navigationPaths: navPaths, navigationNames: navNames));
         }
 
         return result;

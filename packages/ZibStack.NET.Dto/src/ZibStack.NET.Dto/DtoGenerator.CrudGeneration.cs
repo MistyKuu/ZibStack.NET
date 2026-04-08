@@ -96,15 +96,16 @@ public partial class DtoGenerator
                 ? (info.Namespace is not null ? $"{info.Namespace}.{listResponseType}" : listResponseType)
                 : null;
 
-            // DSL filter/sort params (when ZibStack.NET.Query is referenced)
-            var dslParams = info.HasQueryDsl ? ", string? filter = null, string? sort = null" : "";
+            // DSL filter/sort/select params (when ZibStack.NET.Query is referenced)
+            var dslParams = info.HasQueryDsl ? ", string? filter = null, string? sort = null, string? select = null" : "";
             var fqQuery = info.HasQueryDto && info.QueryName is not null
                 ? (info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName)
                 : null;
 
             if (fqQuery is not null)
             {
-                sb.AppendLine($"        group.MapGet(\"\", ([Microsoft.AspNetCore.Http.AsParameters] {fqQuery} query,");
+                var asyncKeyword = info.HasQueryDsl ? "async " : "";
+                sb.AppendLine($"        group.MapGet(\"\", {asyncKeyword}([Microsoft.AspNetCore.Http.AsParameters] {fqQuery} query,");
                 sb.AppendLine($"            {storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = query.Apply(store.Query());");
@@ -119,21 +120,36 @@ public partial class DtoGenerator
                 sb.AppendLine($"        group.MapGet(\"\", ({storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
-                if (info.HasQueryDsl && fqQuery is null)
-                {
-                    // No QueryDto but has DSL — need to generate inline (edge case)
-                    sb.AppendLine("            // DSL filtering without QueryDto is not yet supported");
-                }
+            }
+
+            // select= field projection (when ZibStack.NET.Query is referenced)
+            if (info.HasQueryDsl && fqQuery is not null)
+            {
+                sb.AppendLine("            if (select is not null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                var fields = ZibStack.NET.Query.SelectParser.Parse(select);");
+                sb.AppendLine($"                q = {fqQuery}.ApplyIncludes(q, fields);");
+                sb.AppendLine("                var totalCount = q.Count();");
+                sb.AppendLine("                var items = q.Skip((page - 1) * pageSize).Take(pageSize).ToList();");
+                sb.AppendLine($"                var projected = items.Select(e => {fqQuery}.ProjectFields(e, fields)).ToList();");
+                sb.AppendLine("                return Results.Ok(new { items = projected, totalCount, page, pageSize });");
+                sb.AppendLine("            }");
             }
 
             if (fqListResponse is not null)
             {
-                sb.AppendLine($"            var projected = {fqListResponse}.ProjectFrom(q);");
-                sb.AppendLine($"            return PaginatedResponse<{fqListResponse}>.CreateAsync(projected, page, pageSize, ct);");
+                sb.AppendLine($"            var defaultProjected = {fqListResponse}.ProjectFrom(q);");
+                if (info.HasQueryDsl)
+                    sb.AppendLine($"            return Results.Ok(await PaginatedResponse<{fqListResponse}>.CreateAsync(defaultProjected, page, pageSize, ct));");
+                else
+                    sb.AppendLine($"            return PaginatedResponse<{fqListResponse}>.CreateAsync(defaultProjected, page, pageSize, ct);");
             }
             else
             {
-                sb.AppendLine($"            return PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct);");
+                if (info.HasQueryDsl)
+                    sb.AppendLine($"            return Results.Ok(await PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct));");
+                else
+                    sb.AppendLine($"            return PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct);");
             }
             sb.AppendLine($"        }}).WithName(\"Get{entity}List\"){(info.GetListPolicy is not null ? $".RequireAuthorization(\"{info.GetListPolicy}\")" : "")};");
             sb.AppendLine();
