@@ -417,9 +417,9 @@ public partial class DtoGenerator
                 a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn);
             if (hasQueryIgnore) continue;
 
-            // Bridge: [TableColumn(Filterable = false)] → skip from query
+            // Bridge: [UiTableColumn(Filterable = false)] → skip from query
             var tableColAttr = prop.GetAttributes().FirstOrDefault(a =>
-                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.TableColumnAttribute");
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.UiTableColumnAttribute");
             if (tableColAttr is not null)
             {
                 var filterableArg = tableColAttr.NamedArguments.FirstOrDefault(a => a.Key == "Filterable");

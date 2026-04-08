@@ -24,7 +24,7 @@ using (var scope = app.Services.CreateScope())
 app.MapOpenApi();
 app.MapScalarApiReference();
 
-// Auto-generated from [Model] — full CRUD + UI metadata
+// Auto-generated from [ImTiredOfCrud] — full CRUD + UI metadata
 app.MapPlayerEndpoints();
 
 app.MapControllers();

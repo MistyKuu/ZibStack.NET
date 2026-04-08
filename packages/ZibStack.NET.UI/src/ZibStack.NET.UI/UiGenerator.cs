@@ -10,24 +10,24 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     // ─── FQN constants ───────────────────────────────────────────────────
 
     // Class-level
-    private const string ModelAttributeFqn = "ZibStack.NET.UI.ModelAttribute";
-    private const string FormAttributeFqn = "ZibStack.NET.UI.FormAttribute";
-    private const string FormGroupAttributeFqn = "ZibStack.NET.UI.FormGroupAttribute";
-    private const string TableAttributeFqn = "ZibStack.NET.UI.TableAttribute";
+    private const string ImTiredOfCrudAttributeFqn = "ZibStack.NET.UI.ImTiredOfCrudAttribute";
+    private const string UiFormAttributeFqn = "ZibStack.NET.UI.UiFormAttribute";
+    private const string UiFormGroupAttributeFqn = "ZibStack.NET.UI.UiFormGroupAttribute";
+    private const string UiTableAttributeFqn = "ZibStack.NET.UI.UiTableAttribute";
 
     // Property-level — form
-    private const string FormFieldAttributeFqn = "ZibStack.NET.UI.FormFieldAttribute";
-    private const string FormIgnoreAttributeFqn = "ZibStack.NET.UI.FormIgnoreAttribute";
-    private const string FormHiddenAttributeFqn = "ZibStack.NET.UI.FormHiddenAttribute";
-    private const string FormOrderAttributeFqn = "ZibStack.NET.UI.FormOrderAttribute";
-    private const string FormReadOnlyAttributeFqn = "ZibStack.NET.UI.FormReadOnlyAttribute";
-    private const string FormDisabledAttributeFqn = "ZibStack.NET.UI.FormDisabledAttribute";
-    private const string FormSectionAttributeFqn = "ZibStack.NET.UI.FormSectionAttribute";
-    private const string FormConditionalAttributeFqn = "ZibStack.NET.UI.FormConditionalAttribute";
+    private const string UiFormFieldAttributeFqn = "ZibStack.NET.UI.UiFormFieldAttribute";
+    private const string UiFormIgnoreAttributeFqn = "ZibStack.NET.UI.UiFormIgnoreAttribute";
+    private const string UiFormHiddenAttributeFqn = "ZibStack.NET.UI.UiFormHiddenAttribute";
+    private const string UiFormOrderAttributeFqn = "ZibStack.NET.UI.UiFormOrderAttribute";
+    private const string UiFormReadOnlyAttributeFqn = "ZibStack.NET.UI.UiFormReadOnlyAttribute";
+    private const string UiFormDisabledAttributeFqn = "ZibStack.NET.UI.UiFormDisabledAttribute";
+    private const string UiFormSectionAttributeFqn = "ZibStack.NET.UI.UiFormSectionAttribute";
+    private const string UiFormConditionalAttributeFqn = "ZibStack.NET.UI.UiFormConditionalAttribute";
 
     // Property-level — table
-    private const string TableColumnAttributeFqn = "ZibStack.NET.UI.TableColumnAttribute";
-    private const string TableIgnoreAttributeFqn = "ZibStack.NET.UI.TableIgnoreAttribute";
+    private const string UiTableColumnAttributeFqn = "ZibStack.NET.UI.UiTableColumnAttribute";
+    private const string UiTableIgnoreAttributeFqn = "ZibStack.NET.UI.UiTableIgnoreAttribute";
 
     // ERP: class-level
     private const string ChildTableAttributeFqn = "ZibStack.NET.UI.ChildTableAttribute";
@@ -66,21 +66,21 @@ public sealed partial class UiGenerator : IIncrementalGenerator
         context.RegisterPostInitializationOutput(static ctx =>
         {
             // Form attributes
-            ctx.AddSource("FormAttribute.g.cs", FormAttributeSource);
-            ctx.AddSource("FormGroupAttribute.g.cs", FormGroupAttributeSource);
-            ctx.AddSource("FormFieldAttribute.g.cs", FormFieldAttributeSource);
-            ctx.AddSource("FormIgnoreAttribute.g.cs", FormIgnoreAttributeSource);
-            ctx.AddSource("FormHiddenAttribute.g.cs", FormHiddenAttributeSource);
-            ctx.AddSource("FormOrderAttribute.g.cs", FormOrderAttributeSource);
-            ctx.AddSource("FormReadOnlyAttribute.g.cs", FormReadOnlyAttributeSource);
-            ctx.AddSource("FormDisabledAttribute.g.cs", FormDisabledAttributeSource);
-            ctx.AddSource("FormSectionAttribute.g.cs", FormSectionAttributeSource);
-            ctx.AddSource("FormConditionalAttribute.g.cs", FormConditionalAttributeSource);
+            ctx.AddSource("UiFormAttribute.g.cs", UiFormAttributeSource);
+            ctx.AddSource("UiFormGroupAttribute.g.cs", UiFormGroupAttributeSource);
+            ctx.AddSource("UiFormFieldAttribute.g.cs", UiFormFieldAttributeSource);
+            ctx.AddSource("UiFormIgnoreAttribute.g.cs", UiFormIgnoreAttributeSource);
+            ctx.AddSource("UiFormHiddenAttribute.g.cs", UiFormHiddenAttributeSource);
+            ctx.AddSource("UiFormOrderAttribute.g.cs", UiFormOrderAttributeSource);
+            ctx.AddSource("UiFormReadOnlyAttribute.g.cs", UiFormReadOnlyAttributeSource);
+            ctx.AddSource("UiFormDisabledAttribute.g.cs", UiFormDisabledAttributeSource);
+            ctx.AddSource("UiFormSectionAttribute.g.cs", UiFormSectionAttributeSource);
+            ctx.AddSource("UiFormConditionalAttribute.g.cs", UiFormConditionalAttributeSource);
 
             // Table attributes
-            ctx.AddSource("TableAttribute.g.cs", TableAttributeSource);
-            ctx.AddSource("TableColumnAttribute.g.cs", TableColumnAttributeSource);
-            ctx.AddSource("TableIgnoreAttribute.g.cs", TableIgnoreAttributeSource);
+            ctx.AddSource("UiTableAttribute.g.cs", UiTableAttributeSource);
+            ctx.AddSource("UiTableColumnAttribute.g.cs", UiTableColumnAttributeSource);
+            ctx.AddSource("UiTableIgnoreAttribute.g.cs", UiTableIgnoreAttributeSource);
 
             // UI control hint attributes
             ctx.AddSource("TextAreaAttribute.g.cs", TextAreaAttributeSource);
@@ -110,7 +110,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             ctx.AddSource("DataFilterAttribute.g.cs", DataFilterAttributeSource);
             ctx.AddSource("ComputedAttribute.g.cs", ComputedAttributeSource);
             ctx.AddSource("ColumnStyleAttribute.g.cs", ColumnStyleAttributeSource);
-            ctx.AddSource("ModelAttribute.g.cs", ModelAttributeSource);
+            ctx.AddSource("ImTiredOfCrudAttribute.g.cs", ImTiredOfCrudAttributeSource);
 
             // Runtime types
             ctx.AddSource("FormDescriptor.g.cs", FormDescriptorSource);
@@ -120,7 +120,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
         // ─── Form pipeline ──────────────────────────────────────────────
         var formTargets = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                FormAttributeFqn,
+                UiFormAttributeFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
                 transform: static (ctx, _) => ExtractFormInfo(ctx))
             .Where(static info => info is not null)
@@ -135,7 +135,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
         // ─── Table pipeline ─────────────────────────────────────────────
         var tableTargets = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                TableAttributeFqn,
+                UiTableAttributeFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
                 transform: static (ctx, _) => ExtractTableInfo(ctx))
             .Where(static info => info is not null)
@@ -147,16 +147,16 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             spc.AddSource($"{info.HintName}.TableJson.g.cs", GenerateTableJson(info));
         });
 
-        // ─── [Model] meta-attribute pipeline — implies [Form] + [Table] ──
+        // ─── [ImTiredOfCrud] meta-attribute pipeline — implies [UiForm] + [UiTable] ──
         var modelFormTargets = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                ModelAttributeFqn,
+                ImTiredOfCrudAttributeFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
                 transform: static (ctx, _) =>
                 {
-                    // Only generate form if explicit [Form] is not present
+                    // Only generate form if explicit [UiForm] is not present
                     var hasForm = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
-                        .Any(a => a.AttributeClass?.ToDisplayString() == FormAttributeFqn);
+                        .Any(a => a.AttributeClass?.ToDisplayString() == UiFormAttributeFqn);
                     return hasForm ? null : ExtractFormInfo(ctx);
                 })
             .Where(static info => info is not null)
@@ -170,12 +170,12 @@ public sealed partial class UiGenerator : IIncrementalGenerator
 
         var modelTableTargets = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                ModelAttributeFqn,
+                ImTiredOfCrudAttributeFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
                 transform: static (ctx, _) =>
                 {
                     var hasTable = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
-                        .Any(a => a.AttributeClass?.ToDisplayString() == TableAttributeFqn);
+                        .Any(a => a.AttributeClass?.ToDisplayString() == UiTableAttributeFqn);
                     return hasTable ? null : ExtractTableInfo(ctx);
                 })
             .Where(static info => info is not null)

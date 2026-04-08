@@ -182,10 +182,10 @@ namespace ZibStack.NET.Validation
             spc.AddSource($"{info.HintName}.Validation.g.cs", source);
         });
 
-        // [Model] (from ZibStack.NET.UI) → implies [Validate]
+        // [ImTiredOfCrud] (from ZibStack.NET.UI) → implies [Validate]
         var modelTargets = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                "ZibStack.NET.UI.ModelAttribute",
+                "ZibStack.NET.UI.ImTiredOfCrudAttribute",
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
                 transform: static (ctx, _) =>
                 {

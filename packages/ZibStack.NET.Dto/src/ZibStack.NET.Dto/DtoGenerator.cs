@@ -26,7 +26,7 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
     private const string QueryIgnoreAttributeFqn = "ZibStack.NET.Dto.QueryIgnoreAttribute";
     private const string ListIgnoreAttributeFqn = "ZibStack.NET.Dto.ListIgnoreAttribute";
-    private const string UiModelAttributeFqn = "ZibStack.NET.UI.ModelAttribute";
+    private const string UiImTiredOfCrudAttributeFqn = "ZibStack.NET.UI.ImTiredOfCrudAttribute";
     private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -293,10 +293,10 @@ public partial class DtoGenerator : IIncrementalGenerator
             }
         });
 
-        // [Model] (from ZibStack.NET.UI) → same as [CrudApi] — implied DTOs
+        // [ImTiredOfCrud] (from ZibStack.NET.UI) → same as [CrudApi] — implied DTOs
         var modelImpliedDtos = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                UiModelAttributeFqn,
+                UiImTiredOfCrudAttributeFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
                 transform: static (ctx, _) =>
                 {
@@ -375,10 +375,10 @@ public partial class DtoGenerator : IIncrementalGenerator
             }
         });
 
-        // [Model] (from ZibStack.NET.UI) → CRUD endpoints
+        // [ImTiredOfCrud] (from ZibStack.NET.UI) → CRUD endpoints
         var modelCrudDeclarations = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                UiModelAttributeFqn,
+                UiImTiredOfCrudAttributeFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
                 transform: static (ctx, _) =>
                 {

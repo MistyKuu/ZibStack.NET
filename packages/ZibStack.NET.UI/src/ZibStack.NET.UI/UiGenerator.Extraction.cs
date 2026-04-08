@@ -182,16 +182,16 @@ public partial class UiGenerator
             var isRecord = context.TargetNode is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax;
             var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
 
-            // Read [Form] or [Model] attribute
-            var formAttr = GetAttribute(symbol, FormAttributeFqn) ?? GetAttribute(symbol, ModelAttributeFqn);
+            // Read [UiForm] or [ImTiredOfCrud] attribute
+            var formAttr = GetAttribute(symbol, UiFormAttributeFqn) ?? GetAttribute(symbol, ImTiredOfCrudAttributeFqn);
             var formName = formAttr is not null ? GetNamedArgString(formAttr, "Name") ?? symbol.Name : symbol.Name;
             var layout = formAttr is not null ? GetNamedArgString(formAttr, "Layout") ?? "vertical" : "vertical";
 
-            // Read [FormGroup] attributes
+            // Read [UiFormGroup] attributes
             var groups = new List<FormGroupInfo>();
             foreach (var attr in symbol.GetAttributes())
             {
-                if (attr.AttributeClass?.ToDisplayString() == FormGroupAttributeFqn)
+                if (attr.AttributeClass?.ToDisplayString() == UiFormGroupAttributeFqn)
                 {
                     var name = attr.ConstructorArguments.Length > 0 ? attr.ConstructorArguments[0].Value as string : null;
                     if (name != null)
@@ -213,8 +213,8 @@ public partial class UiGenerator
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
                 if (prop.GetMethod is null) continue;
 
-                // Check [FormIgnore]
-                if (HasAttribute(prop, FormIgnoreAttributeFqn)) continue;
+                // Check [UiFormIgnore]
+                if (HasAttribute(prop, UiFormIgnoreAttributeFqn)) continue;
                 if (HasAttribute(prop, OneToManyAttributeFqn) || HasAttribute(prop, OneToOneAttributeFqn)) continue;
 
                 var fieldType = ResolveFieldType(prop.Type);
@@ -238,8 +238,8 @@ public partial class UiGenerator
                     field.Options.AddRange(ExtractEnumOptions(prop.Type));
                 }
 
-                // [FormField]
-                var formFieldAttr = GetAttribute(prop, FormFieldAttributeFqn);
+                // [UiField]
+                var formFieldAttr = GetAttribute(prop, UiFormFieldAttributeFqn);
                 if (formFieldAttr != null)
                 {
                     var label = GetNamedArgString(formFieldAttr, "Label");
@@ -251,39 +251,39 @@ public partial class UiGenerator
                     field.Group = GetNamedArgString(formFieldAttr, "Group");
                 }
 
-                // [FormOrder]
-                var formOrderAttr = GetAttribute(prop, FormOrderAttributeFqn);
+                // [UiOrder]
+                var formOrderAttr = GetAttribute(prop, UiFormOrderAttributeFqn);
                 if (formOrderAttr != null && formOrderAttr.ConstructorArguments.Length > 0)
                 {
                     if (formOrderAttr.ConstructorArguments[0].Value is int o)
                         field.Order = o;
                 }
 
-                // [FormSection]
-                var formSectionAttr = GetAttribute(prop, FormSectionAttributeFqn);
+                // [UiSection]
+                var formSectionAttr = GetAttribute(prop, UiFormSectionAttributeFqn);
                 if (formSectionAttr != null && formSectionAttr.ConstructorArguments.Length > 0)
                 {
                     if (formSectionAttr.ConstructorArguments[0].Value is string grp)
                         field.Group = grp;
                 }
 
-                // [FormHidden]
-                if (HasAttribute(prop, FormHiddenAttributeFqn))
+                // [UiFormHidden]
+                if (HasAttribute(prop, UiFormHiddenAttributeFqn))
                     field.IsHidden = true;
 
-                // [FormReadOnly]
-                if (HasAttribute(prop, FormReadOnlyAttributeFqn))
+                // [UiFormReadOnly]
+                if (HasAttribute(prop, UiFormReadOnlyAttributeFqn))
                     field.IsReadOnly = true;
 
-                // [FormDisabled]
-                if (HasAttribute(prop, FormDisabledAttributeFqn))
+                // [UiFormDisabled]
+                if (HasAttribute(prop, UiFormDisabledAttributeFqn))
                     field.IsDisabled = true;
 
                 // UI hint attributes
                 ExtractUiHints(prop, field);
 
-                // [FormConditional]
-                var condAttr = GetAttribute(prop, FormConditionalAttributeFqn);
+                // [UiFormConditional]
+                var condAttr = GetAttribute(prop, UiFormConditionalAttributeFqn);
                 if (condAttr != null && condAttr.ConstructorArguments.Length >= 2)
                 {
                     var condField = condAttr.ConstructorArguments[0].Value as string;
@@ -542,8 +542,8 @@ public partial class UiGenerator
             var isRecord = context.TargetNode is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax;
             var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
 
-            // Read [Table] or [Model] attribute
-            var tableAttr = GetAttribute(symbol, TableAttributeFqn) ?? GetAttribute(symbol, ModelAttributeFqn);
+            // Read [UiTable] or [ImTiredOfCrud] attribute
+            var tableAttr = GetAttribute(symbol, UiTableAttributeFqn) ?? GetAttribute(symbol, ImTiredOfCrudAttributeFqn);
             var tableName = tableAttr is not null ? GetNamedArgString(tableAttr, "Name") ?? symbol.Name : symbol.Name;
             var defaultPageSize = tableAttr is not null ? GetNamedArgInt(tableAttr, "DefaultPageSize") ?? 20 : 20;
             var defaultSort = tableAttr is not null ? GetNamedArgString(tableAttr, "DefaultSort") : null;
@@ -574,8 +574,8 @@ public partial class UiGenerator
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
                 if (prop.GetMethod is null) continue;
 
-                // Check [TableIgnore]
-                if (HasAttribute(prop, TableIgnoreAttributeFqn)) continue;
+                // Check [UiTableIgnore]
+                if (HasAttribute(prop, UiTableIgnoreAttributeFqn)) continue;
                 if (HasAttribute(prop, OneToManyAttributeFqn) || HasAttribute(prop, OneToOneAttributeFqn)) continue;
 
                 var fieldType = ResolveFieldType(prop.Type);
@@ -595,8 +595,8 @@ public partial class UiGenerator
                         col.EnumValues.Add(opt.Value);
                 }
 
-                // [TableColumn]
-                var colAttr = GetAttribute(prop, TableColumnAttributeFqn);
+                // [UiTableColumn]
+                var colAttr = GetAttribute(prop, UiTableColumnAttributeFqn);
                 if (colAttr != null)
                 {
                     var label = GetNamedArgString(colAttr, "Label");
@@ -667,7 +667,7 @@ public partial class UiGenerator
 
                         if (childSchemaUrl == null)
                         {
-                            var targetTableAttr = GetAttribute(targetType, TableAttributeFqn);
+                            var targetTableAttr = GetAttribute(targetType, UiTableAttributeFqn);
                             if (targetTableAttr != null)
                                 childSchemaUrl = GetNamedArgString(targetTableAttr, "SchemaUrl");
                         }
@@ -841,7 +841,7 @@ public partial class UiGenerator
         var explicit_ = GetNamedArgString(attr, "SchemaUrl");
         if (explicit_ != null) return explicit_;
 
-        var targetTableAttr = GetAttribute(targetType, TableAttributeFqn);
+        var targetTableAttr = GetAttribute(targetType, UiTableAttributeFqn);
         if (targetTableAttr != null)
         {
             var fromTable = GetNamedArgString(targetTableAttr, "SchemaUrl");
@@ -858,7 +858,7 @@ public partial class UiGenerator
         var explicit_ = GetNamedArgString(attr, "FormSchemaUrl");
         if (explicit_ != null) return explicit_;
 
-        var targetFormAttr = GetAttribute(targetType, FormAttributeFqn);
+        var targetFormAttr = GetAttribute(targetType, UiFormAttributeFqn);
         if (targetFormAttr != null)
         {
             var targetName = targetType.Name;

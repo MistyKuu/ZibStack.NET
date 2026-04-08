@@ -17,55 +17,55 @@ public enum Difficulty
     Expert
 }
 
-[Form]
-[Table(DefaultSort = "Name", DefaultPageSize = 25)]
-[FormGroup("basic", Label = "Basic Info", Order = 1)]
-[FormGroup("contact", Label = "Contact", Order = 2)]
+[UiForm]
+[UiTable(DefaultSort = "Name", DefaultPageSize = 25)]
+[UiFormGroup("basic", Label = "Basic Info", Order = 1)]
+[UiFormGroup("contact", Label = "Contact", Order = 2)]
 public partial class Player
 {
-    [FormIgnore]
-    [TableColumn(IsVisible = false)]
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [FormField(Label = "Player Name", Placeholder = "Enter name...", Group = "basic")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Label = "Player Name", Placeholder = "Enter name...", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
     [Slider(Min = 1, Max = 100)]
-    [FormField(Group = "basic")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Group = "basic")]
+    [UiTableColumn(Sortable = true)]
     public int Level { get; set; }
 
     [Select(typeof(PlayerRole))]
-    [FormField(Group = "basic", Label = "Role")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Group = "basic", Label = "Role")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public PlayerRole Role { get; set; }
 
     [TextArea(Rows = 5)]
-    [FormField(Group = "contact", HelpText = "Tell us about yourself")]
-    [TableIgnore]
+    [UiFormField(Group = "contact", HelpText = "Tell us about yourself")]
+    [UiTableIgnore]
     public string? Biography { get; set; }
 
     [PasswordInput]
-    [TableIgnore]
+    [UiTableIgnore]
     public required string Password { get; set; }
 
-    [FormConditional("Role", "Admin")]
-    [FormField(Label = "Admin Notes")]
-    [TableIgnore]
+    [UiFormConditional("Role", "Admin")]
+    [UiFormField(Label = "Admin Notes")]
+    [UiTableIgnore]
     public string? AdminNotes { get; set; }
 
     [DatePicker]
-    [FormField(Group = "basic")]
-    [TableColumn(Sortable = true, Format = "yyyy-MM-dd")]
+    [UiFormField(Group = "basic")]
+    [UiTableColumn(Sortable = true, Format = "yyyy-MM-dd")]
     public DateTime CreatedAt { get; set; }
 
-    [FormField(Group = "contact", Label = "Email Address")]
-    [TableColumn(Filterable = true)]
+    [UiFormField(Group = "contact", Label = "Email Address")]
+    [UiTableColumn(Filterable = true)]
     public string? Email { get; set; }
 }
 
-[Form(Name = "SimpleForm")]
+[UiForm(Name = "SimpleForm")]
 public partial class SimpleModel
 {
     public string? FirstName { get; set; }
@@ -74,26 +74,26 @@ public partial class SimpleModel
     public bool IsActive { get; set; }
 }
 
-[Table(DefaultPageSize = 10, DefaultSort = "Title")]
+[UiTable(DefaultPageSize = 10, DefaultSort = "Title")]
 public partial class Article
 {
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public string Title { get; set; } = "";
 
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     public string Author { get; set; } = "";
 
-    [TableColumn(Sortable = true, Format = "yyyy-MM-dd")]
+    [UiTableColumn(Sortable = true, Format = "yyyy-MM-dd")]
     public DateTime PublishedAt { get; set; }
 
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public Difficulty Difficulty { get; set; }
 
-    [TableIgnore]
+    [UiTableIgnore]
     public string Content { get; set; } = "";
 }
 
-[Form]
+[UiForm]
 public partial class FormWithRadioAndFile
 {
     [RadioGroup(typeof(Difficulty))]
@@ -108,13 +108,13 @@ public partial class FormWithRadioAndFile
     [RichText]
     public string? Description { get; set; }
 
-    [FormHidden]
+    [UiFormHidden]
     public string? InternalToken { get; set; }
 
-    [FormReadOnly]
+    [UiFormReadOnly]
     public string? CreatedBy { get; set; }
 
-    [FormDisabled]
+    [UiFormDisabled]
     public string? LockedField { get; set; }
 }
 
@@ -122,10 +122,10 @@ public partial class FormWithRadioAndFile
 
 public partial class CountyView { }
 
-[Table(SchemaUrl = "/custom/postalcodes")]
+[UiTable(SchemaUrl = "/custom/postalcodes")]
 public partial class PostalCodeView { }
 
-[Table(DefaultSort = "Name", DefaultPageSize = 50)]
+[UiTable(DefaultSort = "Name", DefaultPageSize = 50)]
 [Permission("voivodeship.read")]
 [ColumnPermission("Budget", "finance.read")]
 [DataFilter("VoivodeshipId")]
@@ -142,22 +142,22 @@ public partial class PostalCodeView { }
                Confirmation = "Przeliczyć salda?", Permission = "finance.write")]
 public partial class VoivodeshipView
 {
-    [TableColumn(IsVisible = false)]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
 
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     public string Code { get; set; } = "";
 
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     [Computed]
     [ColumnStyle(When = "value < 0", Severity = "danger")]
     [ColumnStyle(When = "value >= 0", Severity = "success")]
     public decimal Budget { get; set; }
 
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     [Computed]
     public int CountyCount { get; set; }
 
@@ -166,8 +166,8 @@ public partial class VoivodeshipView
 
 // ─── Relationship models ([OneToMany] / [OneToOne]) ─────────────────
 
-[Table(SchemaUrl = "/api/tables/task")]
-[Form]
+[UiTable(SchemaUrl = "/api/tables/task")]
+[UiForm]
 [Entity]
 public partial class TaskItem
 {
@@ -176,7 +176,7 @@ public partial class TaskItem
     public int ProjectId { get; set; }
 }
 
-[Table(SchemaUrl = "/api/tables/attachment")]
+[UiTable(SchemaUrl = "/api/tables/attachment")]
 [Entity]
 public partial class Attachment
 {
@@ -185,7 +185,7 @@ public partial class Attachment
     public int ProjectId { get; set; }
 }
 
-[Form]
+[UiForm]
 [Entity]
 public partial class ProjectSettings
 {
@@ -194,17 +194,17 @@ public partial class ProjectSettings
     public int ProjectId { get; set; }
 }
 
-[Form]
-[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+[UiForm]
+[UiTable(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
 [Entity(TableName = "Projects")]
 public partial class ProjectView
 {
-    [FormIgnore]
-    [TableColumn(IsVisible = false)]
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [FormField(Label = "Project Name")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Label = "Project Name")]
+    [UiTableColumn(Sortable = true)]
     public string Name { get; set; } = "";
 
     public int SettingsId { get; set; }

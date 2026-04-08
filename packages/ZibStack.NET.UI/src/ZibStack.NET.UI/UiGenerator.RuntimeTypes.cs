@@ -162,7 +162,7 @@ namespace ZibStack.NET.UI
         }
     }
 
-    /// <summary>Implemented by types with [Form] attribute.</summary>
+    /// <summary>Implemented by types with [UiForm] attribute.</summary>
     public interface IFormDescriptorProvider
     {
     }
@@ -359,7 +359,7 @@ namespace ZibStack.NET.UI
         }
     }
 
-    /// <summary>Implemented by types with [Table] attribute.</summary>
+    /// <summary>Implemented by types with [UiTable] attribute.</summary>
     public interface ITableDescriptorProvider
     {
     }

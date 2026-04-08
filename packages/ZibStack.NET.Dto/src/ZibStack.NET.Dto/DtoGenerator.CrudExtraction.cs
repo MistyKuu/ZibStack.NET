@@ -13,7 +13,7 @@ public partial class DtoGenerator
 
         var attr = symbol.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn
-                              || a.AttributeClass?.ToDisplayString() == UiModelAttributeFqn);
+                              || a.AttributeClass?.ToDisplayString() == UiImTiredOfCrudAttributeFqn);
         if (attr is null) return null;
 
         var route = attr.NamedArguments.FirstOrDefault(a => a.Key == "Route").Value.Value as string;
@@ -301,10 +301,10 @@ public partial class DtoGenerator
 
         if (needsQuery)
         {
-            // Bridge: read [Table(DefaultSort)] if present
+            // Bridge: read [UiTable(DefaultSort)] if present
             string? tableDefaultSort = null;
             var tableAttr = allAttrs.FirstOrDefault(a =>
-                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.TableAttribute");
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.UiTableAttribute");
             if (tableAttr is not null)
                 tableDefaultSort = tableAttr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSort").Value.Value as string;
 
@@ -316,10 +316,10 @@ public partial class DtoGenerator
                 if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn)) continue;
                 if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn)) continue;
 
-                // Bridge: [TableColumn(Filterable = false)] → skip from query
-                // If [TableColumn] exists and Filterable is explicitly false, exclude
+                // Bridge: [UiTableColumn(Filterable = false)] → skip from query
+                // If [UiTableColumn] exists and Filterable is explicitly false, exclude
                 var tableColAttr = prop.GetAttributes().FirstOrDefault(a =>
-                    a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.TableColumnAttribute");
+                    a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.UiTableColumnAttribute");
                 if (tableColAttr is not null)
                 {
                     var filterableArg = tableColAttr.NamedArguments.FirstOrDefault(a => a.Key == "Filterable");
