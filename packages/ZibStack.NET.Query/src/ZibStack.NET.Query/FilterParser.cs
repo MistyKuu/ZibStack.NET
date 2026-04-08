@@ -4,52 +4,184 @@ using System.Collections.Generic;
 namespace ZibStack.NET.Query;
 
 /// <summary>
-/// Parses Gridify-compatible filter strings into <see cref="FilterClause"/> lists.
+/// Parses Gridify-compatible filter strings into expression trees.
 /// <para>Syntax: <c>Field Op Value</c> separated by <c>,</c> (AND) or <c>|</c> (OR).</para>
-/// <para>Operators: <c>= != &lt; &gt; &lt;= &gt;= =* !* ^ !^ $ !$</c></para>
-/// <para>Case insensitive suffix: <c>/i</c> (e.g. <c>Name=john/i</c>)</para>
+/// <para>Grouping: <c>(expr1 | expr2), expr3</c></para>
+/// <para>Operators: <c>= != &lt; &gt; &lt;= &gt;= =* !* ^ !^ $ !$ =in= =out=</c></para>
+/// <para>Case insensitive suffix: <c>/i</c></para>
 /// </summary>
 public static class FilterParser
 {
     private static readonly (string Token, FilterOperator Op)[] Operators =
     {
-        (">=", FilterOperator.GreaterThanOrEqual),
-        ("<=", FilterOperator.LessThanOrEqual),
-        ("!=", FilterOperator.NotEquals),
-        ("=*", FilterOperator.Contains),
-        ("!*", FilterOperator.NotContains),
-        ("!^", FilterOperator.NotStartsWith),
-        ("!$", FilterOperator.NotEndsWith),
-        (">",  FilterOperator.GreaterThan),
-        ("<",  FilterOperator.LessThan),
-        ("=",  FilterOperator.Equals),
-        ("^",  FilterOperator.StartsWith),
-        ("$",  FilterOperator.EndsWith),
+        ("=in=",  FilterOperator.In),
+        ("=out=", FilterOperator.NotIn),
+        (">=",    FilterOperator.GreaterThanOrEqual),
+        ("<=",    FilterOperator.LessThanOrEqual),
+        ("!=",    FilterOperator.NotEquals),
+        ("=*",    FilterOperator.Contains),
+        ("!*",    FilterOperator.NotContains),
+        ("!^",    FilterOperator.NotStartsWith),
+        ("!$",    FilterOperator.NotEndsWith),
+        (">",     FilterOperator.GreaterThan),
+        ("<",     FilterOperator.LessThan),
+        ("=",     FilterOperator.Equals),
+        ("^",     FilterOperator.StartsWith),
+        ("$",     FilterOperator.EndsWith),
     };
 
-    /// <summary>
-    /// Parses a filter string into a list of clauses.
-    /// Currently only supports AND (comma-separated). OR (pipe) and grouping are not yet supported.
-    /// </summary>
+    /// <summary>Parses a filter string into a flat list of AND clauses (backward-compatible).</summary>
     public static List<FilterClause> Parse(string? filter)
     {
         var result = new List<FilterClause>();
         if (string.IsNullOrWhiteSpace(filter))
             return result;
 
-        var parts = SplitTopLevel(filter!);
-        foreach (var part in parts)
-        {
-            var trimmed = part.Trim();
-            if (trimmed.Length == 0) continue;
-
-            var clause = ParseSingle(trimmed);
-            if (clause != null)
-                result.Add(clause);
-        }
-
+        var expr = ParseExpression(filter!);
+        CollectClauses(expr, result);
         return result;
     }
+
+    /// <summary>Parses a filter string into an expression tree supporting AND, OR, and grouping.</summary>
+    public static FilterExpression? ParseExpression(string? filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+            return null;
+
+        var tokens = Tokenize(filter!);
+        var pos = 0;
+        return ParseOr(tokens, ref pos);
+    }
+
+    // ─── Recursive descent parser ───────────────────────────────────
+
+    // Precedence (low→high): OR (|) → AND (,) → atom (leaf or grouped)
+
+    private static FilterExpression? ParseOr(List<Token> tokens, ref int pos)
+    {
+        var left = ParseAnd(tokens, ref pos);
+        if (left is null) return null;
+
+        while (pos < tokens.Count && tokens[pos].Type == TokenType.Or)
+        {
+            pos++; // consume |
+            var right = ParseAnd(tokens, ref pos);
+            if (right is null) break;
+            left = new FilterOr(left, right);
+        }
+
+        return left;
+    }
+
+    private static FilterExpression? ParseAnd(List<Token> tokens, ref int pos)
+    {
+        var left = ParseAtom(tokens, ref pos);
+        if (left is null) return null;
+
+        while (pos < tokens.Count && tokens[pos].Type == TokenType.And)
+        {
+            pos++; // consume ,
+            var right = ParseAtom(tokens, ref pos);
+            if (right is null) break;
+            left = new FilterAnd(left, right);
+        }
+
+        return left;
+    }
+
+    private static FilterExpression? ParseAtom(List<Token> tokens, ref int pos)
+    {
+        if (pos >= tokens.Count) return null;
+
+        if (tokens[pos].Type == TokenType.OpenParen)
+        {
+            pos++; // consume (
+            var expr = ParseOr(tokens, ref pos);
+            if (pos < tokens.Count && tokens[pos].Type == TokenType.CloseParen)
+                pos++; // consume )
+            return expr;
+        }
+
+        if (tokens[pos].Type == TokenType.Expression)
+        {
+            var clause = ParseSingle(tokens[pos].Value);
+            pos++;
+            return clause is not null ? new FilterLeaf(clause) : null;
+        }
+
+        return null;
+    }
+
+    // ─── Tokenizer ──────────────────────────────────────────────────
+
+    private enum TokenType { Expression, And, Or, OpenParen, CloseParen }
+
+    private sealed class Token
+    {
+        public TokenType Type { get; }
+        public string Value { get; }
+        public Token(TokenType type, string value = "")
+        {
+            Type = type;
+            Value = value;
+        }
+    }
+
+    private static List<Token> Tokenize(string input)
+    {
+        var tokens = new List<Token>();
+        var start = 0;
+
+        for (var i = 0; i < input.Length; i++)
+        {
+            var c = input[i];
+
+            if (c == '\\' && i + 1 < input.Length)
+            {
+                i++; // skip escaped char
+                continue;
+            }
+
+            switch (c)
+            {
+                case '(':
+                    FlushExpression(tokens, input, start, i);
+                    tokens.Add(new Token(TokenType.OpenParen));
+                    start = i + 1;
+                    break;
+                case ')':
+                    FlushExpression(tokens, input, start, i);
+                    tokens.Add(new Token(TokenType.CloseParen));
+                    start = i + 1;
+                    break;
+                case ',':
+                    FlushExpression(tokens, input, start, i);
+                    tokens.Add(new Token(TokenType.And));
+                    start = i + 1;
+                    break;
+                case '|':
+                    FlushExpression(tokens, input, start, i);
+                    tokens.Add(new Token(TokenType.Or));
+                    start = i + 1;
+                    break;
+            }
+        }
+
+        FlushExpression(tokens, input, start, input.Length);
+        return tokens;
+    }
+
+    private static void FlushExpression(List<Token> tokens, string input, int start, int end)
+    {
+        if (end > start)
+        {
+            var text = input.Substring(start, end - start).Trim();
+            if (text.Length > 0)
+                tokens.Add(new Token(TokenType.Expression, text));
+        }
+    }
+
+    // ─── Single clause parser ───────────────────────────────────────
 
     private static FilterClause? ParseSingle(string expression)
     {
@@ -71,45 +203,11 @@ public static class FilterParser
                 value = value.Substring(0, value.Length - 2);
             }
 
-            // Unescape Gridify escape sequences
             value = Unescape(value);
-
             return new FilterClause(field, op, value, caseInsensitive);
         }
 
         return null;
-    }
-
-    /// <summary>Splits on commas that are not inside escaped sequences.</summary>
-    private static List<string> SplitTopLevel(string input)
-    {
-        var parts = new List<string>();
-        var start = 0;
-        var depth = 0;
-
-        for (var i = 0; i < input.Length; i++)
-        {
-            var c = input[i];
-
-            if (c == '\\' && i + 1 < input.Length)
-            {
-                i++; // skip escaped char
-                continue;
-            }
-
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
-            else if (c == ',' && depth == 0)
-            {
-                parts.Add(input.Substring(start, i - start));
-                start = i + 1;
-            }
-        }
-
-        if (start < input.Length)
-            parts.Add(input.Substring(start));
-
-        return parts;
     }
 
     private static string Unescape(string value)
@@ -131,5 +229,23 @@ public static class FilterParser
             }
         }
         return new string(chars, 0, pos);
+    }
+
+    private static void CollectClauses(FilterExpression? expr, List<FilterClause> result)
+    {
+        switch (expr)
+        {
+            case FilterLeaf leaf:
+                result.Add(leaf.Clause);
+                break;
+            case FilterAnd and:
+                CollectClauses(and.Left, result);
+                CollectClauses(and.Right, result);
+                break;
+            case FilterOr or:
+                CollectClauses(or.Left, result);
+                CollectClauses(or.Right, result);
+                break;
+        }
     }
 }

@@ -27,4 +27,8 @@ public enum FilterOperator
     EndsWith,
     /// <summary><c>!$</c> — not ends with</summary>
     NotEndsWith,
+    /// <summary><c>=in=</c> — value is in a semicolon-separated list</summary>
+    In,
+    /// <summary><c>=out=</c> — value is not in a semicolon-separated list</summary>
+    NotIn,
 }

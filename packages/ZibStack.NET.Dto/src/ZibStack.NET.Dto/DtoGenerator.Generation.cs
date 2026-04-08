@@ -722,28 +722,24 @@ public partial class DtoGenerator
         if (info.HasQueryDsl)
         {
             sb.AppendLine();
-            sb.AppendLine($"    /// <summary>Applies a Gridify-compatible filter string (e.g. \"Name=*ski,Level&gt;25\").</summary>");
+            sb.AppendLine($"    /// <summary>Applies a Gridify-compatible filter string with AND, OR, grouping, and IN support.</summary>");
             sb.AppendLine($"    public static IQueryable<{info.ClassName}> ApplyDslFilter(IQueryable<{info.ClassName}> query, string? filter)");
             sb.AppendLine("    {");
             sb.AppendLine("        if (string.IsNullOrWhiteSpace(filter)) return query;");
-            sb.AppendLine("        foreach (var clause in ZibStack.NET.Query.FilterParser.Parse(filter))");
+            sb.AppendLine("        var expr = ZibStack.NET.Query.FilterParser.ParseExpression(filter);");
+            sb.AppendLine($"        return ZibStack.NET.Query.FilterApplier.ApplyTree(query, expr, clause => clause.Field.ToLowerInvariant() switch");
             sb.AppendLine("        {");
-            sb.AppendLine("            query = clause.Field.ToLowerInvariant() switch");
-            sb.AppendLine("            {");
             foreach (var prop in info.Properties)
             {
                 var lower = prop.PropertyName.ToLowerInvariant();
-                sb.AppendLine($"                \"{lower}\" => ZibStack.NET.Query.FilterApplier.Apply(query, x => x.{prop.PropertyName}, clause),");
+                sb.AppendLine($"            \"{lower}\" => ZibStack.NET.Query.FilterApplier.BuildPredicate<{info.ClassName}, {prop.OriginalTypeName}>(x => x.{prop.PropertyName}, clause),");
             }
-            // Navigation property paths (e.g. "team.name" → x => x.Team.Name)
             foreach (var nav in info.NavigationPaths)
             {
-                sb.AppendLine($"                \"{nav.DotPath}\" => ZibStack.NET.Query.FilterApplier.Apply(query, x => x.{nav.ExpressionPath}, clause),");
+                sb.AppendLine($"            \"{nav.DotPath}\" => ZibStack.NET.Query.FilterApplier.BuildPredicate<{info.ClassName}, {nav.OriginalTypeName}>(x => x.{nav.ExpressionPath}, clause),");
             }
-            sb.AppendLine("                _ => query,");
-            sb.AppendLine("            };");
-            sb.AppendLine("        }");
-            sb.AppendLine("        return query;");
+            sb.AppendLine("            _ => null,");
+            sb.AppendLine("        });");
             sb.AppendLine("    }");
 
             sb.AppendLine();
