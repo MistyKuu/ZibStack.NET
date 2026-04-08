@@ -1,3 +1,4 @@
+using ZibStack.NET.Core;
 using ZibStack.NET.Dto;
 using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
@@ -50,6 +51,15 @@ public partial class Player
     [UiFormField(Label = "Password", Group = "contact")]
     [PasswordInput]
     public required string Password { get; set; }
+
+    // ─── Relation: belongs to Team ──────────────────────────────────
+    [UiFormField(Label = "Team", Group = "basic")]
+    [UiTableColumn(Sortable = true)]
+    public int? TeamId { get; set; }
+
+    [DtoIgnore] [UiFormIgnore] [UiTableIgnore]
+    [OneToOne]
+    public Team? Team { get; set; }
 
     // Audit fields — auto-filled by generated store
     [DtoIgnore] [UiFormIgnore] public DateTime CreatedAt { get; set; }

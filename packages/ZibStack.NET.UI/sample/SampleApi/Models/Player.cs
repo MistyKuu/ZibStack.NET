@@ -1,5 +1,3 @@
-using ZibStack.NET.Core;
-using ZibStack.NET.Dto;
 using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
 
@@ -12,8 +10,10 @@ public enum PlayerRole
     Admin
 }
 
-// [ImTiredOfCrud] = [CrudApi] + [UiForm] + [UiTable] + [Validate] — all from one attribute!
-[ImTiredOfCrud(DefaultSort = "Name", DefaultPageSize = 20)]
+// ─── UI metadata demo — form + table schemas from attributes ────────
+
+[UiForm]
+[UiTable(DefaultSort = "Name", DefaultPageSize = 20)]
 [UiFormGroup("basic", Label = "Basic Info", Order = 1)]
 [UiFormGroup("contact", Label = "Contact", Order = 2)]
 public partial class Player
@@ -41,15 +41,7 @@ public partial class Player
     [TextArea(Rows = 3)]
     [UiFormField(Group = "contact", HelpText = "Tell us about yourself")]
     [UiTableIgnore]
-    [ListIgnore]
     public string? Biography { get; set; }
-
-    [CreateOnly]
-    [ResponseIgnore]
-    [PasswordInput]
-    [UiTableIgnore]
-    [MinLength(8)]
-    public required string Password { get; set; }
 
     [UiFormConditional("Role", "Admin")]
     [UiFormField(Label = "Admin Notes")]
@@ -60,17 +52,4 @@ public partial class Player
     [UiFormField(Group = "contact", Label = "Email Address")]
     [UiTableColumn(Filterable = true)]
     public string? Email { get; set; }
-
-    // ─── Relation: belongs to Team ──────────────────────────────────
-    [UiFormField(Group = "basic", Label = "Team")]
-    [UiTableColumn(Sortable = true)]
-    public int? TeamId { get; set; }
-
-    [DtoIgnore] [UiFormIgnore] [UiTableIgnore]
-    [OneToOne]
-    public Team? Team { get; set; }
-
-    // Audit — auto-filled by generated store
-    [DtoIgnore] [UiFormIgnore] public DateTime CreatedAt { get; set; }
-    [DtoIgnore] [UiFormIgnore] public DateTime UpdatedAt { get; set; }
 }

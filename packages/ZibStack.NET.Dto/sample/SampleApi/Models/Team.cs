@@ -1,3 +1,4 @@
+using ZibStack.NET.Core;
 using ZibStack.NET.Dto;
 using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
@@ -30,6 +31,10 @@ public partial class Team
     [UiFormField(Label = "Max Members")]
     [UiTableColumn(Sortable = true)]
     public int MaxMembers { get; set; }
+
+    [DtoIgnore] [UiFormIgnore] [UiTableIgnore]
+    [OneToMany(Label = "Players")]
+    public ICollection<Player> Players { get; set; } = new List<Player>();
 
     // Audit
     [DtoIgnore] [UiFormIgnore] public DateTime CreatedAt { get; set; }
