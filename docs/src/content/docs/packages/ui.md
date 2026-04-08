@@ -25,36 +25,36 @@ Source generator for **UI form and table metadata**. Annotate your models and ge
 public enum Region { North, South, East, West }
 
 // ─── Child table views with their own SchemaUrl ────────────────────
-// [OneToMany] resolves SchemaUrl from the target type's [Table] attribute,
+// [OneToMany] resolves SchemaUrl from the target type's [UiTable] attribute,
 // so you declare the URL once on the child — no need to repeat it.
 
-[Table(SchemaUrl = "/api/tables/county")]
+[UiTable(SchemaUrl = "/api/tables/county")]
 public partial class CountyView
 {
     public int Id { get; set; }
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
     public int VoivodeshipId { get; set; }
 }
 
-[Table(SchemaUrl = "/api/tables/postalcode")]
+[UiTable(SchemaUrl = "/api/tables/postalcode")]
 public partial class PostalCodeView
 {
     public int Id { get; set; }
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     public string Code { get; set; } = "";
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     public string City { get; set; } = "";
     public int VoivodeshipId { get; set; }
 }
 
 // ─── Main view — forms + tables + ERP features ────────────────────
 
-[Form]
-[Table(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
-[FormGroup("basic", Label = "Basic Info", Order = 1)]
-[FormGroup("contact", Label = "Contact", Order = 2)]
-[FormGroup("finance", Label = "Finance", Order = 3)]
+[UiForm]
+[UiTable(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
+[UiFormGroup("basic", Label = "Basic Info", Order = 1)]
+[UiFormGroup("contact", Label = "Contact", Order = 2)]
+[UiFormGroup("finance", Label = "Finance", Order = 3)]
 
 // Per-row action buttons
 [RowAction("showDetails", Label = "Details", Endpoint = "/api/voivodeships/{id}")]
@@ -76,66 +76,66 @@ public partial class PostalCodeView
 [DataFilter("VoivodeshipId")]
 public partial class VoivodeshipView
 {
-    [FormIgnore]
-    [TableColumn(IsVisible = false)]
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
     // Validation: cross-package with ZibStack.NET.Validation / DataAnnotations
     [Required] [MinLength(2)] [MaxLength(100)]
-    [FormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
     [Required] [Match(@"^[A-Z]{2}$")]
-    [FormField(Label = "Code", HelpText = "Two-letter code (e.g. NY, CA)", Group = "basic")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Label = "Code", HelpText = "Two-letter code (e.g. NY, CA)", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Code { get; set; }
 
     [Select(typeof(Region))]
-    [FormField(Label = "Region", Group = "basic")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Label = "Region", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public Region Region { get; set; }
 
     [Required] [Email]
-    [FormField(Label = "Contact Email", Placeholder = "office@example.com", Group = "contact")]
-    [TableIgnore]
+    [UiFormField(Label = "Contact Email", Placeholder = "office@example.com", Group = "contact")]
+    [UiTableIgnore]
     public required string ContactEmail { get; set; }
 
     [Url]
-    [FormField(Label = "Website", Group = "contact")]
-    [TableIgnore]
+    [UiFormField(Label = "Website", Group = "contact")]
+    [UiTableIgnore]
     public string? Website { get; set; }
 
     // Computed column with conditional styling
-    [FormIgnore]
-    [TableColumn(Sortable = true, Label = "Budget")]
+    [UiFormIgnore]
+    [UiTableColumn(Sortable = true, Label = "Budget")]
     [Computed]
     [ColumnStyle(When = "value < 0", Severity = "danger")]
     [ColumnStyle(When = "value >= 0", Severity = "success")]
     public decimal Budget { get; set; }
 
-    [FormIgnore]
-    [TableColumn(Sortable = true, Label = "County Count")]
+    [UiFormIgnore]
+    [UiTableColumn(Sortable = true, Label = "County Count")]
     [Computed]
     public int CountyCount { get; set; }
 
     [Range(1900, 2100)]
-    [FormField(Label = "Established Year", Group = "basic")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Label = "Established Year", Group = "basic")]
+    [UiTableColumn(Sortable = true)]
     public int EstablishedYear { get; set; }
 
     // Conditional field — only visible when Region == North
-    [FormConditional("Region", "North")]
-    [FormField(Label = "Has Coastline", Group = "basic")]
-    [TableIgnore]
+    [UiFormConditional("Region", "North")]
+    [UiFormField(Label = "Has Coastline", Group = "basic")]
+    [UiTableIgnore]
     public bool HasCoastline { get; set; }
 
-    [FormField(Label = "Notes", Group = "finance")]
+    [UiFormField(Label = "Notes", Group = "finance")]
     [TextArea(Rows = 3)]
-    [TableIgnore]
+    [UiTableIgnore]
     public string? Notes { get; set; }
 
-    [FormHidden]
+    [UiFormHidden]
     public int VoivodeshipId { get; set; }
 
     [OneToMany(Label = "Counties")]
@@ -305,8 +305,8 @@ app.MapGet("/api/tables/voivodeship", () =>
 Define relationships on navigation properties — a single declaration drives both table drill-down and form sub-forms:
 
 ```csharp
-[Table(SchemaUrl = "/api/tables/task")]
-[Form]
+[UiTable(SchemaUrl = "/api/tables/task")]
+[UiForm]
 public partial class TaskItem
 {
     public int Id { get; set; }
@@ -314,23 +314,23 @@ public partial class TaskItem
     public int ProjectId { get; set; }  // FK auto-detected by convention
 }
 
-[Form]
+[UiForm]
 public partial class ProjectSettings
 {
     public int Id { get; set; }
     public string Theme { get; set; } = "";
 }
 
-[Form]
-[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+[UiForm]
+[UiTable(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
 public partial class ProjectView
 {
-    [FormIgnore]
-    [TableColumn(IsVisible = false)]
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [FormField(Label = "Project Name")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Label = "Project Name")]
+    [UiTableColumn(Sortable = true)]
     public string Name { get; set; } = "";
 
     public int SettingsId { get; set; }
@@ -361,7 +361,7 @@ Navigation properties are automatically excluded from form fields and table colu
 
 Both `[OneToMany]` and `[OneToOne]` resolve URLs with the same priority:
 1. Explicit property on the attribute
-2. From target type's `[Table]` / `[Form]` attribute
+2. From target type's `[UiTable]` / `[UiForm]` attribute
 3. Convention fallback (e.g. `/api/tables/{name}`, `/api/forms/{name}`)
 
 ### Generated JSON
@@ -408,15 +408,15 @@ Add `[Entity]` to any model class to generate `IEntityTypeConfiguration<T>` at c
 Requires `Microsoft.EntityFrameworkCore` and a relational provider (e.g. `Microsoft.EntityFrameworkCore.SqlServer`) in your project. Generation is skipped automatically if EF Core is not referenced.
 
 ```csharp
-[Form]
-[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
+[UiForm]
+[UiTable(DefaultSort = "Name", SchemaUrl = "/api/tables/project")]
 [Entity(TableName = "Projects")]
 public partial class ProjectView
 {
     public int Id { get; set; }
 
-    [FormField(Label = "Project Name")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Label = "Project Name")]
+    [UiTableColumn(Sortable = true)]
     public string Name { get; set; } = "";
 
     public int SettingsId { get; set; }
@@ -514,61 +514,61 @@ public class County
 
 ```csharp
 // Create form — only fields the user should fill in, with validation
-[Form]
-[FormGroup("basic", Label = "Basic Info")]
+[UiForm]
+[UiFormGroup("basic", Label = "Basic Info")]
 public partial class CreateVoivodeshipRequest
 {
     [Required] [MinLength(2)] [MaxLength(100)]
-    [FormField(Label = "Name", Placeholder = "e.g. California")]
+    [UiFormField(Label = "Name", Placeholder = "e.g. California")]
     public required string Name { get; set; }
 
     [Required] [Match(@"^[A-Z]{2}$")]
-    [FormField(Label = "Code", Placeholder = "e.g. CA", HelpText = "Two-letter code")]
+    [UiFormField(Label = "Code", Placeholder = "e.g. CA", HelpText = "Two-letter code")]
     public required string Code { get; set; }
 
     [Range(0, 100_000_000)]
-    [FormField(Label = "Population")]
+    [UiFormField(Label = "Population")]
     public int Population { get; set; }
 }
 
 // Child table — declares its own SchemaUrl
-[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/county")]
+[UiTable(DefaultSort = "Name", SchemaUrl = "/api/tables/county")]
 public partial class CountyTableView
 {
-    [TableColumn(IsVisible = false)]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
     public int VoivodeshipId { get; set; }
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
-    [TableColumn(Sortable = true, Format = "N0")]
+    [UiTableColumn(Sortable = true, Format = "N0")]
     public int Population { get; set; }
 }
 
-// Parent table — [ChildTable] resolves SchemaUrl from CountyTableView's [Table]
-[Table(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
+// Parent table — [ChildTable] resolves SchemaUrl from CountyTableView's [UiTable]
+[UiTable(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
 [ChildTable(typeof(CountyTableView), ForeignKey = "VoivodeshipId", Label = "Counties")]
 [RowAction("edit", Label = "Edit", Endpoint = "/api/voivodeships/{id}")]
 [ToolbarAction("export", Label = "Export", Endpoint = "/api/voivodeships/export",
                SelectionMode = "multiple")]
 public partial class VoivodeshipTableView
 {
-    [TableColumn(IsVisible = false)]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
 
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     public string Code { get; set; } = "";
 
-    [TableColumn(Sortable = true, Format = "N0")]
+    [UiTableColumn(Sortable = true, Format = "N0")]
     public int Population { get; set; }
 
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     [Computed]
     public int CountyCount { get; set; }
 
-    [TableColumn(Sortable = true, Format = "yyyy-MM-dd")]
+    [UiTableColumn(Sortable = true, Format = "yyyy-MM-dd")]
     public DateTime CreatedAt { get; set; }
 }
 ```
@@ -639,16 +639,16 @@ The key insight: **entity has internal fields** (IsDeleted, UpdatedAt, navigatio
 Works the same with Dapper, ADO.NET, REST APIs, or any data source — just annotate your DTOs/ViewModels:
 
 ```csharp
-[Form]
-[Table(DefaultSort = "Name")]
+[UiForm]
+[UiTable(DefaultSort = "Name")]
 public partial class ProductView
 {
-    [FormField(Label = "Name")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Label = "Name")]
+    [UiTableColumn(Sortable = true)]
     public string Name { get; set; } = "";
 
     [Slider(Min = 0, Max = 10000)]
-    [TableColumn(Sortable = true)]
+    [UiTableColumn(Sortable = true)]
     [ColumnStyle(When = "value < 10", Severity = "warning")]
     public int Stock { get; set; }
 }
@@ -782,21 +782,21 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[Form]` | Mark for form generation | `Name?`, `Layout?` |
-| `[FormGroup("name")]` | Define field group | `Label?`, `Order?` (AllowMultiple) |
+| `[UiForm]` | Mark for form generation | `Name?`, `Layout?` |
+| `[UiFormGroup("name")]` | Define field group | `Label?`, `Order?` (AllowMultiple) |
 
 ### Form — Property-level
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[FormField]` | Customize field | `Label?`, `Placeholder?`, `HelpText?`, `Order?`, `Group?` |
-| `[FormIgnore]` | Exclude from form | — |
-| `[FormHidden]` | In data but not rendered | — |
-| `[FormOrder(n)]` | Explicit ordering | `int order` |
-| `[FormReadOnly]` | Read-only field | — |
-| `[FormDisabled]` | Disabled field | — |
-| `[FormSection("group")]` | Assign to group | `string group` |
-| `[FormConditional("field", "value")]` | Conditional visibility | `Operator?` |
+| `[UiFormField]` | Customize field | `Label?`, `Placeholder?`, `HelpText?`, `Order?`, `Group?` |
+| `[UiFormIgnore]` | Exclude from form | — |
+| `[UiFormHidden]` | In data but not rendered | — |
+| `[UiFormOrder(n)]` | Explicit ordering | `int order` |
+| `[UiFormReadOnly]` | Read-only field | — |
+| `[UiFormDisabled]` | Disabled field | — |
+| `[UiFormSection("group")]` | Assign to group | `string group` |
+| `[UiFormConditional("field", "value")]` | Conditional visibility | `Operator?` |
 
 ### UI Control Hints — Property-level
 
@@ -819,14 +819,14 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[Table]` | Mark for table generation | `Name?`, `DefaultPageSize?`, `PageSizes?`, `DefaultSort?`, `DefaultSortDirection?`, `SchemaUrl?` |
+| `[UiTable]` | Mark for table generation | `Name?`, `DefaultPageSize?`, `PageSizes?`, `DefaultSort?`, `DefaultSortDirection?`, `SchemaUrl?` |
 
 ### Table — Property-level
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[TableColumn]` | Customize column | `Label?`, `Sortable?`, `Filterable?`, `Format?`, `Order?`, `IsVisible?`, `Width?` |
-| `[TableIgnore]` | Exclude from table | — |
+| `[UiTableColumn]` | Customize column | `Label?`, `Sortable?`, `Filterable?`, `Format?`, `Order?`, `IsVisible?`, `Width?` |
+| `[UiTableIgnore]` | Exclude from table | — |
 
 ### Relationships — Property-level
 
@@ -864,19 +864,19 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 Both `[OneToMany]`/`[OneToOne]` and legacy `[ChildTable]` resolve `SchemaUrl` for drill-down with the following priority:
 
 1. **Explicit** — `SchemaUrl = "/custom/url"` on the attribute itself
-2. **From target type** — `[Table(SchemaUrl = "/api/tables/county")]` on `T` itself
+2. **From target type** — `[UiTable(SchemaUrl = "/api/tables/county")]` on `T` itself
 3. **Convention** — strip `View` suffix, lowercase → `/api/tables/{name}` (e.g. `CountyView` → `/api/tables/county`)
 
-`FormSchemaUrl` (available on `[OneToMany]`/`[OneToOne]`) follows the same pattern but checks for `[Form]` on the target type.
+`FormSchemaUrl` (available on `[OneToMany]`/`[OneToOne]`) follows the same pattern but checks for `[UiForm]` on the target type.
 
-This means you typically declare `SchemaUrl` once on the child type's `[Table]` and it propagates to all parents that reference it.
+This means you typically declare `SchemaUrl` once on the child type's `[UiTable]` and it propagates to all parents that reference it.
 
 ## Default Behavior
 
-- All public properties included unless `[FormIgnore]` / `[TableIgnore]`
+- All public properties included unless `[UiFormIgnore]` / `[UiTableIgnore]`
 - UI hint auto-detected from C# type: `string` → text, `bool` → checkbox, `enum` → select, `DateTime` → datePicker
 - Labels humanized from property names: `FirstName` → "First Name"
-- A class can have both `[Form]` and `[Table]`
+- A class can have both `[UiForm]` and `[UiTable]`
 
 ## Cross-Package Integration
 

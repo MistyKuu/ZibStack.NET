@@ -1,0 +1,30 @@
+name: Release ZibStack.NET.Query
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version (e.g. 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet build ZibStack.NET.slnx -c Release
+      - run: dotnet test packages/ZibStack.NET.Query/tests/ZibStack.NET.Query.Tests/ZibStack.NET.Query.Tests.csproj -c Release --no-build
+      - run: dotnet pack packages/ZibStack.NET.Query/src/ZibStack.NET.Query/ZibStack.NET.Query.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+      - run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: query-v${{ inputs.version }}
+          name: ZibStack.NET.Query v${{ inputs.version }}
+          generate_release_notes: true
+          files: ./artifacts/*.nupkg

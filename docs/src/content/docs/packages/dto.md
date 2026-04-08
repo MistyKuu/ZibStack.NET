@@ -13,10 +13,10 @@ A C# source generator that produces strongly-typed **Create**, **Update**, **Res
 
 ```
 dotnet add package ZibStack.NET.Dto
-dotnet add package ZibStack.NET.Utils
+dotnet add package ZibStack.NET.Core
 ```
 
-`ZibStack.NET.Utils` provides TypeScript-style utility types (`[PartialFrom]`, `[IntersectFrom]`, `[PickFrom]`, `[OmitFrom]`).
+`ZibStack.NET.Core` provides TypeScript-style utility types (`[PartialFrom]`, `[IntersectFrom]`, `[PickFrom]`, `[OmitFrom]`).
 
 ## Quick start
 
@@ -232,7 +232,7 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `PaginatedResponse<T>` | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` |
 | `DtoValidationResult` | Per-property validation errors with `IsValid`, `Errors`, `AddError()`, `Merge()`, `ToDictionary()` |
 
-> **Note:** `[PartialFrom]`, `[IntersectFrom]`, `[PickFrom]`, `[OmitFrom]` are in the separate [`ZibStack.NET.Utils`](https://www.nuget.org/packages/ZibStack.NET.Utils) package.
+> **Note:** `[PartialFrom]`, `[IntersectFrom]`, `[PickFrom]`, `[OmitFrom]` are in the separate [`ZibStack.NET.Core`](https://www.nuget.org/packages/ZibStack.NET.Core) package.
 
 ### `required` keyword
 
@@ -311,12 +311,12 @@ public partial record CreateUserRequest;
 // DTO has "Name" property, ToEntity() writes to "FirstName"
 ```
 
-## Utility types (from `ZibStack.NET.Utils`)
+## Utility types (from `ZibStack.NET.Core`)
 
-TypeScript-style utility types are available in the separate [`ZibStack.NET.Utils`](/ZibStack.NET/packages/utils/) package:
+TypeScript-style utility types are available in the separate [`ZibStack.NET.Core`](/ZibStack.NET/packages/core/) package:
 
 ```csharp
-using ZibStack.NET.Utils;
+using ZibStack.NET.Core;
 
 [PartialFrom(typeof(Player))]       // all properties optional + ApplyTo()
 public partial record PartialPlayer;
@@ -332,7 +332,7 @@ public partial record PlayerWithoutMeta;
 public partial record PlayerWithAddress;
 ```
 
-See the [ZibStack.NET.Utils documentation](/ZibStack.NET/packages/utils/) for full documentation.
+See the [ZibStack.NET.Core documentation](/ZibStack.NET/packages/core/) for full documentation.
 
 ## Query / Filter DTO (`[QueryDto]`)
 

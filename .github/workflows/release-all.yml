@@ -34,6 +34,9 @@ jobs:
       - name: Test UI
         run: dotnet test packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj -c Release --no-build
 
+      - name: Test Query
+        run: dotnet test packages/ZibStack.NET.Query/tests/ZibStack.NET.Query.Tests/ZibStack.NET.Query.Tests.csproj -c Release --no-build
+
       # Pack in dependency order
       - name: Pack 1 — Aop.Abstractions
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Abstractions/ZibStack.NET.Aop.Abstractions.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
@@ -47,8 +50,8 @@ jobs:
       - name: Pack 4 — Log
         run: dotnet pack packages/ZibStack.NET.Log/src/ZibStack.NET.Log/ZibStack.NET.Log.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 5 — Utils
-        run: dotnet pack packages/ZibStack.NET.Utils/src/ZibStack.NET.Utils/ZibStack.NET.Utils.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+      - name: Pack 5 — Core
+        run: dotnet pack packages/ZibStack.NET.Core/src/ZibStack.NET.Core/ZibStack.NET.Core.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       - name: Pack 6 — Dto
         run: dotnet pack packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
@@ -67,6 +70,9 @@ jobs:
 
       - name: Pack 11 — UI
         run: dotnet pack packages/ZibStack.NET.UI/src/ZibStack.NET.UI/ZibStack.NET.UI.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 12 — Query
+        run: dotnet pack packages/ZibStack.NET.Query/src/ZibStack.NET.Query/ZibStack.NET.Query.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       # Push all at once (NuGet resolves deps from same push)
       - name: Push to NuGet

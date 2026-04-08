@@ -180,28 +180,28 @@ if (!result.IsValid) return BadRequest(result.Errors);
 
 ```csharp
 // Annotate models for forms + tables — generates JSON metadata at compile time:
-[Form]
-[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/player")]
-[FormGroup("basic", Label = "Basic Info", Order = 1)]
+[UiForm]
+[UiTable(DefaultSort = "Name", SchemaUrl = "/api/tables/player")]
+[UiFormGroup("basic", Label = "Basic Info", Order = 1)]
 public partial class PlayerView
 {
-    [FormIgnore]
-    [TableColumn(IsVisible = false)]
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
     [Required] [MinLength(2)]
-    [FormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
     [Select(typeof(Region))]
-    [FormField(Label = "Region", Group = "basic")]
-    [TableColumn(Sortable = true, Filterable = true)]
+    [UiFormField(Label = "Region", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public Region Region { get; set; }
 
     [Slider(Min = 1, Max = 100)]
-    [FormField(Label = "Level", Group = "basic")]
-    [TableColumn(Sortable = true)]
+    [UiFormField(Label = "Level", Group = "basic")]
+    [UiTableColumn(Sortable = true)]
     public int Level { get; set; }
 }
 

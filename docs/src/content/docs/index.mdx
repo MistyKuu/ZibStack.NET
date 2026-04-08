@@ -52,9 +52,14 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 		[Learn more](/ZibStack.NET/packages/result/)
 	</Card>
-	<Card title="Utils" icon="puzzle">
-		TypeScript-style utility types: `[PartialFrom]`, `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]`.
+	<Card title="Core" icon="puzzle">
+		Shared attributes: relationships (`[OneToMany]`, `[OneToOne]`, `[Entity]`) and TypeScript-style utility types (`[PartialFrom]`, `[PickFrom]`, `[OmitFrom]`).
 
-		[Learn more](/ZibStack.NET/packages/utils/)
+		[Learn more](/ZibStack.NET/packages/core/)
+	</Card>
+	<Card title="Query" icon="magnifier">
+		Filter/sort DSL for REST APIs: `filter=Level>25,Team.Name=Lakers&sort=-Level&select=Name,Level`.
+
+		[Learn more](/ZibStack.NET/packages/query/)
 	</Card>
 </CardGrid>
