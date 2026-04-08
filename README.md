@@ -95,11 +95,8 @@ public class MetricsHandler : IAsyncAspectHandler
 ### ZibStack.NET.Dto
 
 ```csharp
-[CreateDto]                                        // → CreatePlayerRequest with ToEntity()
-[UpdateDto]                                        // → UpdatePlayerRequest with ApplyTo()
-[ResponseDto]                                      // → PlayerResponse with FromEntity() + ProjectFrom()
-[QueryDto(Sortable = true, DefaultSort = "Name")]  // → PlayerQuery with Apply(IQueryable)
-[CrudApi(Style = ApiStyle.Both)]                   // → Minimal API + MVC Controller
+// One attribute = full CRUD API with auto-generated DTOs + endpoints:
+[CrudApi]
 public class Player
 {
     [DtoIgnore]  public int Id { get; set; }
@@ -108,14 +105,20 @@ public class Player
     public string? Email { get; set; }
 
     [CreateOnly]     public required string Password { get; set; }
-    [UpdateOnly]     public string? DeactivationReason { get; set; }
     [ResponseIgnore] public DateTime CreatedAt { get; set; }
 }
 
-// Program.cs — that's it:
-builder.Services.AddScoped<ICrudStore<Player, int>, PlayerStore>();
-app.MapPlayerEndpoints();   // GET/POST/PATCH/DELETE api/players
-app.MapControllers();       // generated PlayerCrudController
+// EF Core — auto-generated stores from DbContext:
+[GenerateCrudStores]
+public class AppDbContext : DbContext
+{
+    public DbSet<Player> Players => Set<Player>();
+}
+
+// Program.cs — three lines:
+builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite("Data Source=app.db"));
+builder.Services.AddAppDbContextCrudStores();   // auto-generated DI registration
+app.MapPlayerEndpoints();                        // auto-generated GET/POST/PATCH/DELETE
 ```
 
 ### ZibStack.NET.Result
@@ -154,39 +157,57 @@ var result = request.Validate();
 if (!result.IsValid) return BadRequest(result.Errors);
 ```
 
+### ZibStack.NET.UI
+
+```csharp
+// Annotate models for forms + tables — generates JSON metadata at compile time:
+[Form]
+[Table(DefaultSort = "Name", SchemaUrl = "/api/tables/player")]
+[FormGroup("basic", Label = "Basic Info", Order = 1)]
+public partial class PlayerView
+{
+    [FormIgnore]
+    [TableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [Required] [MinLength(2)]
+    [FormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
+    [TableColumn(Sortable = true, Filterable = true)]
+    public required string Name { get; set; }
+
+    [Select(typeof(Region))]
+    [FormField(Label = "Region", Group = "basic")]
+    [TableColumn(Sortable = true, Filterable = true)]
+    public Region Region { get; set; }
+
+    [Slider(Min = 1, Max = 100)]
+    [FormField(Label = "Level", Group = "basic")]
+    [TableColumn(Sortable = true)]
+    public int Level { get; set; }
+}
+
+// Generated: PlayerViewFormDescriptor, PlayerViewTableDescriptor, PlayerViewJsonSchema
+// → Consume from Blazor, React, Vue, Angular — framework-agnostic JSON metadata
+```
 
 ## Repository Structure
 
 ```
 ZibStack.NET/
 ├── packages/
-│   ├── ZibStack.NET.Aop/          → AOP framework (aspects, interceptors)
-│   │   ├── src/                   → Generator + Abstractions
-│   │   └── sample/                → Sample with custom aspects
-│   ├── ZibStack.NET.Log/          → Logging source generator
-│   │   ├── src/                   → Generator + Abstractions
-│   │   ├── tests/                 → Unit tests + Benchmarks
-│   │   └── sample/                → Sample API
-│   ├── ZibStack.NET.Utils/         → TypeScript-style utility types (PartialFrom, IntersectFrom, etc.)
-│   │   └── src/                   → Generator
-│   ├── ZibStack.NET.Dto/          → DTO source generator
-│   │   ├── src/                   → Generator
-│   │   ├── tests/                 → Unit tests
-│   │   └── sample/                → Sample API
-│   ├── ZibStack.NET.Result/       → Result monad (Map/Bind/Match)
-│   │   ├── src/                   → Library
-│   │   └── tests/                 → Unit tests
-│   ├── ZibStack.NET.Validation/   → Validation source generator
-│   │   ├── src/                   → Generator
-│   │   └── tests/                 → Unit tests
+│   ├── ZibStack.NET.Aop/              → AOP framework (aspects, interceptors)
+│   ├── ZibStack.NET.Log/              → Logging source generator
+│   ├── ZibStack.NET.Utils/            → TypeScript-style utility types
+│   ├── ZibStack.NET.Dto/              → DTO + CRUD API source generator
+│   ├── ZibStack.NET.EntityFramework/  → EF Core integration for Dto CRUD
+│   ├── ZibStack.NET.Dapper/           → Dapper integration for Dto CRUD
+│   ├── ZibStack.NET.Result/           → Result monad (Map/Bind/Match)
+│   ├── ZibStack.NET.Validation/       → Validation source generator
+│   └── ZibStack.NET.UI/               → UI form/table metadata generator
 ├── .github/workflows/
-│   ├── ci.yml                     → Builds & tests all packages
-│   ├── release-aop.yml            → Release ZibStack.NET.Aop to NuGet
-│   ├── release-log.yml            → Release ZibStack.NET.Log to NuGet
-│   ├── release-utils.yml           → Release ZibStack.NET.Utils to NuGet
-│   ├── release-dto.yml            → Release ZibStack.NET.Dto to NuGet
-│   ├── release-result.yml         → Release ZibStack.NET.Result to NuGet
-│   └── release-validation.yml     → Release ZibStack.NET.Validation to NuGet
+│   ├── ci.yml                         → Builds & tests all packages
+│   ├── release-all.yml                → Release all packages to NuGet
+│   └── release-{package}.yml          → Individual package releases
 └── ZibStack.NET.slnx
 ```
 
