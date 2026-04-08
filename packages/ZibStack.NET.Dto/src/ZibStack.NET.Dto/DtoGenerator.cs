@@ -26,6 +26,7 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
     private const string QueryIgnoreAttributeFqn = "ZibStack.NET.Dto.QueryIgnoreAttribute";
     private const string ListIgnoreAttributeFqn = "ZibStack.NET.Dto.ListIgnoreAttribute";
+    private const string UiModelAttributeFqn = "ZibStack.NET.UI.ModelAttribute";
     private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -292,6 +293,56 @@ public partial class DtoGenerator : IIncrementalGenerator
             }
         });
 
+        // [Model] (from ZibStack.NET.UI) → same as [CrudApi] — implied DTOs
+        var modelImpliedDtos = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                UiModelAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) =>
+                {
+                    // Skip if explicit [CrudApi] exists
+                    var hasCrud = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Dto.CrudApiAttribute");
+                    return hasCrud ? null : GetCrudImpliedDtos(ctx);
+                })
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation), static (spc, pair) =>
+        {
+            var (implied, hasFluent) = pair;
+            var nestedSeen = new HashSet<string>();
+            foreach (var classInfo in implied.CreateDtos)
+            {
+                var source = GenerateSource(classInfo, hasFluent);
+                spc.AddSource($"{classInfo.FullyQualifiedName}.Create.Model.g.cs", source);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+            }
+            foreach (var classInfo in implied.UpdateDtos)
+            {
+                var source = GenerateSource(classInfo, hasFluent);
+                spc.AddSource($"{classInfo.FullyQualifiedName}.Update.Model.g.cs", source);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+            }
+            foreach (var responseInfo in implied.ResponseDtos)
+            {
+                var source = GenerateResponseDtoSource(responseInfo);
+                spc.AddSource($"{responseInfo.FullyQualifiedName}.Response.Model.g.cs", source);
+                if (responseInfo.ListResponseName is not null && responseInfo.ListProperties is not null)
+                {
+                    var listInfo = new ResponseDtoInfo(responseInfo.ClassName, responseInfo.Namespace, responseInfo.FullyQualifiedName,
+                        responseInfo.ListResponseName, responseInfo.ListProperties);
+                    var listSource = GenerateResponseDtoSource(listInfo);
+                    spc.AddSource($"{responseInfo.FullyQualifiedName}.ListItem.Model.g.cs", listSource);
+                }
+            }
+            foreach (var queryInfo in implied.QueryDtos)
+            {
+                var source = GenerateQueryDtoSource(queryInfo);
+                spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.Model.g.cs", source);
+            }
+        });
+
         // Detect ASP.NET Core for CRUD API generation
         var hasAspNetCore = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Http.Results") is not null);
@@ -322,6 +373,30 @@ public partial class DtoGenerator : IIncrementalGenerator
                 var source = GenerateControllerSource(info);
                 spc.AddSource($"{info.FullyQualifiedName}.Controller.g.cs", source);
             }
+        });
+
+        // [Model] (from ZibStack.NET.UI) → CRUD endpoints
+        var modelCrudDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                UiModelAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) =>
+                {
+                    var hasCrud = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Dto.CrudApiAttribute");
+                    return hasCrud ? null : GetCrudApiInfo(ctx);
+                })
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(modelCrudDeclarations.Combine(hasAspNetCore), static (spc, pair) =>
+        {
+            var (info, hasAsp) = pair;
+            if (!hasAsp) return;
+            if (info.Style == StyleMinimalApi || info.Style == StyleBoth)
+                spc.AddSource($"{info.FullyQualifiedName}.Endpoints.Model.g.cs", GenerateMinimalApiSource(info));
+            if (info.Style == StyleController || info.Style == StyleBoth)
+                spc.AddSource($"{info.FullyQualifiedName}.Controller.Model.g.cs", GenerateControllerSource(info));
         });
     }
 

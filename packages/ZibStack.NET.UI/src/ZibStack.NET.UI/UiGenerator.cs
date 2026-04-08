@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -9,6 +10,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     // ─── FQN constants ───────────────────────────────────────────────────
 
     // Class-level
+    private const string ModelAttributeFqn = "ZibStack.NET.UI.ModelAttribute";
     private const string FormAttributeFqn = "ZibStack.NET.UI.FormAttribute";
     private const string FormGroupAttributeFqn = "ZibStack.NET.UI.FormGroupAttribute";
     private const string TableAttributeFqn = "ZibStack.NET.UI.TableAttribute";
@@ -108,6 +110,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             ctx.AddSource("DataFilterAttribute.g.cs", DataFilterAttributeSource);
             ctx.AddSource("ComputedAttribute.g.cs", ComputedAttributeSource);
             ctx.AddSource("ColumnStyleAttribute.g.cs", ColumnStyleAttributeSource);
+            ctx.AddSource("ModelAttribute.g.cs", ModelAttributeSource);
 
             // Runtime types
             ctx.AddSource("FormDescriptor.g.cs", FormDescriptorSource);
@@ -142,6 +145,46 @@ public sealed partial class UiGenerator : IIncrementalGenerator
         {
             spc.AddSource($"{info.HintName}.Table.g.cs", GenerateTableDescriptor(info));
             spc.AddSource($"{info.HintName}.TableJson.g.cs", GenerateTableJson(info));
+        });
+
+        // ─── [Model] meta-attribute pipeline — implies [Form] + [Table] ──
+        var modelFormTargets = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                ModelAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
+                transform: static (ctx, _) =>
+                {
+                    // Only generate form if explicit [Form] is not present
+                    var hasForm = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == FormAttributeFqn);
+                    return hasForm ? null : ExtractFormInfo(ctx);
+                })
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(modelFormTargets, static (spc, info) =>
+        {
+            spc.AddSource($"{info.HintName}.Form.Model.g.cs", GenerateFormDescriptor(info));
+            spc.AddSource($"{info.HintName}.FormJson.Model.g.cs", GenerateFormJson(info));
+        });
+
+        var modelTableTargets = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                ModelAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
+                transform: static (ctx, _) =>
+                {
+                    var hasTable = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == TableAttributeFqn);
+                    return hasTable ? null : ExtractTableInfo(ctx);
+                })
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(modelTableTargets, static (spc, info) =>
+        {
+            spc.AddSource($"{info.HintName}.Table.Model.g.cs", GenerateTableDescriptor(info));
+            spc.AddSource($"{info.HintName}.TableJson.Model.g.cs", GenerateTableJson(info));
         });
 
         // ─── Entity pipeline (EF Core — opt-in via [Entity]) ────────────

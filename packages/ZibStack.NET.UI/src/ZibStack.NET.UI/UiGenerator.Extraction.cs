@@ -182,10 +182,10 @@ public partial class UiGenerator
             var isRecord = context.TargetNode is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax;
             var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
 
-            // Read [Form] attribute
-            var formAttr = GetAttribute(symbol, FormAttributeFqn);
-            var formName = GetNamedArgString(formAttr!, "Name") ?? symbol.Name;
-            var layout = GetNamedArgString(formAttr!, "Layout") ?? "vertical";
+            // Read [Form] or [Model] attribute
+            var formAttr = GetAttribute(symbol, FormAttributeFqn) ?? GetAttribute(symbol, ModelAttributeFqn);
+            var formName = formAttr is not null ? GetNamedArgString(formAttr, "Name") ?? symbol.Name : symbol.Name;
+            var layout = formAttr is not null ? GetNamedArgString(formAttr, "Layout") ?? "vertical" : "vertical";
 
             // Read [FormGroup] attributes
             var groups = new List<FormGroupInfo>();
@@ -542,19 +542,19 @@ public partial class UiGenerator
             var isRecord = context.TargetNode is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax;
             var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
 
-            // Read [Table] attribute
-            var tableAttr = GetAttribute(symbol, TableAttributeFqn);
-            var tableName = GetNamedArgString(tableAttr!, "Name") ?? symbol.Name;
-            var defaultPageSize = GetNamedArgInt(tableAttr!, "DefaultPageSize") ?? 20;
-            var defaultSort = GetNamedArgString(tableAttr!, "DefaultSort");
-            var defaultSortDirection = GetNamedArgString(tableAttr!, "DefaultSortDirection") ?? "asc";
+            // Read [Table] or [Model] attribute
+            var tableAttr = GetAttribute(symbol, TableAttributeFqn) ?? GetAttribute(symbol, ModelAttributeFqn);
+            var tableName = tableAttr is not null ? GetNamedArgString(tableAttr, "Name") ?? symbol.Name : symbol.Name;
+            var defaultPageSize = tableAttr is not null ? GetNamedArgInt(tableAttr, "DefaultPageSize") ?? 20 : 20;
+            var defaultSort = tableAttr is not null ? GetNamedArgString(tableAttr, "DefaultSort") : null;
+            var defaultSortDirection = tableAttr is not null ? GetNamedArgString(tableAttr, "DefaultSortDirection") ?? "asc" : "asc";
 
             // PageSizes
             int[] pageSizes = { 10, 20, 50, 100 };
-            var pageSizesArg = tableAttr!.NamedArguments.FirstOrDefault(a => a.Key == "PageSizes");
-            if (pageSizesArg.Value.Kind == TypedConstantKind.Array)
+            var pageSizesArg = tableAttr?.NamedArguments.FirstOrDefault(a => a.Key == "PageSizes");
+            if (pageSizesArg is { } psa && psa.Value.Kind == TypedConstantKind.Array)
             {
-                var values = pageSizesArg.Value.Values;
+                var values = psa.Value.Values;
                 if (values.Length > 0)
                 {
                     pageSizes = values
@@ -629,7 +629,7 @@ public partial class UiGenerator
                 columns.Add(col);
             }
 
-            var schemaUrl = GetNamedArgString(tableAttr!, "SchemaUrl");
+            var schemaUrl = tableAttr is not null ? GetNamedArgString(tableAttr, "SchemaUrl") : null;
 
             var result = new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
                 defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant(), schemaUrl);

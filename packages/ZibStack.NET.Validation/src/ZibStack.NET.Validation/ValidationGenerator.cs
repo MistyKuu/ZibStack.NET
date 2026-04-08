@@ -181,6 +181,27 @@ namespace ZibStack.NET.Validation
             var source = GenerateValidation(info);
             spc.AddSource($"{info.HintName}.Validation.g.cs", source);
         });
+
+        // [Model] (from ZibStack.NET.UI) → implies [Validate]
+        var modelTargets = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "ZibStack.NET.UI.ModelAttribute",
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
+                transform: static (ctx, _) =>
+                {
+                    // Skip if explicit [Validate] exists
+                    var hasValidate = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == ValidateAttributeFqn);
+                    return hasValidate ? null : ExtractValidationInfo(ctx);
+                })
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(modelTargets, static (spc, info) =>
+        {
+            var source = GenerateValidation(info);
+            spc.AddSource($"{info.HintName}.Validation.Model.g.cs", source);
+        });
     }
 
     private static ValidationInfo? ExtractValidationInfo(GeneratorAttributeSyntaxContext context)

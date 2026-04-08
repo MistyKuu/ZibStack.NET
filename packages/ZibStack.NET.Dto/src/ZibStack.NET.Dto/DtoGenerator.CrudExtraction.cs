@@ -12,7 +12,8 @@ public partial class DtoGenerator
         var symbol = (INamedTypeSymbol)context.TargetSymbol;
 
         var attr = symbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn
+                              || a.AttributeClass?.ToDisplayString() == UiModelAttributeFqn);
         if (attr is null) return null;
 
         var route = attr.NamedArguments.FirstOrDefault(a => a.Key == "Route").Value.Value as string;
