@@ -1,6 +1,6 @@
 namespace ZibStack.NET.Query;
 
-/// <summary>Filter comparison operators (Gridify-compatible).</summary>
+/// <summary>Filter comparison operators.</summary>
 public enum FilterOperator
 {
     /// <summary><c>=</c> — equals</summary>

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace ZibStack.NET.Query;
 
 /// <summary>
-/// Parses Gridify-compatible filter strings into expression trees.
+/// Parses filter strings into expression trees.
 /// <para>Syntax: <c>Field Op Value</c> separated by <c>,</c> (AND) or <c>|</c> (OR).</para>
 /// <para>Grouping: <c>(expr1 | expr2), expr3</c></para>
 /// <para>Operators: <c>= != &lt; &gt; &lt;= &gt;= =* !* ^ !^ $ !$ =in= =out=</c></para>

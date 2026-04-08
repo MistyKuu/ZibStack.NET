@@ -1,6 +1,6 @@
 # ZibStack.NET.Query
 
-Gridify-compatible filter/sort DSL for REST APIs — parses query strings into LINQ expressions that translate to SQL. Zero reflection, compile-time field allowlists via source generation.
+Filter/sort DSL for REST APIs — parses query strings into LINQ expressions that translate to SQL. Zero reflection, compile-time field allowlists via source generation.
 
 ## Install
 

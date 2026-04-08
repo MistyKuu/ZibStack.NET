@@ -722,7 +722,7 @@ public partial class DtoGenerator
         if (info.HasQueryDsl)
         {
             sb.AppendLine();
-            sb.AppendLine($"    /// <summary>Applies a Gridify-compatible filter string with AND, OR, grouping, and IN support.</summary>");
+            sb.AppendLine($"    /// <summary>Applies a filter DSL string with AND, OR, grouping, and IN support.</summary>");
             sb.AppendLine($"    public static IQueryable<{info.ClassName}> ApplyDslFilter(IQueryable<{info.ClassName}> query, string? filter)");
             sb.AppendLine("    {");
             sb.AppendLine("        if (string.IsNullOrWhiteSpace(filter)) return query;");
