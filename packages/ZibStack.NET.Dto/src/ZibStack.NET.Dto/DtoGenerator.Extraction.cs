@@ -413,6 +413,10 @@ public partial class DtoGenerator
                 a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn);
             if (hasIgnore) continue;
 
+            var hasQueryIgnore = prop.GetAttributes().Any(a =>
+                a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn);
+            if (hasQueryIgnore) continue;
+
             // Skip complex/navigation types — query parameters must be primitives
             var propType = prop.Type;
             if (propType is INamedTypeSymbol nts && nts.NullableAnnotation == NullableAnnotation.Annotated

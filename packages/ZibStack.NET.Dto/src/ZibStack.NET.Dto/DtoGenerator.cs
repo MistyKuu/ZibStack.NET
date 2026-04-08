@@ -24,6 +24,7 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
     private const string ResponseDtoAttributeFqn = "ZibStack.NET.Dto.ResponseDtoAttribute";
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
+    private const string QueryIgnoreAttributeFqn = "ZibStack.NET.Dto.QueryIgnoreAttribute";
     private const string ListIgnoreAttributeFqn = "ZibStack.NET.Dto.ListIgnoreAttribute";
     private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
 
@@ -53,6 +54,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("CrudOperations.g.cs", CrudOperationsSource);
             ctx.AddSource("ApiStyle.g.cs", ApiStyleSource);
             ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
+            ctx.AddSource("QueryIgnoreAttribute.g.cs", QueryIgnoreAttributeSource);
             ctx.AddSource("ListIgnoreAttribute.g.cs", ListIgnoreAttributeSource);
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
         });
@@ -282,6 +284,11 @@ public partial class DtoGenerator : IIncrementalGenerator
                     var listSource = GenerateResponseDtoSource(listInfo);
                     spc.AddSource($"{responseInfo.FullyQualifiedName}.ListItem.CrudImplied.g.cs", listSource);
                 }
+            }
+            foreach (var queryInfo in implied.QueryDtos)
+            {
+                var source = GenerateQueryDtoSource(queryInfo);
+                spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.CrudImplied.g.cs", source);
             }
         });
 

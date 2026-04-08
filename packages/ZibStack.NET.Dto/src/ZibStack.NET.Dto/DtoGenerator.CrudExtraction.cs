@@ -110,6 +110,12 @@ public partial class DtoGenerator
             var customName = qAttr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
             queryName = customName ?? $"{symbol.Name}Query";
         }
+        else
+        {
+            // Auto-imply QueryDto
+            hasQueryDto = true;
+            queryName = $"{symbol.Name}Query";
+        }
 
         // Detect [ListIgnore] on any property → separate list response DTO
         var hasListIgnore = GetAllProperties(symbol).Any(p =>
@@ -156,12 +162,14 @@ public partial class DtoGenerator
         var hasUpdateDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateDtoAttributeFqn);
         var hasCombined = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateOrUpdateDtoAttributeFqn);
         var hasResponseDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
+        var hasQueryDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == QueryDtoAttributeFqn);
 
         // If all explicit DTOs are present, nothing to auto-generate
         var needsCreate = !hasCreateDto && !hasCombined;
         var needsUpdate = !hasUpdateDto && !hasCombined;
         var needsResponse = !hasResponseDto;
-        if (!needsCreate && !needsUpdate && !needsResponse) return null;
+        var needsQuery = !hasQueryDto;
+        if (!needsCreate && !needsUpdate && !needsResponse && !needsQuery) return null;
 
         var ns = symbol.ContainingNamespace.IsGlobalNamespace
             ? null : symbol.ContainingNamespace.ToDisplayString();
@@ -274,6 +282,37 @@ public partial class DtoGenerator
 
             result.ResponseDtos.Add(new ResponseDtoInfo(symbol.Name, ns, fqn,
                 $"{symbol.Name}Response", properties, listName, listProps));
+        }
+
+        if (needsQuery)
+        {
+            var queryProps = new List<QueryPropertyInfo>();
+            foreach (var prop in GetAllProperties(symbol))
+            {
+                if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+                if (prop.GetMethod is null) continue;
+                if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn)) continue;
+                if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn)) continue;
+
+                var propType = prop.Type;
+                if (propType is INamedTypeSymbol nts2 && nts2.NullableAnnotation == NullableAnnotation.Annotated
+                    && nts2.TypeArguments.Length == 1)
+                    propType = nts2.TypeArguments[0];
+                if (propType.TypeKind == TypeKind.Class && propType.SpecialType == SpecialType.None
+                    && propType.ToDisplayString() != "string") continue;
+                if (propType.TypeKind == TypeKind.Interface || propType.TypeKind == TypeKind.Array) continue;
+
+                var jsonName = GetJsonName(prop);
+                var displayType = prop.Type.ToDisplayString();
+                var isValueType = prop.Type.IsValueType;
+                var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
+                var nullableType = isNullable || !isValueType
+                    ? displayType + (isNullable ? "" : "?")
+                    : displayType + "?";
+                queryProps.Add(new QueryPropertyInfo(prop.Name, jsonName, displayType, nullableType, isValueType));
+            }
+            result.QueryDtos.Add(new QueryDtoInfo(symbol.Name, ns, fqn,
+                $"{symbol.Name}Query", queryProps, sortable: true, defaultSort: null, defaultSortDirection: 0));
         }
 
         return result;
