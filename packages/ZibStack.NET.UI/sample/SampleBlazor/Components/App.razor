@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZibStack.NET.UI — Blazor Sample</title>
+    <base href="/" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        fieldset { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+        legend { font-weight: bold; padding: 0 0.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .form-group textarea { resize: vertical; }
+        .help-text { display: block; color: #666; font-size: 0.85rem; margin-top: 0.25rem; }
+        .slider-wrapper { display: flex; align-items: center; gap: 0.5rem; }
+        .slider-wrapper input[type=range] { flex: 1; }
+        .radio-group label { display: inline-flex; align-items: center; gap: 0.25rem; margin-right: 1rem; font-weight: normal; }
+        button[type=submit] { background: #0078d4; color: white; border: none; padding: 0.75rem 2rem; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+        button[type=submit]:hover { background: #005fa3; }
+        pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; }
+        nav { margin-bottom: 2rem; }
+        nav a { margin-right: 1rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">Form Demo</a>
+        <a href="/erp">ERP Demo</a>
+        <a href="/json">JSON Schema</a>
+    </nav>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>

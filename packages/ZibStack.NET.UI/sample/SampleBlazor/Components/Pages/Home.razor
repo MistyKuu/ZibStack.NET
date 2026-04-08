@@ -1,0 +1,23 @@
+@page "/"
+@using SampleBlazor.Models
+@using System.Text.Json
+
+<h2>ZibStack.NET.UI — Blazor Dynamic Form Demo</h2>
+<p>This form is rendered entirely from the compile-time generated <code>FormDescriptor</code>.</p>
+
+<DynamicForm Schema="_schema" Mode="create" />
+
+@code {
+    private FormSchema _schema = default!;
+
+    protected override void OnInitialized()
+    {
+        // Deserialize directly from the compile-time baked JSON.
+        // In a real app you'd fetch this from an API endpoint.
+        var json = Player.GetFormSchemaJson();
+        _schema = JsonSerializer.Deserialize<FormSchema>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        })!;
+    }
+}

@@ -157,7 +157,7 @@ public void Upload(string fileName, [NoLog] byte[] fileContent)
 ### Custom Log Levels
 
 ```csharp
-[Log(EntryExitLevel = ZibStack.LogLevel.Debug, ExceptionLevel = ZibStack.LogLevel.Critical)]
+[Log(EntryExitLevel = ZibLogLevel.Debug, ExceptionLevel = ZibLogLevel.Critical)]
 public async Task<decimal> CalculateTotalAsync(int orderId)
 {
     // ...
@@ -313,8 +313,8 @@ ZibStack.NET.Log reports clear compiler errors when something is misconfigured:
 | Attribute | Target | Default | Description |
 |---|---|---|---|
 | `[Log]` | Method | | Adds entry/exit/exception logging |
-| `[Log(EntryExitLevel = ...)]` | Method | `Information` | Log level for entry/exit (`ZibStack.LogLevel.*`) |
-| `[Log(ExceptionLevel = ...)]` | Method | `Error` | Log level for exceptions (`ZibStack.LogLevel.*`) |
+| `[Log(EntryExitLevel = ...)]` | Method | `Information` | Log level for entry/exit (`ZibLogLevel.*`) |
+| `[Log(ExceptionLevel = ...)]` | Method | `Error` | Log level for exceptions (`ZibLogLevel.*`) |
 | `[Log(LogParameters = false)]` | Method | `true` | Log parameter values on entry |
 | `[Log(MeasureElapsed = false)]` | Method | `true` | Measure elapsed time with Stopwatch |
 | `[Log(EntryMessage = "...")]` | Method | auto | Custom entry message template |

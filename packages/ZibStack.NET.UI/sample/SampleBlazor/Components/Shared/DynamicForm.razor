@@ -1,0 +1,234 @@
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@using SampleBlazor.Models
+
+<h3>@Schema.Name</h3>
+
+@foreach (var group in Schema.Groups.OrderBy(g => g.Order))
+{
+    <fieldset>
+        <legend>@(group.Label ?? group.Name)</legend>
+
+        @foreach (var field in GetFieldsForGroup(group.Name))
+        {
+            <DynamicField Field="field" Values="Values" Errors="_errors" OnValueChanged="OnFieldChanged" />
+        }
+    </fieldset>
+}
+
+@* Fields without a group *@
+@foreach (var field in GetUngroupedFields())
+{
+    <DynamicField Field="field" Values="Values" Errors="_errors" OnValueChanged="OnFieldChanged" />
+}
+
+<button type="submit" @onclick="HandleSubmit">Save</button>
+
+@if (_submitted && _errors.Count == 0)
+{
+    <h4>Submitted values:</h4>
+    <pre>@FormatValues()</pre>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public FormSchema Schema { get; set; } = default!;
+
+    [Parameter]
+    public string Mode { get; set; } = "create";
+
+    [Parameter]
+    public Dictionary<string, object?>? InitialValues { get; set; }
+
+    [Parameter]
+    public EventCallback<Dictionary<string, object?>> OnSubmit { get; set; }
+
+    private Dictionary<string, object?> Values { get; set; } = new();
+    private Dictionary<string, string> _errors = new();
+    private bool _submitted;
+
+    protected override void OnInitialized()
+    {
+        foreach (var field in Schema.Fields)
+            Values[field.Name] = InitialValues?.GetValueOrDefault(field.Name);
+    }
+
+    private IEnumerable<FieldSchema> GetFieldsForGroup(string group)
+    {
+        return Schema.Fields
+            .Where(f => f.Group == group)
+            .Where(f => FilterByMode(f))
+            .OrderBy(f => f.Order);
+    }
+
+    private IEnumerable<FieldSchema> GetUngroupedFields()
+    {
+        return Schema.Fields
+            .Where(f => f.Group is null)
+            .Where(f => FilterByMode(f))
+            .OrderBy(f => f.Order);
+    }
+
+    private bool FilterByMode(FieldSchema field)
+    {
+        if (Mode == "create" && field.UpdateOnly == true) return false;
+        if (Mode == "edit" && field.CreateOnly == true) return false;
+        return true;
+    }
+
+    private void OnFieldChanged()
+    {
+        if (_submitted)
+            Validate();
+
+        StateHasChanged();
+    }
+
+    private async Task HandleSubmit()
+    {
+        _submitted = true;
+
+        if (!Validate())
+            return;
+
+        if (OnSubmit.HasDelegate)
+            await OnSubmit.InvokeAsync(Values);
+    }
+
+    private bool Validate()
+    {
+        _errors.Clear();
+
+        var visibleFields = Schema.Fields
+            .Where(FilterByMode)
+            .Where(f => f.Hidden != true);
+
+        foreach (var field in visibleFields)
+        {
+            Values.TryGetValue(field.Name, out var rawValue);
+            var strValue = rawValue?.ToString() ?? "";
+            var isEmpty = string.IsNullOrWhiteSpace(strValue);
+
+            if (field.Required == true && isEmpty)
+            {
+                _errors[field.Name] = $"{field.Label ?? field.Name} is required.";
+                continue;
+            }
+
+            if (isEmpty)
+                continue;
+
+            var v = field.Validation;
+            if (v is null)
+                continue;
+
+            if (TryGetInt(v, "minLength", out var minLen) && strValue.Length < minLen)
+            {
+                _errors[field.Name] = $"Minimum length is {minLen}.";
+                continue;
+            }
+
+            if (TryGetInt(v, "maxLength", out var maxLen) && strValue.Length > maxLen)
+            {
+                _errors[field.Name] = $"Maximum length is {maxLen}.";
+                continue;
+            }
+
+            if (v.TryGetValue("pattern", out var patternObj) && patternObj is string pattern)
+            {
+                if (!Regex.IsMatch(strValue, pattern))
+                {
+                    _errors[field.Name] = $"Value does not match the required pattern.";
+                    continue;
+                }
+            }
+
+            if (HasFlag(v, "email") && !Regex.IsMatch(strValue, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            {
+                _errors[field.Name] = "Invalid email address.";
+                continue;
+            }
+
+            if (HasFlag(v, "url") && !Uri.TryCreate(strValue, UriKind.Absolute, out _))
+            {
+                _errors[field.Name] = "Invalid URL.";
+                continue;
+            }
+
+            if (v.TryGetValue("range", out var rangeObj))
+            {
+                if (double.TryParse(strValue, out var numValue))
+                {
+                    var range = ParseRange(rangeObj);
+                    if (range.min.HasValue && numValue < range.min)
+                    {
+                        _errors[field.Name] = $"Value must be at least {range.min}.";
+                        continue;
+                    }
+                    if (range.max.HasValue && numValue > range.max)
+                    {
+                        _errors[field.Name] = $"Value must be at most {range.max}.";
+                        continue;
+                    }
+                }
+            }
+
+            if (TryGetDecimal(v, "min", out var min) && decimal.TryParse(strValue, out var numVal1) && numVal1 < min)
+            {
+                _errors[field.Name] = $"Value must be at least {min}.";
+                continue;
+            }
+
+            if (TryGetDecimal(v, "max", out var max) && decimal.TryParse(strValue, out var numVal2) && numVal2 > max)
+            {
+                _errors[field.Name] = $"Value must be at most {max}.";
+                continue;
+            }
+        }
+
+        return _errors.Count == 0;
+    }
+
+    private static bool TryGetInt(Dictionary<string, object> dict, string key, out int value)
+    {
+        value = 0;
+        if (!dict.TryGetValue(key, out var obj)) return false;
+        if (obj is int i) { value = i; return true; }
+        if (obj is JsonElement je && je.TryGetInt32(out var ji)) { value = ji; return true; }
+        return int.TryParse(obj?.ToString(), out value);
+    }
+
+    private static bool TryGetDecimal(Dictionary<string, object> dict, string key, out decimal value)
+    {
+        value = 0;
+        if (!dict.TryGetValue(key, out var obj)) return false;
+        if (obj is JsonElement je && je.TryGetDecimal(out var jd)) { value = jd; return true; }
+        return decimal.TryParse(obj?.ToString(), out value);
+    }
+
+    private static bool HasFlag(Dictionary<string, object> dict, string key)
+    {
+        if (!dict.TryGetValue(key, out var obj)) return false;
+        if (obj is bool b) return b;
+        if (obj is JsonElement je && je.ValueKind == JsonValueKind.True) return true;
+        return string.Equals(obj?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (double? min, double? max) ParseRange(object rangeObj)
+    {
+        if (rangeObj is JsonElement je && je.ValueKind == JsonValueKind.Object)
+        {
+            double? min = je.TryGetProperty("min", out var minEl) && minEl.TryGetDouble(out var mv) ? mv : null;
+            double? max = je.TryGetProperty("max", out var maxEl) && maxEl.TryGetDouble(out var xv) ? xv : null;
+            return (min, max);
+        }
+        return (null, null);
+    }
+
+    private string FormatValues()
+    {
+        return string.Join("\n", Values
+            .Where(kv => kv.Value is not null && kv.Value.ToString() != "")
+            .Select(kv => $"{kv.Key}: {kv.Value}"));
+    }
+}

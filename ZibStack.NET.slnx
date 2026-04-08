@@ -54,6 +54,17 @@
   <Folder Name="/packages/ZibStack.NET.Validation/tests/">
     <Project Path="packages/ZibStack.NET.Validation/tests/ZibStack.NET.Validation.Tests/ZibStack.NET.Validation.Tests.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.UI/" />
+  <Folder Name="/packages/ZibStack.NET.UI/src/">
+    <Project Path="packages/ZibStack.NET.UI/src/ZibStack.NET.UI/ZibStack.NET.UI.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.UI/tests/">
+    <Project Path="packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.UI/sample/">
+    <Project Path="packages/ZibStack.NET.UI/sample/SampleApi/SampleApi.csproj" />
+    <Project Path="packages/ZibStack.NET.UI/sample/SampleBlazor/SampleBlazor.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Result/" />
   <Folder Name="/packages/ZibStack.NET.Result/src/">
     <Project Path="packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj" />

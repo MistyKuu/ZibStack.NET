@@ -49,9 +49,9 @@ Generates two records -- `CreatePlayerRequest` and `UpdatePlayerRequest`:
 [HttpPost]
 public IActionResult Create([FromBody] CreatePlayerRequest request)
 {
-    var errors = request.Validate();
-    if (errors.Count > 0)
-        return BadRequest(new { errors });
+    var validation = request.Validate();
+    if (!validation.IsValid)
+        return BadRequest(new { validation.Errors });
 
     Player player = request.ToEntity();
     return Ok(player);
@@ -60,9 +60,9 @@ public IActionResult Create([FromBody] CreatePlayerRequest request)
 [HttpPatch("{id}")]
 public IActionResult Update(int id, [FromBody] UpdatePlayerRequest request)
 {
-    var errors = request.Validate();
-    if (errors.Count > 0)
-        return BadRequest(new { errors });
+    var validation = request.Validate();
+    if (!validation.IsValid)
+        return BadRequest(new { validation.Errors });
 
     request.ApplyTo(existingPlayer);
     return Ok(existingPlayer);
@@ -90,9 +90,9 @@ public class Team
 [HttpPost]
 public IActionResult Create([FromBody] TeamRequest request)
 {
-    var errors = request.ValidateForCreate();
-    if (errors.Count > 0)
-        return BadRequest(new { errors });
+    var validation = request.ValidateForCreate();
+    if (!validation.IsValid)
+        return BadRequest(new { validation.Errors });
 
     Team team = request.ToEntity();
     return Ok(team);
@@ -101,9 +101,9 @@ public IActionResult Create([FromBody] TeamRequest request)
 [HttpPatch("{id}")]
 public IActionResult Update(int id, [FromBody] TeamRequest request)
 {
-    var errors = request.ValidateForUpdate();
-    if (errors.Count > 0)
-        return BadRequest(new { errors });
+    var validation = request.ValidateForUpdate();
+    if (!validation.IsValid)
+        return BadRequest(new { validation.Errors });
 
     request.ApplyTo(existingTeam);
     return Ok(existingTeam);
@@ -121,7 +121,7 @@ public record CreatePlayerRequest
     public PatchField<int> Level { get; init; }      // optional
     public PatchField<string?> Email { get; init; }  // optional, nullable
 
-    public List<string> Validate() { ... }
+    public DtoValidationResult Validate() { ... }
     public Player ToEntity() { ... }
 }
 
@@ -131,7 +131,7 @@ public record UpdatePlayerRequest
     public PatchField<int> Level { get; init; }
     public PatchField<string?> Email { get; init; }
 
-    public List<string> Validate() { ... }
+    public DtoValidationResult Validate() { ... }
     public void ApplyTo(Player target) { ... }
 }
 ```
@@ -145,8 +145,8 @@ public record TeamRequest
     public PatchField<string?> Description { get; init; }
     public PatchField<int> MaxMembers { get; init; }
 
-    public List<string> ValidateForCreate() { ... }
-    public List<string> ValidateForUpdate() { ... }
+    public DtoValidationResult ValidateForCreate() { ... }
+    public DtoValidationResult ValidateForUpdate() { ... }
     public Team ToEntity() { ... }
     public void ApplyTo(Team target) { ... }
 }
@@ -170,7 +170,7 @@ Generated types implement generic interfaces for type-safe generic handlers:
 |---|---|---|
 | `ICanCreate<T>` | Create requests, Combined | `T ToEntity()` |
 | `ICanApply<T>` | Update requests, Combined | `void ApplyTo(T target)` |
-| `ICanValidate` | Create/Update requests (not Combined) | `List<string> Validate()` |
+| `ICanValidate` | Create/Update requests (not Combined) | `DtoValidationResult Validate()` |
 
 Combined requests implement `ICanCreate<T>` and `ICanApply<T>` but not `ICanValidate` (they have `ValidateForCreate()`/`ValidateForUpdate()` instead).
 
@@ -180,8 +180,8 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 {
     if (request is ICanValidate validatable)
     {
-        var errors = validatable.Validate();
-        if (errors.Count > 0) return BadRequest(errors);
+        var validation = validatable.Validate();
+        if (!validation.IsValid) return BadRequest(validation.Errors);
     }
     var entity = request.ToEntity();
     return Ok(entity);
@@ -196,8 +196,8 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[UpdateDto]` | Class | Generates Update request with `Validate()` + `ApplyTo()` |
 | `[CreateOrUpdateDto]` | Class | Generates single DTO with `ValidateForCreate/Update()` + both |
 | `[ResponseDto]` | Class | Generates read-only Response DTO with `FromEntity()` + `ProjectFrom()` |
-| `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` with `Validate()` + `ToEntity()` |
-| `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` with `Validate()` + `ApplyTo()` |
+| `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` with `Validate()` (returns `DtoValidationResult`) + `ToEntity()` |
+| `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` with `Validate()` (returns `DtoValidationResult`) + `ApplyTo()` |
 | `[PickFrom(typeof(T), ...)]` | Record (partial) | Like TS `Pick<T, K>` — whitelist of properties |
 | `[OmitFrom(typeof(T), ...)]` | Record (partial) | Like TS `Omit<T, K>` — exclude listed properties |
 | `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
@@ -452,14 +452,10 @@ public async Task<IActionResult> List([FromQuery] ProductQuery query, int page =
 
 ## CRUD API generation (`[CrudApi]`)
 
-Add `[CrudApi]` to your entity alongside other DTO attributes to generate complete CRUD API endpoints — Minimal API, MVC Controller, or both:
+Add `[CrudApi]` to your entity to generate complete CRUD API endpoints. A single attribute is enough — `CreateDto`, `UpdateDto`, and `ResponseDto` are auto-implied when missing:
 
 ```csharp
-[CreateDto]
-[UpdateDto]
-[ResponseDto]
-[QueryDto(Sortable = true, DefaultSort = "Name")]
-[CrudApi(Style = ApiStyle.Both)]
+[CrudApi]
 public class Player
 {
     [DtoIgnore]  public int Id { get; set; }
@@ -470,12 +466,21 @@ public class Player
 }
 ```
 
-This generates:
+This generates `CreatePlayerRequest`, `UpdatePlayerRequest`, `PlayerResponse`, and full CRUD endpoints — all from one attribute. Add explicit DTO attributes when you need custom names, sorting, or fine-grained control:
 
-- `PlayerEndpoints` — static class with `MapPlayerEndpoints()` extension method (Minimal API)
-- `PlayerCrudController` — partial `[ApiController]` (MVC)
+```csharp
+[CrudApi(Style = ApiStyle.Both)]
+[CreateDto(Name = "NewPlayerDto")]            // custom request name
+[QueryDto(Sortable = true, DefaultSort = "Name")]  // filtering + sorting
+public class Player { ... }
+```
 
-Both use `ICrudStore<Player, int>` from DI and wire up the full pipeline: validation → entity mapping → store → response mapping → pagination.
+This generates two classes (depending on `Style`):
+
+- `PlayerEndpoints` — Minimal API endpoints via `MapPlayerEndpoints()` extension method
+- `PlayerCrudController` — MVC `[ApiController]` (partial, so you can extend it)
+
+Both inject `ICrudStore<Player, int>` from DI and wire up: validation → entity mapping → store → response mapping → pagination.
 
 ### Generated endpoints
 
@@ -483,9 +488,83 @@ Both use `ICrudStore<Player, int>` from DI and wire up the full pipeline: valida
 |--------|-------|-------------|
 | `GET` | `/api/players/{id}` | Get by ID → `PlayerResponse` |
 | `GET` | `/api/players?name=...&sortBy=level&page=2` | List with filter + sort + pagination → `PaginatedResponse<PlayerResponse>` |
-| `POST` | `/api/players` | Create → validate → `ToEntity()` → store |
-| `PATCH` | `/api/players/{id}` | Update → validate → `ApplyTo()` → store |
-| `DELETE` | `/api/players/{id}` | Delete |
+| `POST` | `/api/players` | Create → validate → `ToEntity()` → store → 201 |
+| `PATCH` | `/api/players/{id}` | Update → validate → `ApplyTo()` → store → 200 |
+| `DELETE` | `/api/players/{id}` | Delete → 204 |
+| `POST` | `/api/players/bulk` | Bulk create (requires `CrudOperations.BulkCreate`) |
+| `POST` | `/api/players/bulk-delete` | Bulk delete by IDs (requires `CrudOperations.BulkDelete`) |
+
+### Generated code (Minimal API)
+
+Here's what the generator actually produces (simplified):
+
+```csharp
+// <auto-generated />
+public static class PlayerEndpoints
+{
+    public static RouteGroupBuilder MapPlayerEndpoints(
+        this IEndpointRouteBuilder app,
+        string? prefix = null,
+        Action<RouteGroupBuilder>? configure = null)
+    {
+        var group = app.MapGroup(prefix ?? "api/players").WithTags("Player");
+        configure?.Invoke(group);
+
+        // GET /api/players/{id}
+        group.MapGet("{id}", async (int id, ICrudStore<Player, int> store, CancellationToken ct) =>
+        {
+            var entity = await store.GetByIdAsync(id, ct);
+            if (entity is null) return Results.Problem(statusCode: 404, title: "Not Found");
+            return Results.Ok(PlayerResponse.FromEntity(entity));
+        }).WithName("GetPlayer");
+
+        // GET /api/players?name=...&sortBy=level&page=2
+        group.MapGet("", ([AsParameters] PlayerQuery query,
+            ICrudStore<Player, int> store, int page = 1, int pageSize = 20, CancellationToken ct = default) =>
+        {
+            var q = query.Apply(store.Query());
+            var projected = PlayerResponse.ProjectFrom(q);
+            return PaginatedResponse<PlayerResponse>.CreateAsync(projected, page, pageSize, ct);
+        }).WithName("GetPlayerList");
+
+        // POST /api/players
+        group.MapPost("", async (CreatePlayerRequest request, ICrudStore<Player, int> store, CancellationToken ct) =>
+        {
+            var validation = request.Validate();
+            if (!validation.IsValid) return Results.ValidationProblem(validation.ToDictionary());
+            var entity = request.ToEntity();
+            await store.CreateAsync(entity, ct);
+            return Results.CreatedAtRoute("GetPlayer", new { id = entity.Id },
+                PlayerResponse.FromEntity(entity));
+        });
+
+        // PATCH /api/players/{id}
+        group.MapPatch("{id}", async (int id, UpdatePlayerRequest request, ICrudStore<Player, int> store, CancellationToken ct) =>
+        {
+            var entity = await store.GetByIdAsync(id, ct);
+            if (entity is null) return Results.Problem(statusCode: 404, title: "Not Found");
+            var validation = request.Validate();
+            if (!validation.IsValid) return Results.ValidationProblem(validation.ToDictionary());
+            request.ApplyTo(entity);
+            await store.UpdateAsync(entity, ct);
+            return Results.Ok(PlayerResponse.FromEntity(entity));
+        });
+
+        // DELETE /api/players/{id}
+        group.MapDelete("{id}", async (int id, ICrudStore<Player, int> store, CancellationToken ct) =>
+        {
+            var entity = await store.GetByIdAsync(id, ct);
+            if (entity is null) return Results.Problem(statusCode: 404, title: "Not Found");
+            await store.DeleteAsync(entity, ct);
+            return Results.NoContent();
+        });
+
+        return group;
+    }
+}
+```
+
+The generated MVC Controller follows the same pattern with `[HttpGet]`, `[HttpPost]`, `[HttpPatch]`, `[HttpDelete]` attributes and is `partial` so you can extend it.
 
 ### Setup
 
@@ -701,7 +780,8 @@ All error responses use the [RFC 9110](https://tools.ietf.org/html/rfc9110) **Pr
   "title": "One or more validation errors occurred.",
   "status": 400,
   "errors": {
-    "": ["Property 'name' is required.", "Property 'password' is required."]
+    "name": ["is required."],
+    "password": ["is required."]
   }
 }
 
@@ -999,12 +1079,12 @@ Implement `IDtoValidator<T>` and point to it from the attribute:
 ```csharp
 public class MyCreateValidator : IDtoValidator<CreatePlayerRequest>
 {
-    public List<string> Validate(CreatePlayerRequest instance)
+    public DtoValidationResult Validate(CreatePlayerRequest instance)
     {
-        var errors = new List<string>();
+        var result = new DtoValidationResult();
         if (instance.Name.HasValue && instance.Name.Value.Length < 3)
-            errors.Add("Name must be at least 3 characters.");
-        return errors;
+            result.AddError("name", "must be at least 3 characters.");
+        return result;
     }
 }
 
