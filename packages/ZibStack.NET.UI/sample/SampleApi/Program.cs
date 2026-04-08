@@ -40,4 +40,7 @@ app.MapGet("/api/forms/product", () =>
 app.MapGet("/api/tables/product", () =>
     Results.Content(Product.GetTableSchemaJson(), "application/json"));
 
+// Live playground: POST C# code → compile with generators → return schemas
+app.MapPlayground();
+
 app.Run();

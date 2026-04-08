@@ -9,15 +9,22 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Source generators (compile-time) -->
     <ProjectReference Include="..\..\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Core\src\ZibStack.NET.Core\ZibStack.NET.Core.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Dto\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.EntityFramework\src\ZibStack.NET.EntityFramework\ZibStack.NET.EntityFramework.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Generator DLLs copied to output for playground runtime compilation -->
+    <ProjectReference Include="..\..\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Core\src\ZibStack.NET.Core\ZibStack.NET.Core.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Dto\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Query\src\ZibStack.NET.Query\ZibStack.NET.Query.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.13.20" />
