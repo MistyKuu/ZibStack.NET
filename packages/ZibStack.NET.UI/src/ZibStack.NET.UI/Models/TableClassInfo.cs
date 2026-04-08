@@ -15,6 +15,8 @@ internal sealed class TableClassInfo
     public string? DefaultSort { get; }
     public string DefaultSortDirection { get; }
     public string? SchemaUrl { get; }
+    public string? ApiUrl { get; set; }
+    public string? KeyProperty { get; set; }
     public List<RelationInfo> Relations { get; } = new List<RelationInfo>();
     public List<RowActionInfo> RowActions { get; } = new List<RowActionInfo>();
     public List<ToolbarActionInfo> ToolbarActions { get; } = new List<ToolbarActionInfo>();

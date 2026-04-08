@@ -70,6 +70,8 @@ public partial class UiGenerator
         var sb = new StringBuilder();
         sb.Append("{");
         sb.Append($"\"name\":\"{JsonEscape(info.FormName)}\",");
+        if (info.ApiUrl is not null) sb.Append($"\"apiUrl\":\"{JsonEscape(info.ApiUrl)}\",");
+        if (info.KeyProperty is not null) sb.Append($"\"keyProperty\":\"{JsonEscape(ToCamelCase(info.KeyProperty))}\",");
         sb.Append($"\"layout\":\"{JsonEscape(info.Layout)}\",");
 
         // Groups
@@ -226,6 +228,10 @@ public partial class UiGenerator
         var sb = new StringBuilder();
         sb.Append("{");
         sb.Append($"\"name\":\"{JsonEscape(info.TableName)}\",");
+        if (info.ApiUrl is not null)
+            sb.Append($"\"apiUrl\":\"{JsonEscape(info.ApiUrl)}\",");
+        if (info.KeyProperty is not null)
+            sb.Append($"\"keyProperty\":\"{JsonEscape(ToCamelCase(info.KeyProperty))}\",");
         if (info.SchemaUrl != null)
             sb.Append($"\"schemaUrl\":\"{JsonEscape(info.SchemaUrl)}\",");
 
@@ -241,6 +247,12 @@ public partial class UiGenerator
             if (col.Label != null) sb.Append($",\"label\":\"{JsonEscape(col.Label)}\"");
             sb.Append($",\"sortable\":{(col.Sortable ? "true" : "false")}");
             sb.Append($",\"filterable\":{(col.Filterable ? "true" : "false")}");
+            // Filter operators per column type (for Query DSL integration)
+            if (col.Filterable)
+            {
+                sb.Append(",\"filterOperators\":");
+                sb.Append(GetFilterOperatorsJson(col.ColumnType, col.IsEnum));
+            }
             if (col.Format != null) sb.Append($",\"format\":\"{JsonEscape(col.Format)}\"");
             sb.Append($",\"order\":{col.Order}");
             if (!col.IsVisible) sb.Append(",\"visible\":false");
@@ -367,6 +379,24 @@ public partial class UiGenerator
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
+
+    private static string GetFilterOperatorsJson(string columnType, bool isEnum)
+    {
+        // String types: equality + string ops + in
+        if (columnType == "string")
+            return "[\"=\",\"!=\",\"=*\",\"!*\",\"^\",\"!^\",\"$\",\"!$\",\"=in=\",\"=out=\"]";
+
+        // Enum: equality + in
+        if (isEnum)
+            return "[\"=\",\"!=\",\"=in=\",\"=out=\"]";
+
+        // Boolean: equality only
+        if (columnType == "boolean")
+            return "[\"=\",\"!=\"]";
+
+        // Numeric/date/comparable: equality + comparison + in
+        return "[\"=\",\"!=\",\"<\",\">\",\"<=\",\">=\",\"=in=\",\"=out=\"]";
+    }
 
     private static string JsonEscape(string s)
         => s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");

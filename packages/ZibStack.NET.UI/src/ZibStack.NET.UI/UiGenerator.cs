@@ -11,6 +11,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
 
     // Class-level
     private const string ImTiredOfCrudAttributeFqn = "ZibStack.NET.UI.ImTiredOfCrudAttribute";
+    private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
     private const string UiFormAttributeFqn = "ZibStack.NET.UI.UiFormAttribute";
     private const string UiFormGroupAttributeFqn = "ZibStack.NET.UI.UiFormGroupAttribute";
     private const string UiTableAttributeFqn = "ZibStack.NET.UI.UiTableAttribute";

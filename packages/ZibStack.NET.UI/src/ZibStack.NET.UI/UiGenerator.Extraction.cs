@@ -307,6 +307,12 @@ public partial class UiGenerator
 
             var formInfo = new FormClassInfo(symbol.Name, ns, hintName, formName, layout.ToLowerInvariant(), isRecord, fields, groups);
             formInfo.Relations.AddRange(formRelations);
+
+            // Extract API metadata from [ImTiredOfCrud] or [CrudApi]
+            ExtractApiMetadata(symbol, out var apiUrl, out var keyProperty);
+            formInfo.ApiUrl = apiUrl;
+            formInfo.KeyProperty = keyProperty;
+
             return formInfo;
         }
         catch
@@ -633,6 +639,11 @@ public partial class UiGenerator
 
             var result = new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
                 defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant(), schemaUrl);
+
+            // Extract API metadata from [ImTiredOfCrud] or [CrudApi]
+            ExtractApiMetadata(symbol, out var apiUrl, out var keyProperty);
+            result.ApiUrl = apiUrl;
+            result.KeyProperty = keyProperty;
 
             ExtractRelationsFromProperties(symbol, result.Relations);
 
@@ -970,5 +981,42 @@ public partial class UiGenerator
         {
             return null;
         }
+    }
+
+    // ─── API metadata extraction ───────────────────────────────────────
+
+    private static void ExtractApiMetadata(INamedTypeSymbol symbol, out string? apiUrl, out string? keyProperty)
+    {
+        apiUrl = null;
+        keyProperty = null;
+
+        // Check [ImTiredOfCrud] first, then [CrudApi]
+        var attr = GetAttribute(symbol, ImTiredOfCrudAttributeFqn)
+                ?? GetAttribute(symbol, CrudApiAttributeFqn);
+        if (attr is null) return;
+
+        var route = GetNamedArgString(attr, "Route");
+        var routePrefix = GetNamedArgString(attr, "RoutePrefix");
+        keyProperty = GetNamedArgString(attr, "KeyProperty") ?? "Id";
+
+        if (route is null)
+        {
+            // Auto-generate route from class name (same logic as Dto generator)
+            var name = symbol.Name;
+            route = "api/" + (routePrefix is not null ? routePrefix + "/" : "") + PluralizeSimple(name).ToLowerInvariant();
+        }
+
+        apiUrl = "/" + route.TrimStart('/');
+    }
+
+    private static string PluralizeSimple(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        if (name.EndsWith("s") || name.EndsWith("x") || name.EndsWith("z")
+            || name.EndsWith("sh") || name.EndsWith("ch"))
+            return name + "es";
+        if (name.EndsWith("y") && name.Length > 1 && !"aeiouAEIOU".Contains(name[name.Length - 2]))
+            return name.Substring(0, name.Length - 1) + "ies";
+        return name + "s";
     }
 }

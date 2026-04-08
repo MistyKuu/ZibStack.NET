@@ -12,6 +12,8 @@ internal sealed class FormClassInfo
     public bool IsRecord { get; }
     public List<FormFieldInfo> Fields { get; }
     public List<FormGroupInfo> Groups { get; }
+    public string? ApiUrl { get; set; }
+    public string? KeyProperty { get; set; }
     public List<RelationInfo> Relations { get; } = new List<RelationInfo>();
 
     public FormClassInfo(
