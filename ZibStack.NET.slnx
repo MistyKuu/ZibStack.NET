@@ -69,6 +69,9 @@
   <Folder Name="/packages/ZibStack.NET.Query/src/">
     <Project Path="packages/ZibStack.NET.Query/src/ZibStack.NET.Query/ZibStack.NET.Query.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.Query/tests/">
+    <Project Path="packages/ZibStack.NET.Query/tests/ZibStack.NET.Query.Tests/ZibStack.NET.Query.Tests.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Result/" />
   <Folder Name="/packages/ZibStack.NET.Result/src/">
     <Project Path="packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj" />
