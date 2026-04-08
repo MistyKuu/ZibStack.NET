@@ -1,3 +1,4 @@
+using System.Linq;
 using ZibStack.NET.Dto;
 
 namespace ZibStack.NET.Dto.Tests;
@@ -49,6 +50,6 @@ public class RenamePropertyTests
         var request = new CreateUserRequest { Name = "Bob", Email = "b@t.com" };
         var errors = request.Validate();
         // "name" not "firstName" in error messages
-        Assert.DoesNotContain(errors, e => e.Contains("firstName"));
+        Assert.False(errors.Errors.ContainsKey("firstName"));
     }
 }

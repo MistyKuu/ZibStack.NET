@@ -30,9 +30,9 @@ public class OrdersController : ControllerBase
     [HttpPost]
     public IActionResult Create([FromBody] CreateOrderRequest request)
     {
-        var errors = request.Validate();
-        if (errors.Count > 0)
-            return BadRequest(new { errors });
+        var validation = request.Validate();
+        if (!validation.IsValid)
+            return BadRequest(validation.ToDictionary());
 
         var order = request.ToEntity();
         order.Id = _orders.Count + 1;
@@ -47,9 +47,9 @@ public class OrdersController : ControllerBase
         var order = _orders.FirstOrDefault(o => o.Id == id);
         if (order is null) return NotFound();
 
-        var errors = request.Validate();
-        if (errors.Count > 0)
-            return BadRequest(new { errors });
+        var validation = request.Validate();
+        if (!validation.IsValid)
+            return BadRequest(validation.ToDictionary());
 
         request.ApplyTo(order);
         return Ok(order);

@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace ZibStack.NET.Dto.Tests;
 
 public class SeparateModeTests
@@ -10,8 +12,10 @@ public class SeparateModeTests
         var request = new CreateProductRequest();
         var errors = request.Validate();
 
-        Assert.Contains(errors, e => e.Contains("name") && e.Contains("required"));
-        Assert.Contains(errors, e => e.Contains("sku") && e.Contains("required"));
+        Assert.True(errors.Errors.ContainsKey("name"));
+        Assert.Contains(errors.Errors["name"], e => e.Contains("required"));
+        Assert.True(errors.Errors.ContainsKey("sku"));
+        Assert.Contains(errors.Errors["sku"], e => e.Contains("required"));
     }
 
     [Fact]
@@ -20,8 +24,10 @@ public class SeparateModeTests
         var request = new CreateProductRequest { Name = null!, Sku = null! };
         var errors = request.Validate();
 
-        Assert.Contains(errors, e => e.Contains("name") && e.Contains("null"));
-        Assert.Contains(errors, e => e.Contains("sku") && e.Contains("null"));
+        Assert.True(errors.Errors.ContainsKey("name"));
+        Assert.Contains(errors.Errors["name"], e => e.Contains("null"));
+        Assert.True(errors.Errors.ContainsKey("sku"));
+        Assert.Contains(errors.Errors["sku"], e => e.Contains("null"));
     }
 
     [Fact]
@@ -29,7 +35,7 @@ public class SeparateModeTests
     {
         var request = new CreateProductRequest { Name = "Widget", Sku = "WDG-001" };
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -88,7 +94,7 @@ public class SeparateModeTests
     {
         var request = new UpdateProductRequest();
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -96,7 +102,8 @@ public class SeparateModeTests
     {
         var request = new UpdateProductRequest { Name = null! };
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("name") && e.Contains("null"));
+        Assert.True(errors.Errors.ContainsKey("name"));
+        Assert.Contains(errors.Errors["name"], e => e.Contains("null"));
     }
 
     [Fact]
@@ -104,7 +111,7 @@ public class SeparateModeTests
     {
         var request = new UpdateProductRequest { Description = null };
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -165,7 +172,7 @@ public class SeparateModeTests
     {
         var request = new CreateSettingsRequest();
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]

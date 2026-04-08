@@ -10,6 +10,8 @@ public partial class DtoGenerator
     private const int OpCreate = 4;
     private const int OpUpdate = 8;
     private const int OpDelete = 16;
+    private const int OpBulkCreate = 32;
+    private const int OpBulkDelete = 64;
 
     // ApiStyle values (must match enum)
     private const int StyleMinimalApi = 0;
@@ -29,6 +31,7 @@ public partial class DtoGenerator
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
         sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Linq;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using Microsoft.AspNetCore.Builder;");
@@ -67,7 +70,7 @@ public partial class DtoGenerator
             sb.AppendLine($"        group.MapGet(\"{{id}}\", async ({keyType} id, {storeType} store, CancellationToken ct) =>");
             sb.AppendLine("        {");
             sb.AppendLine("            var entity = await store.GetByIdAsync(id, ct);");
-            sb.AppendLine("            if (entity is null) return Results.NotFound();");
+            sb.AppendLine("            if (entity is null) return Results.Problem(statusCode: 404, title: \"Not Found\");");
             if (info.HasResponseDto && info.ResponseName is not null)
             {
                 var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
@@ -77,13 +80,22 @@ public partial class DtoGenerator
             {
                 sb.AppendLine("            return Results.Ok(entity);");
             }
-            sb.AppendLine($"        }}).WithName(\"Get{entity}\");");
+            var getByIdChain = $"}}).WithName(\"Get{entity}\")";
+            if (info.GetByIdPolicy is not null)
+                getByIdChain += $".RequireAuthorization(\"{info.GetByIdPolicy}\")";
+            sb.AppendLine($"        {getByIdChain};");
             sb.AppendLine();
         }
 
         // GET list
         if ((info.Operations & OpGetList) != 0)
         {
+            // Use ListResponseName (from [ListIgnore]) if available, otherwise ResponseName
+            var listResponseType = info.ListResponseName ?? info.ResponseName;
+            var fqListResponse = info.HasResponseDto && listResponseType is not null
+                ? (info.Namespace is not null ? $"{info.Namespace}.{listResponseType}" : listResponseType)
+                : null;
+
             if (info.HasQueryDto && info.QueryName is not null)
             {
                 var fqQuery = info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName;
@@ -91,34 +103,32 @@ public partial class DtoGenerator
                 sb.AppendLine($"            {storeType} store, int page = 1, int pageSize = 20, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = query.Apply(store.Query());");
-                if (info.HasResponseDto && info.ResponseName is not null)
+                if (fqListResponse is not null)
                 {
-                    var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
-                    sb.AppendLine($"            var projected = {fqResponse}.ProjectFrom(q);");
-                    sb.AppendLine($"            return PaginatedResponse<{fqResponse}>.CreateAsync(projected, page, pageSize, ct);");
+                    sb.AppendLine($"            var projected = {fqListResponse}.ProjectFrom(q);");
+                    sb.AppendLine($"            return PaginatedResponse<{fqListResponse}>.CreateAsync(projected, page, pageSize, ct);");
                 }
                 else
                 {
                     sb.AppendLine($"            return PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct);");
                 }
-                sb.AppendLine($"        }}).WithName(\"Get{entity}List\");");
+                sb.AppendLine($"        }}).WithName(\"Get{entity}List\"){(info.GetListPolicy is not null ? $".RequireAuthorization(\"{info.GetListPolicy}\")" : "")};");
             }
             else
             {
                 sb.AppendLine($"        group.MapGet(\"\", ({storeType} store, int page = 1, int pageSize = 20, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
-                if (info.HasResponseDto && info.ResponseName is not null)
+                if (fqListResponse is not null)
                 {
-                    var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
-                    sb.AppendLine($"            var projected = {fqResponse}.ProjectFrom(q);");
-                    sb.AppendLine($"            return PaginatedResponse<{fqResponse}>.CreateAsync(projected, page, pageSize, ct);");
+                    sb.AppendLine($"            var projected = {fqListResponse}.ProjectFrom(q);");
+                    sb.AppendLine($"            return PaginatedResponse<{fqListResponse}>.CreateAsync(projected, page, pageSize, ct);");
                 }
                 else
                 {
                     sb.AppendLine($"            return PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct);");
                 }
-                sb.AppendLine($"        }}).WithName(\"Get{entity}List\");");
+                sb.AppendLine($"        }}).WithName(\"Get{entity}List\"){(info.GetListPolicy is not null ? $".RequireAuthorization(\"{info.GetListPolicy}\")" : "")};");
             }
             sb.AppendLine();
         }
@@ -130,8 +140,8 @@ public partial class DtoGenerator
             var validateMethod = info.IsCombinedDto ? "ValidateForCreate" : "Validate";
             sb.AppendLine($"        group.MapPost(\"\", async ({fqCreate} request, {storeType} store, CancellationToken ct) =>");
             sb.AppendLine("        {");
-            sb.AppendLine($"            var errors = request.{validateMethod}();");
-            sb.AppendLine("            if (errors.Count > 0) return Results.BadRequest(new { errors });");
+            sb.AppendLine($"            var validation = request.{validateMethod}();");
+            sb.AppendLine("            if (!validation.IsValid) return Results.ValidationProblem(validation.ToDictionary());");
             sb.AppendLine("            var entity = request.ToEntity();");
             sb.AppendLine("            await store.CreateAsync(entity, ct);");
             if (info.HasResponseDto && info.ResponseName is not null)
@@ -143,7 +153,10 @@ public partial class DtoGenerator
             {
                 sb.AppendLine($"            return Results.CreatedAtRoute(\"Get{entity}\", new {{ id = entity.{info.KeyPropertyName} }}, entity);");
             }
-            sb.AppendLine("        });");
+            var postChain = "        })";
+            if (info.CreatePolicy is not null)
+                postChain += $".RequireAuthorization(\"{info.CreatePolicy}\")";
+            sb.AppendLine(postChain + ";");
             sb.AppendLine();
         }
 
@@ -155,9 +168,9 @@ public partial class DtoGenerator
             sb.AppendLine($"        group.MapPatch(\"{{id}}\", async ({keyType} id, {fqUpdate} request, {storeType} store, CancellationToken ct) =>");
             sb.AppendLine("        {");
             sb.AppendLine("            var entity = await store.GetByIdAsync(id, ct);");
-            sb.AppendLine("            if (entity is null) return Results.NotFound();");
-            sb.AppendLine($"            var errors = request.{validateMethod}();");
-            sb.AppendLine("            if (errors.Count > 0) return Results.BadRequest(new { errors });");
+            sb.AppendLine("            if (entity is null) return Results.Problem(statusCode: 404, title: \"Not Found\");");
+            sb.AppendLine($"            var validation = request.{validateMethod}();");
+            sb.AppendLine("            if (!validation.IsValid) return Results.ValidationProblem(validation.ToDictionary());");
             sb.AppendLine("            request.ApplyTo(entity);");
             sb.AppendLine("            await store.UpdateAsync(entity, ct);");
             if (info.HasResponseDto && info.ResponseName is not null)
@@ -169,7 +182,10 @@ public partial class DtoGenerator
             {
                 sb.AppendLine("            return Results.Ok(entity);");
             }
-            sb.AppendLine("        });");
+            var patchChain = "        })";
+            if (info.UpdatePolicy is not null)
+                patchChain += $".RequireAuthorization(\"{info.UpdatePolicy}\")";
+            sb.AppendLine(patchChain + ";");
             sb.AppendLine();
         }
 
@@ -179,10 +195,73 @@ public partial class DtoGenerator
             sb.AppendLine($"        group.MapDelete(\"{{id}}\", async ({keyType} id, {storeType} store, CancellationToken ct) =>");
             sb.AppendLine("        {");
             sb.AppendLine("            var entity = await store.GetByIdAsync(id, ct);");
-            sb.AppendLine("            if (entity is null) return Results.NotFound();");
+            sb.AppendLine("            if (entity is null) return Results.Problem(statusCode: 404, title: \"Not Found\");");
             sb.AppendLine("            await store.DeleteAsync(entity, ct);");
             sb.AppendLine("            return Results.NoContent();");
-            sb.AppendLine("        });");
+            var deleteChain = "        })";
+            if (info.DeletePolicy is not null)
+                deleteChain += $".RequireAuthorization(\"{info.DeletePolicy}\")";
+            sb.AppendLine(deleteChain + ";");
+            sb.AppendLine();
+        }
+
+        // BULK CREATE
+        if ((info.Operations & OpBulkCreate) != 0 && info.CreateRequestName is not null)
+        {
+            var fqCreate = info.Namespace is not null ? $"{info.Namespace}.{info.CreateRequestName}" : info.CreateRequestName;
+            var validateMethod = info.IsCombinedDto ? "ValidateForCreate" : "Validate";
+            sb.AppendLine($"        group.MapPost(\"bulk\", async (List<{fqCreate}> requests, {storeType} store, CancellationToken ct) =>");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var allErrors = new DtoValidationResult();");
+            sb.AppendLine("            for (var i = 0; i < requests.Count; i++)");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                var validation = requests[i].{validateMethod}();");
+            sb.AppendLine("                allErrors.Merge(validation, $\"[{i}]\");");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if (!allErrors.IsValid) return Results.ValidationProblem(allErrors.ToDictionary());");
+            sb.AppendLine($"            var entities = new List<{fqEntity}>();");
+            sb.AppendLine("            foreach (var request in requests)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var entity = request.ToEntity();");
+            sb.AppendLine("                await store.CreateAsync(entity, ct);");
+            sb.AppendLine("                entities.Add(entity);");
+            sb.AppendLine("            }");
+            if (info.HasResponseDto && info.ResponseName is not null)
+            {
+                var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
+                sb.AppendLine($"            return Results.Ok(entities.Select(e => {fqResponse}.FromEntity(e)).ToList());");
+            }
+            else
+            {
+                sb.AppendLine("            return Results.Ok(entities);");
+            }
+            var bulkCreateChain = "        })";
+            if (info.CreatePolicy is not null)
+                bulkCreateChain += $".RequireAuthorization(\"{info.CreatePolicy}\")";
+            sb.AppendLine(bulkCreateChain + ";");
+            sb.AppendLine();
+        }
+
+        // BULK DELETE
+        if ((info.Operations & OpBulkDelete) != 0)
+        {
+            sb.AppendLine($"        group.MapPost(\"bulk-delete\", async (List<{keyType}> ids, {storeType} store, CancellationToken ct) =>");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var deleted = 0;");
+            sb.AppendLine("            foreach (var id in ids)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var entity = await store.GetByIdAsync(id, ct);");
+            sb.AppendLine("                if (entity is not null)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    await store.DeleteAsync(entity, ct);");
+            sb.AppendLine("                    deleted++;");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            return Results.Ok(new { deleted });");
+            var bulkDeleteChain = "        })";
+            if (info.DeletePolicy is not null)
+                bulkDeleteChain += $".RequireAuthorization(\"{info.DeletePolicy}\")";
+            sb.AppendLine(bulkDeleteChain + ";");
             sb.AppendLine();
         }
 
@@ -237,6 +316,8 @@ public partial class DtoGenerator
         if ((info.Operations & OpGetById) != 0)
         {
             sb.AppendLine();
+            if (info.GetByIdPolicy is not null)
+                sb.AppendLine($"    [Microsoft.AspNetCore.Authorization.Authorize(Policy = \"{info.GetByIdPolicy}\")]");
             sb.AppendLine("    [HttpGet(\"{id}\")]");
             sb.AppendLine($"    public async Task<IActionResult> GetById({keyType} id, CancellationToken ct)");
             sb.AppendLine("    {");
@@ -258,6 +339,8 @@ public partial class DtoGenerator
         if ((info.Operations & OpGetList) != 0)
         {
             sb.AppendLine();
+            if (info.GetListPolicy is not null)
+                sb.AppendLine($"    [Microsoft.AspNetCore.Authorization.Authorize(Policy = \"{info.GetListPolicy}\")]");
             if (info.HasQueryDto && info.QueryName is not null)
             {
                 var fqQuery = info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName;
@@ -274,11 +357,14 @@ public partial class DtoGenerator
                 sb.AppendLine("        var q = _store.Query();");
             }
 
-            if (info.HasResponseDto && info.ResponseName is not null)
+            var ctrlListType = info.ListResponseName ?? info.ResponseName;
+            var fqCtrlList = info.HasResponseDto && ctrlListType is not null
+                ? (info.Namespace is not null ? $"{info.Namespace}.{ctrlListType}" : ctrlListType)
+                : null;
+            if (fqCtrlList is not null)
             {
-                var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
-                sb.AppendLine($"        var projected = {fqResponse}.ProjectFrom(q);");
-                sb.AppendLine($"        var result = await PaginatedResponse<{fqResponse}>.CreateAsync(projected, page, pageSize, ct);");
+                sb.AppendLine($"        var projected = {fqCtrlList}.ProjectFrom(q);");
+                sb.AppendLine($"        var result = await PaginatedResponse<{fqCtrlList}>.CreateAsync(projected, page, pageSize, ct);");
             }
             else
             {
@@ -294,11 +380,13 @@ public partial class DtoGenerator
             var fqCreate = info.Namespace is not null ? $"{info.Namespace}.{info.CreateRequestName}" : info.CreateRequestName;
             var validateMethod = info.IsCombinedDto ? "ValidateForCreate" : "Validate";
             sb.AppendLine();
+            if (info.CreatePolicy is not null)
+                sb.AppendLine($"    [Microsoft.AspNetCore.Authorization.Authorize(Policy = \"{info.CreatePolicy}\")]");
             sb.AppendLine("    [HttpPost]");
             sb.AppendLine($"    public async Task<IActionResult> Create([FromBody] {fqCreate} request, CancellationToken ct)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        var errors = request.{validateMethod}();");
-            sb.AppendLine("        if (errors.Count > 0) return BadRequest(new { errors });");
+            sb.AppendLine($"        var validation = request.{validateMethod}();");
+            sb.AppendLine("        if (!validation.IsValid) { foreach (var kv in validation.Errors) foreach (var msg in kv.Value) ModelState.AddModelError(kv.Key, msg); return ValidationProblem(); }");
             sb.AppendLine("        var entity = request.ToEntity();");
             sb.AppendLine("        await _store.CreateAsync(entity, ct);");
             if (info.HasResponseDto && info.ResponseName is not null)
@@ -319,13 +407,15 @@ public partial class DtoGenerator
             var fqUpdate = info.Namespace is not null ? $"{info.Namespace}.{info.UpdateRequestName}" : info.UpdateRequestName;
             var validateMethod = info.IsCombinedDto ? "ValidateForUpdate" : "Validate";
             sb.AppendLine();
+            if (info.UpdatePolicy is not null)
+                sb.AppendLine($"    [Microsoft.AspNetCore.Authorization.Authorize(Policy = \"{info.UpdatePolicy}\")]");
             sb.AppendLine("    [HttpPatch(\"{id}\")]");
             sb.AppendLine($"    public async Task<IActionResult> Update({keyType} id, [FromBody] {fqUpdate} request, CancellationToken ct)");
             sb.AppendLine("    {");
             sb.AppendLine("        var entity = await _store.GetByIdAsync(id, ct);");
             sb.AppendLine("        if (entity is null) return NotFound();");
-            sb.AppendLine($"        var errors = request.{validateMethod}();");
-            sb.AppendLine("        if (errors.Count > 0) return BadRequest(new { errors });");
+            sb.AppendLine($"        var validation = request.{validateMethod}();");
+            sb.AppendLine("        if (!validation.IsValid) { foreach (var kv in validation.Errors) foreach (var msg in kv.Value) ModelState.AddModelError(kv.Key, msg); return ValidationProblem(); }");
             sb.AppendLine("        request.ApplyTo(entity);");
             sb.AppendLine("        await _store.UpdateAsync(entity, ct);");
             if (info.HasResponseDto && info.ResponseName is not null)
@@ -344,6 +434,8 @@ public partial class DtoGenerator
         if ((info.Operations & OpDelete) != 0)
         {
             sb.AppendLine();
+            if (info.DeletePolicy is not null)
+                sb.AppendLine($"    [Microsoft.AspNetCore.Authorization.Authorize(Policy = \"{info.DeletePolicy}\")]");
             sb.AppendLine("    [HttpDelete(\"{id}\")]");
             sb.AppendLine($"    public async Task<IActionResult> Delete({keyType} id, CancellationToken ct)");
             sb.AppendLine("    {");

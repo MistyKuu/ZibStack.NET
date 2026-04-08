@@ -1,34 +1,40 @@
+using Microsoft.EntityFrameworkCore;
+using Scalar.AspNetCore;
 using ZibStack.NET.Dto;
 using ZibStack.NET.Dto.Sample;
 using ZibStack.NET.Dto.Sample.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
 
-// Register in-memory stores for generated CRUD endpoints
-builder.Services.AddSingleton<ICrudStore<Player, int>>(_ =>
-    new InMemoryCrudStore<Player, int>(
-        new List<Player>
-        {
-            new Player
-            {
-                Id = 1, Name = "Alice", Level = 10, Email = "alice@example.com",
-                Address = new Address { Street = "123 Main St", City = "Springfield", ZipCode = "62701" },
-                Password = "hashed_secret", IsAdmin = false, CreatedAt = DateTime.UtcNow
-            }
-        },
-        p => p.Id, (p, id) => p.Id = id, nextId: 2));
+// PatchField converter for Minimal API endpoints
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
 
-builder.Services.AddSingleton<ICrudStore<Team, int>>(_ =>
-    new InMemoryCrudStore<Team, int>(
-        new List<Team>
-        {
-            new Team { Id = 1, Name = "Alpha", Description = "First team", MaxMembers = 5, CreatedAt = DateTime.UtcNow }
-        },
-        t => t.Id, (t, id) => t.Id = id, nextId: 2));
+// OpenAPI
+builder.Services.AddOpenApi();
+
+// EF Core + SQLite — database file lives next to the project
+builder.Services.AddDbContext<AppDbContext>(o =>
+    o.UseSqlite("Data Source=sample.db"));
+
+// Auto-generated CRUD stores for all DbSets in AppDbContext
+builder.Services.AddAppDbContextCrudStores();
 
 var app = builder.Build();
+
+// Auto-create/migrate the database on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
+
+// OpenAPI doc + Scalar UI
+app.MapOpenApi();
+app.MapScalarApiReference();
 
 // Generated minimal API endpoints
 app.MapPlayerEndpoints();

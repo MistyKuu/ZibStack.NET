@@ -3,11 +3,7 @@ using ZibStack.NET.Dto;
 
 namespace ZibStack.NET.Dto.Sample.Models;
 
-[CreateDto]
-[UpdateDto]
-[ResponseDto]
-[QueryDto(Sortable = true, DefaultSort = "Name")]
-[CrudApi(Style = ApiStyle.Both)]
+[CrudApi(Style = ApiStyle.MinimalApi, Operations = CrudOperations.AllWithBulk)]
 public class Player
 {
     [DtoIgnore]

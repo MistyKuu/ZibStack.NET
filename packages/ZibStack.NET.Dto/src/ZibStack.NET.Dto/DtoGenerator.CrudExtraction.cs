@@ -22,6 +22,11 @@ public partial class DtoGenerator
         var styleRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "Style").Value.Value;
         var style = styleRaw is int s ? s : 0; // ApiStyle.MinimalApi = 0
         var authorizePolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "AuthorizePolicy").Value.Value as string;
+        var getByIdPolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "GetByIdPolicy").Value.Value as string;
+        var getListPolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "GetListPolicy").Value.Value as string;
+        var createPolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "CreatePolicy").Value.Value as string;
+        var updatePolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "UpdatePolicy").Value.Value as string;
+        var deletePolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "DeletePolicy").Value.Value as string;
 
         // Resolve key property type
         var keyProp = GetAllProperties(symbol).FirstOrDefault(p => p.Name == keyProperty);
@@ -31,8 +36,11 @@ public partial class DtoGenerator
         // Auto-generate route from class name if not specified
         if (route is null)
         {
+            var routePrefix = attr.NamedArguments.FirstOrDefault(a => a.Key == "RoutePrefix").Value.Value as string;
             var name = symbol.Name;
-            route = "api/" + Pluralize(CamelCase(name));
+            route = routePrefix is not null
+                ? "api/" + routePrefix.TrimEnd('/') + "/" + Pluralize(CamelCase(name))
+                : "api/" + Pluralize(CamelCase(name));
         }
 
         // Cross-reference DTO attributes on the same entity
@@ -44,7 +52,7 @@ public partial class DtoGenerator
         var hasResponseDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
         var hasQueryDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == QueryDtoAttributeFqn);
 
-        // Resolve DTO type names
+        // Resolve DTO type names — [CrudApi] auto-implies missing DTO attributes
         string? createRequestName = null;
         string? updateRequestName = null;
         string? responseName = null;
@@ -56,12 +64,22 @@ public partial class DtoGenerator
             var customName = cAttr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
             createRequestName = customName ?? $"Create{symbol.Name}Request";
         }
+        else if (!hasCombined)
+        {
+            // Auto-imply CreateDto
+            createRequestName = $"Create{symbol.Name}Request";
+        }
 
         if (hasUpdateDto)
         {
             var uAttr = allAttrs.First(a => a.AttributeClass?.ToDisplayString() == UpdateDtoAttributeFqn);
             var customName = uAttr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
             updateRequestName = customName ?? $"Update{symbol.Name}Request";
+        }
+        else if (!hasCombined)
+        {
+            // Auto-imply UpdateDto
+            updateRequestName = $"Update{symbol.Name}Request";
         }
 
         if (hasCombined)
@@ -79,6 +97,12 @@ public partial class DtoGenerator
             var customName = rAttr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
             responseName = customName ?? $"{symbol.Name}Response";
         }
+        else
+        {
+            // Auto-imply ResponseDto
+            hasResponseDto = true;
+            responseName = $"{symbol.Name}Response";
+        }
 
         if (hasQueryDto)
         {
@@ -86,6 +110,11 @@ public partial class DtoGenerator
             var customName = qAttr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
             queryName = customName ?? $"{symbol.Name}Query";
         }
+
+        // Detect [ListIgnore] on any property → separate list response DTO
+        var hasListIgnore = GetAllProperties(symbol).Any(p =>
+            p.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn));
+        var listResponseName = hasListIgnore ? $"{symbol.Name}ListItem" : (string?)null;
 
         var ns = symbol.ContainingNamespace.IsGlobalNamespace
             ? null
@@ -107,7 +136,147 @@ public partial class DtoGenerator
             queryName,
             hasCombined,
             hasResponseDto,
-            hasQueryDto);
+            hasQueryDto,
+            getByIdPolicy,
+            getListPolicy,
+            createPolicy,
+            updatePolicy,
+            deletePolicy,
+            listResponseName);
+    } catch { return null; } }
+
+    // ─── Auto-implied DTOs from [CrudApi] ──────────────────────────────
+
+    private static CrudImpliedDtos? GetCrudImpliedDtos(GeneratorAttributeSyntaxContext context)
+    { try {
+        var symbol = (INamedTypeSymbol)context.TargetSymbol;
+        var allAttrs = symbol.GetAttributes();
+
+        var hasCreateDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateDtoAttributeFqn);
+        var hasUpdateDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateDtoAttributeFqn);
+        var hasCombined = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateOrUpdateDtoAttributeFqn);
+        var hasResponseDto = allAttrs.Any(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
+
+        // If all explicit DTOs are present, nothing to auto-generate
+        var needsCreate = !hasCreateDto && !hasCombined;
+        var needsUpdate = !hasUpdateDto && !hasCombined;
+        var needsResponse = !hasResponseDto;
+        if (!needsCreate && !needsUpdate && !needsResponse) return null;
+
+        var ns = symbol.ContainingNamespace.IsGlobalNamespace
+            ? null : symbol.ContainingNamespace.ToDisplayString();
+        var fqn = SanitizeHintName(symbol.ToDisplayString().Replace(".", "_"));
+
+        var result = new CrudImpliedDtos();
+
+        if (needsCreate)
+        {
+            var seen = new HashSet<string>();
+            var autoNested = new List<DtoClassInfo>();
+            var properties = CollectProperties(symbol, DtoKind.Create, seen, autoNested);
+            var info = new DtoClassInfo(symbol.Name, ns, fqn,
+                $"Create{symbol.Name}Request", DtoKind.Create, properties, null, null);
+            info.AutoNestedDtos.AddRange(autoNested);
+            result.CreateDtos.Add(info);
+        }
+
+        if (needsUpdate)
+        {
+            var seen = new HashSet<string>();
+            var autoNested = new List<DtoClassInfo>();
+            var properties = CollectProperties(symbol, DtoKind.Update, seen, autoNested);
+            var info = new DtoClassInfo(symbol.Name, ns, fqn,
+                $"Update{symbol.Name}Request", DtoKind.Update, properties, null, null);
+            info.AutoNestedDtos.AddRange(autoNested);
+            result.UpdateDtos.Add(info);
+        }
+
+        if (needsResponse)
+        {
+            var properties = new List<ResponsePropertyInfo>();
+            foreach (var prop in GetAllProperties(symbol))
+            {
+                if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+                if (prop.GetMethod is null) continue;
+
+                var hasResponseIgnore = prop.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() == ResponseIgnoreAttributeFqn);
+                if (hasResponseIgnore) continue;
+
+                var hasFlatten = prop.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() == FlattenAttributeFqn);
+                if (hasFlatten)
+                {
+                    var propType = prop.Type;
+                    var isNullableRef = propType.NullableAnnotation == NullableAnnotation.Annotated;
+                    var unwrapped = propType;
+                    if (unwrapped is INamedTypeSymbol { IsGenericType: true, ConstructedFrom.SpecialType: SpecialType.System_Nullable_T } nullableF)
+                        unwrapped = nullableF.TypeArguments[0];
+                    if (unwrapped is INamedTypeSymbol flatType)
+                    {
+                        var seenTypes = new HashSet<string>();
+                        FlattenRecursive(properties, flatType, prop.Name,
+                            $"entity.{prop.Name}", $"x.{prop.Name}",
+                            isNullableRef, seenTypes, maxDepth: 5);
+                    }
+                    continue;
+                }
+
+                var jsonName = GetJsonName(prop);
+                var (validationAttrs, _) = GetValidationAttributes(prop);
+
+                // Check nested [ResponseDto]
+                var propType2 = prop.Type;
+                var isNullableRef2 = propType2.NullableAnnotation == NullableAnnotation.Annotated;
+                var unwrapped2 = propType2;
+                if (unwrapped2 is INamedTypeSymbol { IsGenericType: true, ConstructedFrom.SpecialType: SpecialType.System_Nullable_T } nullable)
+                    unwrapped2 = nullable.TypeArguments[0];
+
+                var hasNestedResponseDto = unwrapped2 is INamedTypeSymbol namedType &&
+                    namedType.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
+
+                if (!hasNestedResponseDto)
+                {
+                    properties.Add(new ResponsePropertyInfo(prop.Name, jsonName, propType2.ToDisplayString(), validationAttrs));
+                }
+                else
+                {
+                    var nestedName = ((INamedTypeSymbol)unwrapped2).Name;
+                    var nestedResponseDtoAttr = unwrapped2.GetAttributes()
+                        .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
+                    var customName = nestedResponseDtoAttr?.NamedArguments
+                        .FirstOrDefault(a => a.Key == "Name").Value.Value as string;
+                    var rName = customName ?? $"{nestedName}Response";
+                    var nestedNs = unwrapped2.ContainingNamespace.IsGlobalNamespace
+                        ? null : unwrapped2.ContainingNamespace.ToDisplayString();
+                    var fqResponseName = nestedNs is not null ? $"{nestedNs}.{rName}" : rName;
+                    var displayType2 = isNullableRef2 ? $"{fqResponseName}?" : fqResponseName;
+                    properties.Add(new ResponsePropertyInfo(prop.Name, jsonName, displayType2, validationAttrs,
+                        isNestedResponse: true, isNullable: isNullableRef2,
+                        sourceTypeName: propType2.ToDisplayString(), nestedResponseName: fqResponseName));
+                }
+            }
+            // Check for [ListIgnore] → separate list DTO
+            var listIgnoreSet = new HashSet<string>();
+            foreach (var prop in GetAllProperties(symbol))
+            {
+                if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn))
+                    listIgnoreSet.Add(prop.Name);
+            }
+
+            string? listName = null;
+            List<ResponsePropertyInfo>? listProps = null;
+            if (listIgnoreSet.Count > 0)
+            {
+                listName = $"{symbol.Name}ListItem";
+                listProps = properties.Where(p => !listIgnoreSet.Contains(p.PropertyName)).ToList();
+            }
+
+            result.ResponseDtos.Add(new ResponseDtoInfo(symbol.Name, ns, fqn,
+                $"{symbol.Name}Response", properties, listName, listProps));
+        }
+
+        return result;
     } catch { return null; } }
 
     private static string Pluralize(string name)

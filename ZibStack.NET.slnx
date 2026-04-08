@@ -15,6 +15,14 @@
   <Folder Name="/packages/ZibStack.NET.Utils/src/">
     <Project Path="packages/ZibStack.NET.Utils/src/ZibStack.NET.Utils/ZibStack.NET.Utils.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.EntityFramework/" />
+  <Folder Name="/packages/ZibStack.NET.EntityFramework/src/">
+    <Project Path="packages/ZibStack.NET.EntityFramework/src/ZibStack.NET.EntityFramework/ZibStack.NET.EntityFramework.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Dapper/" />
+  <Folder Name="/packages/ZibStack.NET.Dapper/src/">
+    <Project Path="packages/ZibStack.NET.Dapper/src/ZibStack.NET.Dapper/ZibStack.NET.Dapper.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Dto/" />
   <Folder Name="/packages/ZibStack.NET.Dto/sample/">
     <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />

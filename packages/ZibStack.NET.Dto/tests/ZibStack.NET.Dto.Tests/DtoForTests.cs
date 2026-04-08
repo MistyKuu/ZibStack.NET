@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace ZibStack.NET.Dto.Tests;
 
 public class CreateDtoForTests
@@ -29,8 +31,10 @@ public class CreateDtoForTests
     {
         var request = new CreateConfigRequest();
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("key") && e.Contains("required"));
-        Assert.Contains(errors, e => e.Contains("value") && e.Contains("required"));
+        Assert.True(errors.Errors.ContainsKey("key"));
+        Assert.Contains(errors.Errors["key"], e => e.Contains("required"));
+        Assert.True(errors.Errors.ContainsKey("value"));
+        Assert.Contains(errors.Errors["value"], e => e.Contains("required"));
     }
 
     [Fact]
@@ -38,7 +42,7 @@ public class CreateDtoForTests
     {
         var request = new CreateConfigRequest { Key = "app.name", Value = "MyApp" };
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -97,7 +101,7 @@ public class UpdateDtoForTests
     {
         var request = new UpdateConfigRequest();
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -105,7 +109,8 @@ public class UpdateDtoForTests
     {
         var request = new UpdateConfigRequest { Key = null! };
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("key") && e.Contains("null"));
+        Assert.True(errors.Errors.ContainsKey("key"));
+        Assert.Contains(errors.Errors["key"], e => e.Contains("null"));
     }
 
     [Fact]

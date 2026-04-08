@@ -78,6 +78,7 @@ public partial class DtoGenerator
         var hasUpdateDtoFor = attrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateDtoForAttributeFqn);
         var hasPickFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.PickFromAttribute");
         var hasOmitFrom = attrs.Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.OmitFromAttribute");
+        var hasCrudApi = attrs.Any(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
 
         var isPartial = syntax.Modifiers.Any(SyntaxKind.PartialKeyword);
 
@@ -133,8 +134,8 @@ public partial class DtoGenerator
 
             var propAttrs = prop.GetAttributes();
 
-            // SDTO004: CreateOnly without CreateDto
-            if (!hasCreateDto && !hasCombined &&
+            // SDTO004: CreateOnly without CreateDto (skip if [CrudApi] auto-implies it)
+            if (!hasCreateDto && !hasCombined && !hasCrudApi &&
                 propAttrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateOnlyAttributeFqn))
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CreateOnlyWithoutCreateDto,
@@ -142,8 +143,8 @@ public partial class DtoGenerator
                     prop.Name, symbol.Name));
             }
 
-            // SDTO005: UpdateOnly without UpdateDto
-            if (!hasUpdateDto && !hasCombined &&
+            // SDTO005: UpdateOnly without UpdateDto (skip if [CrudApi] auto-implies it)
+            if (!hasUpdateDto && !hasCombined && !hasCrudApi &&
                 propAttrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateOnlyAttributeFqn))
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.UpdateOnlyWithoutUpdateDto,
@@ -176,23 +177,9 @@ public partial class DtoGenerator
             }
         }
 
-        // SDTO009-011: CrudApi diagnostics
-        var hasCrudApi = attrs.Any(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
+        // SDTO011: CrudApi key property not found
         if (hasCrudApi)
         {
-            if (!hasCreateDto && !hasUpdateDto && !hasCombined)
-            {
-                spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CrudApiMissingWriteDto,
-                    syntax.Identifier.GetLocation(), symbol.Name));
-            }
-
-            var hasResponseDto2 = attrs.Any(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
-            if (!hasResponseDto2)
-            {
-                spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CrudApiMissingResponseDto,
-                    syntax.Identifier.GetLocation(), symbol.Name));
-            }
-
             var crudAttr = attrs.First(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
             var keyPropName = crudAttr.NamedArguments.FirstOrDefault(a => a.Key == "KeyProperty").Value.Value as string ?? "Id";
             var keyExists = GetAllProperties(symbol).Any(p => p.Name == keyPropName);

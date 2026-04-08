@@ -518,42 +518,82 @@ public interface ICrudStore<TEntity, TKey>
 }
 ```
 
-**EF Core** — when EF Core is referenced, the generator emits an `EfCrudStore<TEntity, TKey, TContext>` base class:
+### Storage integrations
+
+Ready-made implementations are available as separate packages:
+
+| Package | Description |
+|---------|-------------|
+| [`ZibStack.NET.EntityFramework`](https://www.nuget.org/packages/ZibStack.NET.EntityFramework) | EF Core — auto-generates stores + DI registration from `DbContext` |
+| [`ZibStack.NET.Dapper`](https://www.nuget.org/packages/ZibStack.NET.Dapper) | Dapper — base class with auto-generated SQL |
+
+**EF Core** — add `[GenerateCrudStores]` to your DbContext and the store implementations + DI registration are generated automatically:
 
 ```csharp
-public class PlayerStore : EfCrudStore<Player, int, AppDbContext>
+dotnet add package ZibStack.NET.EntityFramework
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+```
+
+```csharp
+[GenerateCrudStores]
+public class AppDbContext : DbContext
 {
-    public PlayerStore(AppDbContext db) : base(db) { }
-    protected override DbSet<Player> Set => Db.Players;
+    public DbSet<Player> Players => Set<Player>();
+    public DbSet<Team> Teams => Set<Team>();
+    // ...
 }
 ```
 
-### Smart DTO detection
+```csharp
+// In Program.cs — one line registers all stores
+builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite("Data Source=app.db"));
+builder.Services.AddAppDbContextCrudStores();  // auto-generated extension method
+```
 
-The generator analyzes which DTO attributes are present and adapts the generated endpoints:
+You can also implement `ICrudStore<T,K>` manually or inherit `EfCrudStore<T,K,TContext>` for custom behavior.
 
-| Attributes on entity | Effect |
+### Auto-implied DTOs
+
+`[CrudApi]` alone is enough for a full CRUD API. Missing DTO attributes are auto-generated with sensible defaults:
+
+```csharp
+[CrudApi]  // generates CreatePlayerRequest, UpdatePlayerRequest, PlayerResponse + endpoints
+public class Player
+{
+    [DtoIgnore] public int Id { get; set; }
+    public required string Name { get; set; }
+    public int Level { get; set; }
+}
+```
+
+Explicit DTO attributes always take priority when present:
+
+| What's on the class | What gets generated |
 |---|---|
-| `[ResponseDto]` | GET endpoints return `{Entity}Response` via `FromEntity()` / `ProjectFrom()` |
-| No `[ResponseDto]` | GET endpoints return raw entity |
-| `[QueryDto]` | GET list uses query parameters for filtering + sorting via `Apply()` |
-| No `[QueryDto]` | GET list returns all items (with pagination only) |
-| `[CreateDto]` or `[CreateOrUpdateDto]` | POST endpoint generated |
-| `[UpdateDto]` or `[CreateOrUpdateDto]` | PATCH endpoint generated |
-| `[CreateOrUpdateDto]` | Uses `ValidateForCreate()` / `ValidateForUpdate()` instead of `Validate()` |
-| No create/update DTOs | Write endpoints not generated (warning SDTO010) |
+| `[CrudApi]` alone | Auto: `CreateXxxRequest`, `UpdateXxxRequest`, `XxxResponse` |
+| `[CrudApi]` + `[CreateDto(Name = "NewPlayer")]` | Explicit `NewPlayer` + auto: Update, Response |
+| `[CrudApi]` + `[CreateOrUpdateDto]` | Explicit combined DTO + auto: Response |
+| `[CrudApi]` + all DTO attrs | All explicit — auto-imply disabled |
 
 ### Attribute options
 
 ```csharp
 [CrudApi(
-    Route = "api/v2/players",              // custom route (default: api/{pluralized-name})
+    Route = "api/v2/players",              // full route override (default: api/{pluralized-name})
+    RoutePrefix = "v2",                    // prefix only → api/v2/players (ignored when Route is set)
     KeyProperty = "PlayerId",              // key property name (default: "Id")
-    Operations = CrudOperations.Read,      // which operations (default: All)
+    Operations = CrudOperations.AllWithBulk, // which operations (default: All)
     Style = ApiStyle.MinimalApi,           // MinimalApi, Controller, or Both
-    AuthorizePolicy = "admin"              // adds RequireAuthorization / [Authorize]
+    AuthorizePolicy = "read:players",      // default policy for all operations
+    CreatePolicy = "write:players",        // override for POST only
+    UpdatePolicy = "write:players",        // override for PATCH only
+    DeletePolicy = "admin",               // override for DELETE only
+    GetByIdPolicy = "read:players",        // override for GET by ID
+    GetListPolicy = "read:players"         // override for GET list
 )]
 ```
+
+Per-operation policies override the default `AuthorizePolicy` for specific operations. This allows read-only access for some users while requiring elevated permissions for writes.
 
 **`CrudOperations`** flags:
 
@@ -564,13 +604,156 @@ The generator analyzes which DTO attributes are present and adapts the generated
 | `Create` | 4 | POST |
 | `Update` | 8 | PATCH |
 | `Delete` | 16 | DELETE |
+| `BulkCreate` | 32 | POST /bulk |
+| `BulkDelete` | 64 | POST /bulk-delete |
 | `Read` | 3 | GetById + GetList |
 | `Write` | 28 | Create + Update + Delete |
-| `All` | 31 | Everything |
+| `Bulk` | 96 | BulkCreate + BulkDelete |
+| `All` | 31 | Read + Write (no bulk) |
+| `AllWithBulk` | 127 | All + Bulk |
+
+### Customizing endpoints
+
+**Property-level control** — attributes on model properties affect what appears in generated requests/responses:
+
+| Attribute | Effect on CRUD |
+|-----------|---------------|
+| `[DtoIgnore]` | Excluded from request and response DTOs |
+| `[CreateOnly]` | Included only in POST request (not in PATCH) |
+| `[UpdateOnly]` | Included only in PATCH request (not in POST) |
+| `[Immutable]` | Visible in PATCH DTO but `ApplyTo()` skips it |
+| `[ResponseIgnore]` | Hidden from GET responses (e.g. passwords) |
+| `[ListIgnore]` | Hidden from GET list, visible in GET by ID (e.g. large fields) |
+| `[Flatten]` | Nested object properties flattened into response |
+| `required` | Validated as mandatory in POST, optional in PATCH |
+| `[MinLength]`, `[MaxLength]`, `[Range]`, `[EmailAddress]` | Propagated to generated validation |
+
+**Custom DTO names:**
+
+```csharp
+[CrudApi]
+[CreateDto(Name = "NewPlayerDto")]    // override default CreatePlayerRequest
+[ResponseDto(Name = "PlayerView")]    // override default PlayerResponse
+```
+
+**Minimal API route group configuration** — the generated `MapXxxEndpoints` accepts a `configure` callback:
+
+```csharp
+app.MapPlayerEndpoints(configure: group =>
+{
+    group.RequireRateLimiting("fixed");
+    group.AddEndpointFilter<MyLoggingFilter>();
+    group.WithTags("Players", "V1");
+});
+```
+
+**Custom route prefix** — override the generated route or add a version prefix:
+
+```csharp
+app.MapPlayerEndpoints(prefix: "api/v2/players");  // override route at runtime
+```
+
+**Extending generated controllers** — generated controllers are `partial`, so you can add extra endpoints:
+
+```csharp
+public partial class PlayerCrudController
+{
+    [HttpPost("bulk")]
+    public async Task<IActionResult> BulkCreate([FromBody] List<CreatePlayerRequest> requests, CancellationToken ct)
+    {
+        // custom bulk logic
+    }
+}
+```
+
+**Custom data access** — override methods in `EfCrudStore` for custom behavior:
+
+```csharp
+public class PlayerStore : EfCrudStore<Player, int, AppDbContext>
+{
+    public PlayerStore(AppDbContext db) : base(db) { }
+    protected override DbSet<Player> Set => Db.Players;
+
+    // Soft delete instead of hard delete
+    public override async ValueTask DeleteAsync(Player entity, CancellationToken ct = default)
+    {
+        entity.IsDeleted = true;
+        await Db.SaveChangesAsync(ct);
+    }
+
+    // Auto-set timestamps
+    public override async ValueTask CreateAsync(Player entity, CancellationToken ct = default)
+    {
+        entity.CreatedAt = DateTime.UtcNow;
+        await base.CreateAsync(entity, ct);
+    }
+}
+```
+
+### Error responses
+
+All error responses use the [RFC 9110](https://tools.ietf.org/html/rfc9110) **ProblemDetails** format (`application/problem+json`):
+
+```json
+// Validation error (400)
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "": ["Property 'name' is required.", "Property 'password' is required."]
+  }
+}
+
+// Not found (404)
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+  "title": "Not Found",
+  "status": 404
+}
+```
+
+### List vs Detail responses (`[ListIgnore]`)
+
+Mark properties with `[ListIgnore]` to exclude them from the GET list response while keeping them in the GET by ID response. The generator creates a separate `{Entity}ListItem` DTO for list endpoints:
+
+```csharp
+[CrudApi]
+public class Player
+{
+    [DtoIgnore] public int Id { get; set; }
+    public required string Name { get; set; }
+    public int Level { get; set; }
+
+    [ListIgnore]
+    public string? Bio { get; set; }          // only in GET /api/players/{id}
+
+    [ListIgnore]
+    public Address? Address { get; set; }      // only in GET /api/players/{id}
+}
+```
+
+Generated: `PlayerResponse` (all fields, for detail) and `PlayerListItem` (without Bio/Address, for list).
+
+### Bulk operations
+
+Enable bulk create/delete with `CrudOperations.Bulk` or `CrudOperations.AllWithBulk`:
+
+```csharp
+[CrudApi(Operations = CrudOperations.AllWithBulk)]
+public class Player { ... }
+```
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/players/bulk` | POST | Create multiple entities. Body: `[{...}, {...}]`. Validates all before creating. |
+| `/api/players/bulk-delete` | POST | Delete by IDs. Body: `[1, 3, 5]`. Returns `{"deleted": 2}`. |
+
+Bulk endpoints inherit the same per-operation auth policies (`CreatePolicy` for bulk create, `DeletePolicy` for bulk delete).
 
 ### Conditional emission
 
-CRUD endpoints are only generated when the consuming project references ASP.NET Core (detected at compile time). The `EfCrudStore` base class is only emitted when EF Core is referenced. This means:
+CRUD endpoints are only generated when the consuming project references ASP.NET Core (detected at compile time). This means:
 
 - Library projects that only use DTOs → no endpoint code emitted
 - Web API projects → full CRUD generation
@@ -580,8 +763,6 @@ CRUD endpoints are only generated when the consuming project references ASP.NET 
 
 | Code | Severity | Description |
 |------|----------|-------------|
-| SDTO009 | Warning | `[CrudApi]` without `[ResponseDto]` — GET endpoints return raw entity |
-| SDTO010 | Warning | `[CrudApi]` without any create/update DTO — write endpoints not generated |
 | SDTO011 | Error | `KeyProperty` value does not match any property on the type |
 
 ## `ApplyWithChanges()` (Update DTOs only)

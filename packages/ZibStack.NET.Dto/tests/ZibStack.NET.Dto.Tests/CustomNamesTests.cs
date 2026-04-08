@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace ZibStack.NET.Dto.Tests;
 
 public class CustomNamesTests
@@ -26,9 +28,10 @@ public class CustomNamesTests
         var request = new TagDto();
 
         var createErrors = request.ValidateForCreate();
-        Assert.Contains(createErrors, e => e.Contains("label") && e.Contains("required"));
+        Assert.True(createErrors.Errors.ContainsKey("label"));
+        Assert.Contains(createErrors.Errors["label"], e => e.Contains("required"));
 
         var updateErrors = request.ValidateForUpdate();
-        Assert.Empty(updateErrors);
+        Assert.True(updateErrors.IsValid);
     }
 }

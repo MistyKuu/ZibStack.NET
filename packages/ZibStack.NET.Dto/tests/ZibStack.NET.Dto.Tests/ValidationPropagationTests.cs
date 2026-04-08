@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 
 namespace ZibStack.NET.Dto.Tests;
 
@@ -54,7 +55,7 @@ public class ValidationPropagationTests
             Quantity = new PatchField<int>(10),
         };
         var errors = request.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -67,7 +68,7 @@ public class ValidationPropagationTests
             Quantity = new PatchField<int>(5),
         };
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("at most 100"));
+        Assert.Contains(errors.Errors.SelectMany(kv => kv.Value), e => e.Contains("at most 100"));
     }
 
     [Fact]
@@ -79,7 +80,7 @@ public class ValidationPropagationTests
             Quantity = new PatchField<int>(5),
         };
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("email"));
+        Assert.Contains(errors.Errors.SelectMany(kv => kv.Value), e => e.Contains("email"));
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public class ValidationPropagationTests
             Quantity = new PatchField<int>(0),
         };
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("between 1 and 999"));
+        Assert.Contains(errors.Errors.SelectMany(kv => kv.Value), e => e.Contains("between 1 and 999"));
     }
 
     [Fact]
@@ -103,7 +104,7 @@ public class ValidationPropagationTests
             Quantity = new PatchField<int>(1000),
         };
         var errors = request.Validate();
-        Assert.Contains(errors, e => e.Contains("between 1 and 999"));
+        Assert.Contains(errors.Errors.SelectMany(kv => kv.Value), e => e.Contains("between 1 and 999"));
     }
 
     [Fact]
@@ -114,6 +115,6 @@ public class ValidationPropagationTests
             Email = new PatchField<string>("user@test.com"),
         };
         var errors = request.Validate();
-        Assert.DoesNotContain(errors, e => e.Contains("quantity"));
+        Assert.False(errors.Errors.ContainsKey("quantity"));
     }
 }

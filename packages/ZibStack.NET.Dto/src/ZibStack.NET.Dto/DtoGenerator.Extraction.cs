@@ -197,12 +197,30 @@ public partial class DtoGenerator
             ? null
             : symbol.ContainingNamespace.ToDisplayString();
 
+        // Check if any property has [ListIgnore] — if so, generate a separate list DTO
+        var listIgnoreProps = new HashSet<string>();
+        foreach (var prop in GetAllProperties(symbol))
+        {
+            if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn))
+                listIgnoreProps.Add(prop.Name);
+        }
+
+        string? listResponseName = null;
+        List<ResponsePropertyInfo>? listProperties = null;
+        if (listIgnoreProps.Count > 0)
+        {
+            listResponseName = $"{symbol.Name}ListItem";
+            listProperties = properties.Where(p => !listIgnoreProps.Contains(p.PropertyName)).ToList();
+        }
+
         return new ResponseDtoInfo(
             symbol.Name,
             ns,
             SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
             nameArg ?? $"{symbol.Name}Response",
-            properties);
+            properties,
+            listResponseName,
+            listProperties);
     } catch { return null; } }
 
     private static DtoForInfo? GetCreateDtoForInfo(GeneratorAttributeSyntaxContext context)
@@ -392,6 +410,20 @@ public partial class DtoGenerator
             var hasIgnore = prop.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn);
             if (hasIgnore) continue;
+
+            // Skip complex/navigation types — query parameters must be primitives
+            var propType = prop.Type;
+            if (propType is INamedTypeSymbol nts && nts.NullableAnnotation == NullableAnnotation.Annotated
+                && nts.TypeArguments.Length == 1)
+                propType = nts.TypeArguments[0]; // unwrap Nullable<T>
+
+            if (propType.TypeKind == TypeKind.Class
+                && propType.SpecialType == SpecialType.None
+                && propType.ToDisplayString() != "string")
+                continue;
+
+            if (propType.TypeKind == TypeKind.Interface || propType.TypeKind == TypeKind.Array)
+                continue;
 
             var jsonName = GetJsonName(prop);
             var displayType = prop.Type.ToDisplayString();

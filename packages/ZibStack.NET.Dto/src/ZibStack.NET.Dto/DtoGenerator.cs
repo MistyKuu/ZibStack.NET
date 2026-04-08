@@ -24,6 +24,7 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
     private const string ResponseDtoAttributeFqn = "ZibStack.NET.Dto.ResponseDtoAttribute";
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
+    private const string ListIgnoreAttributeFqn = "ZibStack.NET.Dto.ListIgnoreAttribute";
     private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -52,6 +53,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("CrudOperations.g.cs", CrudOperationsSource);
             ctx.AddSource("ApiStyle.g.cs", ApiStyleSource);
             ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
+            ctx.AddSource("ListIgnoreAttribute.g.cs", ListIgnoreAttributeSource);
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
         });
 
@@ -68,14 +70,21 @@ public partial class DtoGenerator : IIncrementalGenerator
             spc.AddSource("PatchField.g.cs", GeneratePatchFieldSource(flags.hasStj, flags.hasNewtonsoft));
         });
 
-        // Detect Swashbuckle and emit schema filter
-        var hasSwashbuckle = context.CompilationProvider.Select(static (compilation, _) =>
-            compilation.GetTypeByMetadataName("Swashbuckle.AspNetCore.SwaggerGen.ISchemaFilter") is not null);
-
-        context.RegisterSourceOutput(hasSwashbuckle, static (spc, has) =>
+        // Detect Swashbuckle and emit schema filter (v10+ uses IOpenApiSchema, older uses OpenApiSchema)
+        var swashbuckleVersion = context.CompilationProvider.Select(static (compilation, _) =>
         {
-            if (has)
+            var hasFilter = compilation.GetTypeByMetadataName("Swashbuckle.AspNetCore.SwaggerGen.ISchemaFilter") is not null;
+            if (!hasFilter) return 0;
+            var hasNewApi = compilation.GetTypeByMetadataName("Microsoft.OpenApi.IOpenApiSchema") is not null;
+            return hasNewApi ? 2 : 1; // 0=none, 1=legacy, 2=v10+
+        });
+
+        context.RegisterSourceOutput(swashbuckleVersion, static (spc, version) =>
+        {
+            if (version == 1)
                 spc.AddSource("PatchFieldSchemaFilter.g.cs", PatchFieldSchemaFilterSource);
+            else if (version == 2)
+                spc.AddSource("PatchFieldSchemaFilter.g.cs", PatchFieldSchemaFilterV10Source);
         });
 
         // Detect FluentValidation and emit adapter
@@ -182,6 +191,13 @@ public partial class DtoGenerator : IIncrementalGenerator
         {
             var source = GenerateResponseDtoSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Response.g.cs", source);
+            if (info.ListResponseName is not null && info.ListProperties is not null)
+            {
+                var listInfo = new ResponseDtoInfo(info.ClassName, info.Namespace, info.FullyQualifiedName,
+                    info.ListResponseName, info.ListProperties);
+                var listSource = GenerateResponseDtoSource(listInfo);
+                spc.AddSource($"{info.FullyQualifiedName}.ListItem.g.cs", listSource);
+            }
         });
 
         // Find [CreateDtoFor] and [UpdateDtoFor] — generate partial records for external types
@@ -228,14 +244,45 @@ public partial class DtoGenerator : IIncrementalGenerator
             spc.AddSource($"{info.FullyQualifiedName}.Query.g.cs", source);
         });
 
-        // Detect EF Core and emit EfCrudStore base class
-        var hasEfCore = context.CompilationProvider.Select(static (compilation, _) =>
-            compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext") is not null);
+        // [CrudApi] auto-implies missing DTO attributes — generate DTOs for classes
+        // that have [CrudApi] but lack explicit [CreateDto]/[UpdateDto]/[ResponseDto]
+        var crudImpliedDtos = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                CrudApiAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetCrudImpliedDtos(ctx))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(hasEfCore, static (spc, has) =>
+        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation), static (spc, pair) =>
         {
-            if (has)
-                spc.AddSource("EfCrudStore.g.cs", EfCrudStoreSource);
+            var (implied, hasFluent) = pair;
+            var nestedSeen = new HashSet<string>();
+
+            foreach (var classInfo in implied.CreateDtos)
+            {
+                var source = GenerateSource(classInfo, hasFluent);
+                spc.AddSource($"{classInfo.FullyQualifiedName}.Create.CrudImplied.g.cs", source);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+            }
+            foreach (var classInfo in implied.UpdateDtos)
+            {
+                var source = GenerateSource(classInfo, hasFluent);
+                spc.AddSource($"{classInfo.FullyQualifiedName}.Update.CrudImplied.g.cs", source);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+            }
+            foreach (var responseInfo in implied.ResponseDtos)
+            {
+                var source = GenerateResponseDtoSource(responseInfo);
+                spc.AddSource($"{responseInfo.FullyQualifiedName}.Response.CrudImplied.g.cs", source);
+                if (responseInfo.ListResponseName is not null && responseInfo.ListProperties is not null)
+                {
+                    var listInfo = new ResponseDtoInfo(responseInfo.ClassName, responseInfo.Namespace, responseInfo.FullyQualifiedName,
+                        responseInfo.ListResponseName, responseInfo.ListProperties);
+                    var listSource = GenerateResponseDtoSource(listInfo);
+                    spc.AddSource($"{responseInfo.FullyQualifiedName}.ListItem.CrudImplied.g.cs", listSource);
+                }
+            }
         });
 
         // Detect ASP.NET Core for CRUD API generation

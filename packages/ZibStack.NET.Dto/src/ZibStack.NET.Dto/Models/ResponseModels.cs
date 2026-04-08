@@ -38,13 +38,17 @@ internal sealed class ResponseDtoInfo
     public string FullyQualifiedName { get; }
     public string ResponseName { get; }
     public List<ResponsePropertyInfo> Properties { get; }
+    public string? ListResponseName { get; }
+    public List<ResponsePropertyInfo>? ListProperties { get; }
 
-    public ResponseDtoInfo(string className, string? ns, string fullyQualifiedName, string responseName, List<ResponsePropertyInfo> properties)
+    public ResponseDtoInfo(string className, string? ns, string fullyQualifiedName, string responseName, List<ResponsePropertyInfo> properties, string? listResponseName = null, List<ResponsePropertyInfo>? listProperties = null)
     {
         ClassName = className;
         Namespace = ns;
         FullyQualifiedName = fullyQualifiedName;
         ResponseName = responseName;
         Properties = properties;
+        ListResponseName = listResponseName;
+        ListProperties = listProperties;
     }
 }

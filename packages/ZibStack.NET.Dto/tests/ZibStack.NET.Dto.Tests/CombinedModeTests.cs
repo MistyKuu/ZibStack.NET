@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace ZibStack.NET.Dto.Tests;
 
 public class CombinedModeTests
@@ -13,7 +15,8 @@ public class CombinedModeTests
     {
         var request = new CategoryRequest();
         var errors = request.ValidateForCreate();
-        Assert.Contains(errors, e => e.Contains("name") && e.Contains("required"));
+        Assert.True(errors.Errors.ContainsKey("name"));
+        Assert.Contains(errors.Errors["name"], e => e.Contains("required"));
     }
 
     [Fact]
@@ -21,7 +24,7 @@ public class CombinedModeTests
     {
         var request = new CategoryRequest { Name = "Electronics" };
         var errors = request.ValidateForCreate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -29,7 +32,7 @@ public class CombinedModeTests
     {
         var request = new CategoryRequest();
         var errors = request.ValidateForUpdate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
     }
 
     [Fact]
@@ -37,7 +40,8 @@ public class CombinedModeTests
     {
         var request = new CategoryRequest { Name = null! };
         var errors = request.ValidateForUpdate();
-        Assert.Contains(errors, e => e.Contains("name") && e.Contains("null"));
+        Assert.True(errors.Errors.ContainsKey("name"));
+        Assert.Contains(errors.Errors["name"], e => e.Contains("null"));
     }
 
     [Fact]

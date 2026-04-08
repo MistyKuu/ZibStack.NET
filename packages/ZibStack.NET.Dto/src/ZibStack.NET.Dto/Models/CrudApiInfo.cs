@@ -13,10 +13,16 @@ internal sealed class CrudApiInfo
     public int Operations { get; }
     public int Style { get; }
     public string? AuthorizePolicy { get; }
+    public string? GetByIdPolicy { get; }
+    public string? GetListPolicy { get; }
+    public string? CreatePolicy { get; }
+    public string? UpdatePolicy { get; }
+    public string? DeletePolicy { get; }
 
     public string? CreateRequestName { get; }
     public string? UpdateRequestName { get; }
     public string? ResponseName { get; }
+    public string? ListResponseName { get; }
     public string? QueryName { get; }
     public bool IsCombinedDto { get; }
     public bool HasResponseDto { get; }
@@ -38,7 +44,13 @@ internal sealed class CrudApiInfo
         string? queryName,
         bool isCombinedDto,
         bool hasResponseDto,
-        bool hasQueryDto)
+        bool hasQueryDto,
+        string? getByIdPolicy = null,
+        string? getListPolicy = null,
+        string? createPolicy = null,
+        string? updatePolicy = null,
+        string? deletePolicy = null,
+        string? listResponseName = null)
     {
         ClassName = className;
         Namespace = ns;
@@ -49,9 +61,15 @@ internal sealed class CrudApiInfo
         Operations = operations;
         Style = style;
         AuthorizePolicy = authorizePolicy;
+        GetByIdPolicy = getByIdPolicy;
+        GetListPolicy = getListPolicy;
+        CreatePolicy = createPolicy;
+        UpdatePolicy = updatePolicy;
+        DeletePolicy = deletePolicy;
         CreateRequestName = createRequestName;
         UpdateRequestName = updateRequestName;
         ResponseName = responseName;
+        ListResponseName = listResponseName;
         QueryName = queryName;
         IsCombinedDto = isCombinedDto;
         HasResponseDto = hasResponseDto;

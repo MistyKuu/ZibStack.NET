@@ -85,7 +85,7 @@ public class JsonSerializationTests
 
         Assert.NotNull(request);
         var errors = request!.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
 
         var entity = request.ToEntity();
         Assert.Equal("Gadget", entity.Name);
@@ -109,7 +109,7 @@ public class JsonSerializationTests
 
         Assert.NotNull(request);
         var errors = request!.Validate();
-        Assert.Empty(errors);
+        Assert.True(errors.IsValid);
 
         request.ApplyTo(product);
         Assert.Equal("Old", product.Name);

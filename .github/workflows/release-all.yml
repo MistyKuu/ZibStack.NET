@@ -50,10 +50,16 @@ jobs:
       - name: Pack 6 — Dto
         run: dotnet pack packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 7 — Result
+      - name: Pack 7 — EntityFramework
+        run: dotnet pack packages/ZibStack.NET.EntityFramework/src/ZibStack.NET.EntityFramework/ZibStack.NET.EntityFramework.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 8 — Dapper
+        run: dotnet pack packages/ZibStack.NET.Dapper/src/ZibStack.NET.Dapper/ZibStack.NET.Dapper.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 9 — Result
         run: dotnet pack packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 8 — Validation
+      - name: Pack 10 — Validation
         run: dotnet pack packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       # Push all at once (NuGet resolves deps from same push)
