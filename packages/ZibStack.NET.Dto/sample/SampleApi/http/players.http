@@ -1,0 +1,182 @@
+### ─── Basic CRUD ────────────────────────────────────────────────────
+
+### List all players (default)
+GET {{host}}/api/players
+
+### Get player by id
+GET {{host}}/api/players/1
+
+### Create player
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "New Player", "level": 30, "email": "new@test.pl", "salary": 4000, "password": "newpass123"}
+
+### Update player (PatchField — only sends changed fields)
+PATCH {{host}}/api/players/1
+Content-Type: application/json
+
+{"level": 50, "email": "jan.updated@test.pl"}
+
+### Delete player
+DELETE {{host}}/api/players/6
+
+### ─── Filter: comparison operators ──────────────────────────────────
+
+### Equals
+GET {{host}}/api/players?filter=Name=Jan Kowalski
+
+### Not equals
+GET {{host}}/api/players?filter=Name!=Jan Kowalski
+
+### Greater than
+GET {{host}}/api/players?filter=Level>50
+
+### Greater than or equal
+GET {{host}}/api/players?filter=Level>=42
+
+### Less than
+GET {{host}}/api/players?filter=Level<30
+
+### Less than or equal
+GET {{host}}/api/players?filter=Salary<=5000
+
+### ─── Filter: string operators ──────────────────────────────────────
+
+### Contains
+GET {{host}}/api/players?filter=Name=*ski
+
+### Not contains
+GET {{host}}/api/players?filter=Name!*ski
+
+### Starts with
+GET {{host}}/api/players?filter=Name^Jan
+
+### Not starts with
+GET {{host}}/api/players?filter=Name!^Jan
+
+### Ends with
+GET {{host}}/api/players?filter=Email$test.pl
+
+### Not ends with
+GET {{host}}/api/players?filter=Email!$test.pl
+
+### ─── Filter: case insensitive ──────────────────────────────────────
+
+### Case insensitive equals
+GET {{host}}/api/players?filter=Name=jan kowalski/i
+
+### Case insensitive contains
+GET {{host}}/api/players?filter=Name=*SKI/i
+
+### Case insensitive email domain
+GET {{host}}/api/players?filter=Email=*COMPANY.COM/i
+
+### ─── Filter: IN / NOT IN ───────────────────────────────────────────
+
+### IN — semicolon-separated values
+GET {{host}}/api/players?filter=Name=in=Jan Kowalski;Anna Nowak;Kasia Wielka
+
+### IN — numeric
+GET {{host}}/api/players?filter=Level=in=42;75;90
+
+### NOT IN
+GET {{host}}/api/players?filter=Level=out=42;75
+
+### ─── Filter: AND (comma) ───────────────────────────────────────────
+
+### Level range
+GET {{host}}/api/players?filter=Level>=20,Level<=55
+
+### Multiple conditions
+GET {{host}}/api/players?filter=Level>30,Email$test.pl
+
+### Three conditions
+GET {{host}}/api/players?filter=Level>20,Level<80,Salary>3000
+
+### ─── Filter: OR (pipe) ─────────────────────────────────────────────
+
+### High or low level
+GET {{host}}/api/players?filter=Level>70|Level<15
+
+### Name match OR
+GET {{host}}/api/players?filter=Name^Jan|Name^Anna
+
+### ─── Filter: grouping with parentheses ─────────────────────────────
+
+### (high OR low level) AND specific email domain
+GET {{host}}/api/players?filter=(Level>70|Level<15),Email$test.pl
+
+### (name starts with J OR A) AND salary above 4000
+GET {{host}}/api/players?filter=(Name^Jan|Name^Anna),Salary>4000
+
+### Complex: (level range OR name match) AND email domain
+GET {{host}}/api/players?filter=(Level>50|Name=*ski),Email$test.pl
+
+### ─── Filter: relations (dot notation → auto JOIN) ──────────────────
+
+### Filter by team name
+GET {{host}}/api/players?filter=Team.Name=Lakers
+
+### Filter by team name contains
+GET {{host}}/api/players?filter=Team.Name=*elt
+
+### Relation + flat field
+GET {{host}}/api/players?filter=Team.Name=Lakers,Level>30
+
+### Relation with OR
+GET {{host}}/api/players?filter=Team.Name=Lakers|Team.Name=Celtics
+
+### Relation IN
+GET {{host}}/api/players?filter=Team.Name=in=Lakers;Warriors
+
+### ─── Sort ──────────────────────────────────────────────────────────
+
+### Sort ascending
+GET {{host}}/api/players?sort=Name
+
+### Sort descending (dash prefix)
+GET {{host}}/api/players?sort=-Level
+
+### Sort descending (keyword)
+GET {{host}}/api/players?sort=Salary desc
+
+### Multi-field sort
+GET {{host}}/api/players?sort=-Level,Name
+
+### Sort by relation
+GET {{host}}/api/players?sort=Team.Name
+
+### Sort by relation descending
+GET {{host}}/api/players?sort=-Team.Name
+
+### ─── Select (field projection) ─────────────────────────────────────
+
+### Select specific fields only
+GET {{host}}/api/players?select=Name,Level
+
+### Select with relation fields
+GET {{host}}/api/players?select=Name,Level,Team.Name
+
+### Select multiple relation fields
+GET {{host}}/api/players?select=Name,Email,Team.Name,Team.Description
+
+### ─── Combined: filter + sort + select + pagination ─────────────────
+
+### Full query: filter + sort + select + page
+GET {{host}}/api/players?filter=Level>20&sort=-Level&select=Name,Level,Email&page=1&pageSize=3
+
+### Filter by relation + sort + select relation fields
+GET {{host}}/api/players?filter=Team.Name=Lakers&sort=Level&select=Name,Level,Team.Name
+
+### Complex: grouping + relation filter + sort + select
+GET {{host}}/api/players?filter=(Level>50|Level<15),Team.Name!=Warriors&sort=-Level&select=Name,Level,Team.Name
+
+### IN + select + sort
+GET {{host}}/api/players?filter=Level=in=42;75;90&sort=Name&select=Name,Level,Email
+
+### Pagination
+GET {{host}}/api/players?sort=-Level&page=1&pageSize=2
+
+### Pagination page 2
+GET {{host}}/api/players?sort=-Level&page=2&pageSize=2

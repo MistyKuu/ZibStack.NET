@@ -1,0 +1,39 @@
+### ─── Basic CRUD ────────────────────────────────────────────────────
+
+### List all teams
+GET {{host}}/api/teams
+
+### Get team by id
+GET {{host}}/api/teams/1
+
+### Create team
+POST {{host}}/api/teams
+Content-Type: application/json
+
+{"name": "Bulls", "description": "Chicago Bulls", "maxMembers": 15}
+
+### Update team
+PATCH {{host}}/api/teams/1
+Content-Type: application/json
+
+{"description": "Los Angeles Lakers - Updated"}
+
+### Delete team
+DELETE {{host}}/api/teams/4
+
+### ─── Filter + sort ─────────────────────────────────────────────────
+
+### Filter by name
+GET {{host}}/api/teams?filter=Name=Lakers
+
+### Filter contains
+GET {{host}}/api/teams?filter=Name=*elt
+
+### Filter + sort
+GET {{host}}/api/teams?filter=MaxMembers>=15&sort=Name
+
+### Select
+GET {{host}}/api/teams?select=Name,Description
+
+### IN
+GET {{host}}/api/teams?filter=Name=in=Lakers;Celtics&sort=-Name

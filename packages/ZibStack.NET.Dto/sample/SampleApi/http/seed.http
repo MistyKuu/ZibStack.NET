@@ -1,0 +1,55 @@
+### ─── Seed test data ─────────────────────────────────────────────────
+
+### Create teams
+POST {{host}}/api/teams
+Content-Type: application/json
+
+{"name": "Lakers", "description": "Los Angeles Lakers", "maxMembers": 15}
+
+###
+POST {{host}}/api/teams
+Content-Type: application/json
+
+{"name": "Celtics", "description": "Boston Celtics", "maxMembers": 15}
+
+###
+POST {{host}}/api/teams
+Content-Type: application/json
+
+{"name": "Warriors", "description": "Golden State Warriors", "maxMembers": 15}
+
+### Create players
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "Jan Kowalski", "level": 42, "email": "jan@test.pl", "salary": 5000, "password": "test12345", "teamId": 1}
+
+###
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "Anna Nowak", "level": 75, "email": "anna@test.pl", "salary": 8000, "password": "admin1234", "teamId": 2}
+
+###
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "Piotr Ski", "level": 20, "email": "piotr@test.pl", "salary": 3000, "password": "mod123456", "teamId": 1}
+
+###
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "Kasia Wielka", "level": 55, "email": "kasia@company.com", "salary": 6000, "password": "kasia1234", "teamId": 3}
+
+###
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "Tomek Admin", "level": 90, "email": "tomek@test.pl", "salary": 12000, "password": "tomek1234", "teamId": 2}
+
+###
+POST {{host}}/api/players
+Content-Type: application/json
+
+{"name": "Ola Testowa", "level": 10, "email": "ola@company.com", "salary": 2500, "password": "ola1234567", "teamId": 3}
