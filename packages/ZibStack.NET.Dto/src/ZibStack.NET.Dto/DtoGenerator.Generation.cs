@@ -718,6 +718,69 @@ public partial class DtoGenerator
             sb.AppendLine("    }");
         }
 
+        // DSL filter/sort methods (when ZibStack.NET.Query is referenced)
+        if (info.HasQueryDsl)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"    /// <summary>Applies a Gridify-compatible filter string (e.g. \"Name=*ski,Level&gt;25\").</summary>");
+            sb.AppendLine($"    public static IQueryable<{info.ClassName}> ApplyDslFilter(IQueryable<{info.ClassName}> query, string? filter)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (string.IsNullOrWhiteSpace(filter)) return query;");
+            sb.AppendLine("        foreach (var clause in ZibStack.NET.Query.FilterParser.Parse(filter))");
+            sb.AppendLine("        {");
+            sb.AppendLine("            query = clause.Field.ToLowerInvariant() switch");
+            sb.AppendLine("            {");
+            foreach (var prop in info.Properties)
+            {
+                var lower = prop.PropertyName.ToLowerInvariant();
+                sb.AppendLine($"                \"{lower}\" => ZibStack.NET.Query.FilterApplier.Apply(query, x => x.{prop.PropertyName}, clause),");
+            }
+            // Navigation property paths (e.g. "team.name" → x => x.Team.Name)
+            foreach (var nav in info.NavigationPaths)
+            {
+                sb.AppendLine($"                \"{nav.DotPath}\" => ZibStack.NET.Query.FilterApplier.Apply(query, x => x.{nav.ExpressionPath}, clause),");
+            }
+            sb.AppendLine("                _ => query,");
+            sb.AppendLine("            };");
+            sb.AppendLine("        }");
+            sb.AppendLine("        return query;");
+            sb.AppendLine("    }");
+
+            sb.AppendLine();
+            sb.AppendLine($"    /// <summary>Applies a sort string (e.g. \"-Name\" or \"Level desc\").</summary>");
+            sb.AppendLine($"    public static IQueryable<{info.ClassName}> ApplyDslSort(IQueryable<{info.ClassName}> query, string? sort)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (string.IsNullOrWhiteSpace(sort)) return query;");
+            sb.AppendLine("        var clauses = ZibStack.NET.Query.SortParser.Parse(sort);");
+            sb.AppendLine("        var first = true;");
+            sb.AppendLine("        foreach (var clause in clauses)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            query = (clause.Field.ToLowerInvariant(), clause.Descending, first) switch");
+            sb.AppendLine("            {");
+            foreach (var prop in info.Properties)
+            {
+                var lower = prop.PropertyName.ToLowerInvariant();
+                sb.AppendLine($"                (\"{lower}\", false, true)  => query.OrderBy(x => x.{prop.PropertyName}),");
+                sb.AppendLine($"                (\"{lower}\", true,  true)  => query.OrderByDescending(x => x.{prop.PropertyName}),");
+                sb.AppendLine($"                (\"{lower}\", false, false) => ((IOrderedQueryable<{info.ClassName}>)query).ThenBy(x => x.{prop.PropertyName}),");
+                sb.AppendLine($"                (\"{lower}\", true,  false) => ((IOrderedQueryable<{info.ClassName}>)query).ThenByDescending(x => x.{prop.PropertyName}),");
+            }
+            // Navigation property paths for sorting
+            foreach (var nav in info.NavigationPaths)
+            {
+                sb.AppendLine($"                (\"{nav.DotPath}\", false, true)  => query.OrderBy(x => x.{nav.ExpressionPath}),");
+                sb.AppendLine($"                (\"{nav.DotPath}\", true,  true)  => query.OrderByDescending(x => x.{nav.ExpressionPath}),");
+                sb.AppendLine($"                (\"{nav.DotPath}\", false, false) => ((IOrderedQueryable<{info.ClassName}>)query).ThenBy(x => x.{nav.ExpressionPath}),");
+                sb.AppendLine($"                (\"{nav.DotPath}\", true,  false) => ((IOrderedQueryable<{info.ClassName}>)query).ThenByDescending(x => x.{nav.ExpressionPath}),");
+            }
+            sb.AppendLine("                _ => query,");
+            sb.AppendLine("            };");
+            sb.AppendLine("            first = false;");
+            sb.AppendLine("        }");
+            sb.AppendLine("        return query;");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
         return sb.ToString();
     }

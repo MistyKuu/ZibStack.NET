@@ -20,6 +20,26 @@ internal sealed class QueryPropertyInfo
     }
 }
 
+/// <summary>A navigation property path for DSL filtering (e.g. "Team.Name" → x => x.Team.Name).</summary>
+internal sealed class QueryNavigationPath
+{
+    /// <summary>Dot-separated path for the switch key (e.g. "team.name").</summary>
+    public string DotPath { get; }
+    /// <summary>C# expression path (e.g. "Team.Name").</summary>
+    public string ExpressionPath { get; }
+    /// <summary>The leaf property's original type name.</summary>
+    public string OriginalTypeName { get; }
+    public bool IsValueType { get; }
+
+    public QueryNavigationPath(string dotPath, string expressionPath, string originalTypeName, bool isValueType)
+    {
+        DotPath = dotPath;
+        ExpressionPath = expressionPath;
+        OriginalTypeName = originalTypeName;
+        IsValueType = isValueType;
+    }
+}
+
 internal sealed class QueryDtoInfo
 {
     public string ClassName { get; }
@@ -27,17 +47,20 @@ internal sealed class QueryDtoInfo
     public string FullyQualifiedName { get; }
     public string QueryName { get; }
     public List<QueryPropertyInfo> Properties { get; }
+    public List<QueryNavigationPath> NavigationPaths { get; }
     public bool Sortable { get; }
     public string? DefaultSort { get; }
     public int DefaultSortDirection { get; } // 0 = Asc, 1 = Desc
+    public bool HasQueryDsl { get; set; }
 
-    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0)
+    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0, List<QueryNavigationPath>? navigationPaths = null)
     {
         ClassName = className;
         Namespace = ns;
         FullyQualifiedName = fullyQualifiedName;
         QueryName = queryName;
         Properties = properties;
+        NavigationPaths = navigationPaths ?? new List<QueryNavigationPath>();
         Sortable = sortable;
         DefaultSort = defaultSort;
         DefaultSortDirection = defaultSortDirection;

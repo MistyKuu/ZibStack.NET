@@ -453,6 +453,69 @@ public partial class DtoGenerator
             properties.Add(new QueryPropertyInfo(prop.Name, jsonName, displayType, nullableType, isValueType));
         }
 
+        // Collect navigation property paths for DSL filtering (1 level deep)
+        var navigationPaths = new List<QueryNavigationPath>();
+        foreach (var prop in GetAllProperties(symbol))
+        {
+            if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+            if (prop.GetMethod is null) continue;
+
+            // Detect navigation properties: [OneToOne] or non-collection class types (not string)
+            var propType = prop.Type;
+
+            // Check for [OneToOne] attribute (single navigation)
+            var hasOneToOne = prop.GetAttributes().Any(a =>
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Core.OneToOneAttribute");
+
+            // Also detect by type: non-collection, non-string class with public properties
+            var isNavigation = hasOneToOne;
+            if (!isNavigation && propType is INamedTypeSymbol navNts)
+            {
+                var unwrapped = navNts.NullableAnnotation == NullableAnnotation.Annotated && navNts.TypeArguments.Length == 1
+                    ? navNts.TypeArguments[0] as INamedTypeSymbol
+                    : navNts;
+                if (unwrapped is not null
+                    && unwrapped.TypeKind == TypeKind.Class
+                    && unwrapped.SpecialType == SpecialType.None
+                    && unwrapped.ToDisplayString() != "string"
+                    && !unwrapped.AllInterfaces.Any(i => i.ToDisplayString().StartsWith("System.Collections")))
+                {
+                    isNavigation = true;
+                    propType = unwrapped;
+                }
+            }
+
+            if (!isNavigation) continue;
+
+            // Extract sub-properties of the navigation type
+            var navTypeSymbol = propType as INamedTypeSymbol;
+            if (navTypeSymbol is null) continue;
+
+            foreach (var subProp in GetAllProperties(navTypeSymbol))
+            {
+                if (subProp.DeclaredAccessibility != Accessibility.Public) continue;
+                if (subProp.GetMethod is null) continue;
+
+                var subType = subProp.Type;
+                var subIsValueType = subType.IsValueType;
+
+                // Only include primitive/filterable sub-properties
+                if (subType is INamedTypeSymbol subNts && subNts.NullableAnnotation == NullableAnnotation.Annotated
+                    && subNts.TypeArguments.Length == 1)
+                    subType = subNts.TypeArguments[0];
+
+                if (subType.TypeKind == TypeKind.Class && subType.SpecialType == SpecialType.None
+                    && subType.ToDisplayString() != "string")
+                    continue;
+                if (subType.TypeKind == TypeKind.Interface || subType.TypeKind == TypeKind.Array)
+                    continue;
+
+                var dotPath = $"{prop.Name.ToLowerInvariant()}.{subProp.Name.ToLowerInvariant()}";
+                var exprPath = $"{prop.Name}.{subProp.Name}";
+                navigationPaths.Add(new QueryNavigationPath(dotPath, exprPath, subProp.Type.ToDisplayString(), subIsValueType));
+            }
+        }
+
         var ns = symbol.ContainingNamespace.IsGlobalNamespace
             ? null
             : symbol.ContainingNamespace.ToDisplayString();
@@ -464,7 +527,8 @@ public partial class DtoGenerator
             properties,
             sortable,
             defaultSort,
-            defaultSortDirection);
+            defaultSortDirection,
+            navigationPaths);
     } catch { return null; } }
 
     private static IEnumerable<IPropertySymbol> GetAllProperties(INamedTypeSymbol symbol)

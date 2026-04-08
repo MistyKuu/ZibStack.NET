@@ -65,6 +65,10 @@
     <Project Path="packages/ZibStack.NET.UI/sample/SampleApi/SampleApi.csproj" />
     <Project Path="packages/ZibStack.NET.UI/sample/SampleBlazor/SampleBlazor.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.Query/" />
+  <Folder Name="/packages/ZibStack.NET.Query/src/">
+    <Project Path="packages/ZibStack.NET.Query/src/ZibStack.NET.Query/ZibStack.NET.Query.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Result/" />
   <Folder Name="/packages/ZibStack.NET.Result/src/">
     <Project Path="packages/ZibStack.NET.Result/src/ZibStack.NET.Result/ZibStack.NET.Result.csproj" />

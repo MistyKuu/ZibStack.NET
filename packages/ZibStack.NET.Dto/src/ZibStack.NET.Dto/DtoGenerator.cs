@@ -94,6 +94,10 @@ public partial class DtoGenerator : IIncrementalGenerator
         var hasFluentValidation = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("FluentValidation.AbstractValidator`1") is not null);
 
+        // Detect ZibStack.NET.Query for DSL filter/sort support
+        var hasQueryDsl = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null);
+
         context.RegisterSourceOutput(hasFluentValidation, static (spc, hasFluent) =>
         {
             if (hasFluent)
@@ -257,9 +261,9 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation), static (spc, pair) =>
+        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl), static (spc, pair) =>
         {
-            var (implied, hasFluent) = pair;
+            var ((implied, hasFluent), hasDsl) = pair;
             var nestedSeen = new HashSet<string>();
 
             foreach (var classInfo in implied.CreateDtos)
@@ -288,6 +292,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             }
             foreach (var queryInfo in implied.QueryDtos)
             {
+                queryInfo.HasQueryDsl = hasDsl;
                 var source = GenerateQueryDtoSource(queryInfo);
                 spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.CrudImplied.g.cs", source);
             }
@@ -308,9 +313,9 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation), static (spc, pair) =>
+        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl), static (spc, pair) =>
         {
-            var (implied, hasFluent) = pair;
+            var ((implied, hasFluent), hasDsl) = pair;
             var nestedSeen = new HashSet<string>();
             foreach (var classInfo in implied.CreateDtos)
             {
@@ -338,6 +343,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             }
             foreach (var queryInfo in implied.QueryDtos)
             {
+                queryInfo.HasQueryDsl = hasDsl;
                 var source = GenerateQueryDtoSource(queryInfo);
                 spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.Model.g.cs", source);
             }
@@ -356,10 +362,11 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(crudApiDeclarations.Combine(hasAspNetCore), static (spc, pair) =>
+        context.RegisterSourceOutput(crudApiDeclarations.Combine(hasAspNetCore).Combine(hasQueryDsl), static (spc, pair) =>
         {
-            var (info, hasAsp) = pair;
+            var ((info, hasAsp), hasDsl) = pair;
             if (!hasAsp) return;
+            info.HasQueryDsl = hasDsl;
 
             // ApiStyle: 0=MinimalApi, 1=Controller, 2=Both
             if (info.Style == StyleMinimalApi || info.Style == StyleBoth)
@@ -389,10 +396,11 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(modelCrudDeclarations.Combine(hasAspNetCore), static (spc, pair) =>
+        context.RegisterSourceOutput(modelCrudDeclarations.Combine(hasAspNetCore).Combine(hasQueryDsl), static (spc, pair) =>
         {
-            var (info, hasAsp) = pair;
+            var ((info, hasAsp), hasDsl) = pair;
             if (!hasAsp) return;
+            info.HasQueryDsl = hasDsl;
             if (info.Style == StyleMinimalApi || info.Style == StyleBoth)
                 spc.AddSource($"{info.FullyQualifiedName}.Endpoints.Model.g.cs", GenerateMinimalApiSource(info));
             if (info.Style == StyleController || info.Style == StyleBoth)

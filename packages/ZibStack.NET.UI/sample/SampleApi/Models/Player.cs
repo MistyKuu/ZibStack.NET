@@ -66,6 +66,10 @@ public partial class Player
     [UiTableColumn(Sortable = true)]
     public int? TeamId { get; set; }
 
+    [DtoIgnore] [UiFormIgnore] [UiTableIgnore]
+    [OneToOne]
+    public Team? Team { get; set; }
+
     // Audit — auto-filled by generated store
     [DtoIgnore] [UiFormIgnore] public DateTime CreatedAt { get; set; }
     [DtoIgnore] [UiFormIgnore] public DateTime UpdatedAt { get; set; }

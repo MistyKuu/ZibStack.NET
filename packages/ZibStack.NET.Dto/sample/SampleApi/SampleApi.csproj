@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\..\ZibStack.NET.EntityFramework\src\ZibStack.NET.EntityFramework\ZibStack.NET.EntityFramework.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.UI\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Query\src\ZibStack.NET.Query\ZibStack.NET.Query.csproj" />
   </ItemGroup>
 
   <ItemGroup>

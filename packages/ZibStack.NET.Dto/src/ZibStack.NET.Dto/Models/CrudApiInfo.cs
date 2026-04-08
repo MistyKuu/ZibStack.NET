@@ -28,6 +28,7 @@ internal sealed class CrudApiInfo
     public bool IsCombinedDto { get; }
     public bool HasResponseDto { get; }
     public bool HasQueryDto { get; }
+    public bool HasQueryDsl { get; set; }
 
     public CrudApiInfo(
         string className,
