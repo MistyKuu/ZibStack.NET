@@ -95,6 +95,12 @@ public class MetricsHandler : IAsyncAspectHandler
 }
 ```
 
+### `[ImTiredOfCrud]` — one attribute, full-stack CRUD
+
+One attribute on your model generates: CRUD API + DTOs + validation + form/table UI schemas + Query DSL (filter, sort, select, pagination). The frontend reads the JSON schemas and renders everything automatically — zero configuration.
+
+![ImTiredOfCrud Demo](docs/src/assets/imtiredofcrud-demo.png)
+
 ### ZibStack.NET.Dto
 
 ```csharp

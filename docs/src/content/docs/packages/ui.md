@@ -7,6 +7,10 @@ description: Source generator for UI form and table metadata — compile-time fo
 
 Source generator for **UI form and table metadata**. Annotate your models and get compile-time form descriptors, table column definitions, and JSON schemas — no reflection, no runtime overhead.
 
+![ImTiredOfCrud Demo](../../../assets/imtiredofcrud-demo.png)
+
+*One `[ImTiredOfCrud]` attribute generates: CRUD API + DTOs + form/table UI schemas + Query DSL. The frontend reads JSON schemas and renders a data grid with filtering/sorting and a form with validation — zero configuration.*
+
 > **See the working samples:** [SampleApi](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI/sample/SampleApi) | [SampleBlazor](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI/sample/SampleBlazor) | [React App](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI/sample/react-app)
 
 ## Features
