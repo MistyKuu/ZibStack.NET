@@ -147,11 +147,17 @@ namespace ZibStack.NET.EntityFramework
                 var keyProp = FindKeyProperty(entityType);
                 if (keyProp is null) continue;
 
+                var entityConstraints = ExtractEntityConstraints(entityType);
+                var allEntityProps = new HashSet<string>(GetAllProperties(entityType).Select(p => p.Name));
                 dbSets.Add(new DbSetEntry(
                     prop.Name,
                     entityType.Name,
                     entityType.ToDisplayString(),
-                    keyProp.Type.ToDisplayString()));
+                    keyProp.Type.ToDisplayString(),
+                    entityConstraints,
+                    hasCreatedAt: allEntityProps.Contains("CreatedAt"),
+                    hasUpdatedAt: allEntityProps.Contains("UpdatedAt"),
+                    hasCreatedBy: allEntityProps.Contains("CreatedBy")));
             }
 
             if (dbSets.Count == 0) return null;
@@ -234,6 +240,51 @@ namespace ZibStack.NET.EntityFramework
             sb.AppendLine("{");
             sb.AppendLine($"    public {dbSet.EntityName}EfStore({info.ContextFqn} db) : base(db) {{ }}");
             sb.AppendLine($"    protected override Microsoft.EntityFrameworkCore.DbSet<{dbSet.EntityFqn}> Set => Db.{dbSet.PropertyName};");
+
+            // Audit: override CreateAsync/UpdateAsync to auto-fill timestamps
+            if (dbSet.HasAuditFields)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"    public override async System.Threading.Tasks.ValueTask CreateAsync({dbSet.EntityFqn} entity, System.Threading.CancellationToken ct = default)");
+                sb.AppendLine("    {");
+                if (dbSet.HasCreatedAt)
+                    sb.AppendLine("        entity.CreatedAt = System.DateTime.UtcNow;");
+                if (dbSet.HasUpdatedAt)
+                    sb.AppendLine("        entity.UpdatedAt = System.DateTime.UtcNow;");
+                sb.AppendLine("        await base.CreateAsync(entity, ct);");
+                sb.AppendLine("    }");
+
+                if (dbSet.HasUpdatedAt)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine($"    public override async System.Threading.Tasks.ValueTask UpdateAsync({dbSet.EntityFqn} entity, System.Threading.CancellationToken ct = default)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        entity.UpdatedAt = System.DateTime.UtcNow;");
+                    sb.AppendLine("        await base.UpdateAsync(entity, ct);");
+                    sb.AppendLine("    }");
+                }
+            }
+
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        // Emit entity type configurations (from validation attributes)
+        foreach (var dbSet in info.DbSets)
+        {
+            if (dbSet.Constraints.Count == 0) continue;
+            sb.AppendLine($"public class {dbSet.EntityName}EntityConfiguration : Microsoft.EntityFrameworkCore.IEntityTypeConfiguration<{dbSet.EntityFqn}>");
+            sb.AppendLine("{");
+            sb.AppendLine($"    public void Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<{dbSet.EntityFqn}> builder)");
+            sb.AppendLine("    {");
+            foreach (var c in dbSet.Constraints)
+            {
+                if (c.IsRequired)
+                    sb.AppendLine($"        builder.Property(e => e.{c.PropertyName}).IsRequired();");
+                if (c.MaxLength is not null)
+                    sb.AppendLine($"        builder.Property(e => e.{c.PropertyName}).HasMaxLength({c.MaxLength});");
+            }
+            sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();
         }
@@ -251,6 +302,20 @@ namespace ZibStack.NET.EntityFramework
             }
             sb.AppendLine("        return services;");
             sb.AppendLine("    }");
+            sb.AppendLine();
+            // OnModelCreating helper — applies all generated entity configurations
+            var hasConfigs = info.DbSets.Any(d => d.Constraints.Count > 0);
+            if (hasConfigs)
+            {
+                sb.AppendLine($"    public static void ApplyGeneratedConfigurations(this Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)");
+                sb.AppendLine("    {");
+                foreach (var dbSet in info.DbSets)
+                {
+                    if (dbSet.Constraints.Count > 0)
+                        sb.AppendLine($"        modelBuilder.ApplyConfiguration(new {dbSet.EntityName}EntityConfiguration());");
+                }
+                sb.AppendLine("    }");
+            }
             sb.AppendLine("}");
         }
 
@@ -281,13 +346,74 @@ namespace ZibStack.NET.EntityFramework
         public string EntityName { get; }
         public string EntityFqn { get; }
         public string KeyTypeFqn { get; }
+        public List<PropertyConstraint> Constraints { get; }
 
-        public DbSetEntry(string propertyName, string entityName, string entityFqn, string keyTypeFqn)
+        public bool HasCreatedAt { get; }
+        public bool HasUpdatedAt { get; }
+        public bool HasCreatedBy { get; }
+
+        public DbSetEntry(string propertyName, string entityName, string entityFqn, string keyTypeFqn, List<PropertyConstraint> constraints, bool hasCreatedAt = false, bool hasUpdatedAt = false, bool hasCreatedBy = false)
         {
             PropertyName = propertyName;
             EntityName = entityName;
             EntityFqn = entityFqn;
             KeyTypeFqn = keyTypeFqn;
+            Constraints = constraints;
+            HasCreatedAt = hasCreatedAt;
+            HasUpdatedAt = hasUpdatedAt;
+            HasCreatedBy = hasCreatedBy;
         }
+
+        public bool HasAuditFields => HasCreatedAt || HasUpdatedAt || HasCreatedBy;
+    }
+
+    private sealed class PropertyConstraint
+    {
+        public string PropertyName { get; }
+        public bool IsRequired { get; }
+        public int? MaxLength { get; }
+
+        public PropertyConstraint(string propertyName, bool isRequired, int? maxLength)
+        {
+            PropertyName = propertyName;
+            IsRequired = isRequired;
+            MaxLength = maxLength;
+        }
+    }
+
+    private static List<PropertyConstraint> ExtractEntityConstraints(INamedTypeSymbol entityType)
+    {
+        var constraints = new List<PropertyConstraint>();
+        foreach (var prop in GetAllProperties(entityType))
+        {
+            if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+            if (prop.SetMethod is null) continue;
+
+            bool isRequired = false;
+            int? maxLength = null;
+
+            foreach (var attr in prop.GetAttributes())
+            {
+                var name = attr.AttributeClass?.ToDisplayString();
+                if (name == "System.ComponentModel.DataAnnotations.RequiredAttribute" ||
+                    name == "ZibStack.NET.Validation.RequiredAttribute")
+                    isRequired = true;
+                else if ((name == "System.ComponentModel.DataAnnotations.MaxLengthAttribute" ||
+                          name == "ZibStack.NET.Validation.MaxLengthAttribute")
+                         && attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int ml)
+                    maxLength = ml;
+                else if ((name == "System.ComponentModel.DataAnnotations.StringLengthAttribute")
+                         && attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int sl)
+                    maxLength = sl;
+            }
+
+            // Also check 'required' keyword
+            if (prop.IsRequired)
+                isRequired = true;
+
+            if (isRequired || maxLength is not null)
+                constraints.Add(new PropertyConstraint(prop.Name, isRequired, maxLength));
+        }
+        return constraints;
     }
 }

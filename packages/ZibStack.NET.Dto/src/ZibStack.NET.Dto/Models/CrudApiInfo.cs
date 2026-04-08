@@ -24,6 +24,7 @@ internal sealed class CrudApiInfo
     public string? ResponseName { get; }
     public string? ListResponseName { get; }
     public string? QueryName { get; }
+    public Dictionary<string, string> ColumnPermissions { get; }
     public bool IsCombinedDto { get; }
     public bool HasResponseDto { get; }
     public bool HasQueryDto { get; }
@@ -50,7 +51,8 @@ internal sealed class CrudApiInfo
         string? createPolicy = null,
         string? updatePolicy = null,
         string? deletePolicy = null,
-        string? listResponseName = null)
+        string? listResponseName = null,
+        Dictionary<string, string>? columnPermissions = null)
     {
         ClassName = className;
         Namespace = ns;
@@ -70,6 +72,7 @@ internal sealed class CrudApiInfo
         UpdateRequestName = updateRequestName;
         ResponseName = responseName;
         ListResponseName = listResponseName;
+        ColumnPermissions = columnPermissions ?? new Dictionary<string, string>();
         QueryName = queryName;
         IsCombinedDto = isCombinedDto;
         HasResponseDto = hasResponseDto;

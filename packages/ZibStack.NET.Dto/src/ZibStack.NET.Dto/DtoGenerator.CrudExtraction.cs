@@ -117,6 +117,19 @@ public partial class DtoGenerator
             queryName = $"{symbol.Name}Query";
         }
 
+        // Bridge: extract [ColumnPermission("Column", "permission")] from class
+        var columnPermissions = new Dictionary<string, string>();
+        foreach (var a in allAttrs)
+        {
+            if (a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.ColumnPermissionAttribute"
+                && a.ConstructorArguments.Length >= 2
+                && a.ConstructorArguments[0].Value is string colName
+                && a.ConstructorArguments[1].Value is string colPerm)
+            {
+                columnPermissions[colName] = colPerm;
+            }
+        }
+
         // Detect [ListIgnore] on any property → separate list response DTO
         var hasListIgnore = GetAllProperties(symbol).Any(p =>
             p.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn));
@@ -148,7 +161,8 @@ public partial class DtoGenerator
             createPolicy,
             updatePolicy,
             deletePolicy,
-            listResponseName);
+            listResponseName,
+            columnPermissions);
     } catch { return null; } }
 
     // ─── Auto-implied DTOs from [CrudApi] ──────────────────────────────
@@ -286,6 +300,13 @@ public partial class DtoGenerator
 
         if (needsQuery)
         {
+            // Bridge: read [Table(DefaultSort)] if present
+            string? tableDefaultSort = null;
+            var tableAttr = allAttrs.FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.TableAttribute");
+            if (tableAttr is not null)
+                tableDefaultSort = tableAttr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSort").Value.Value as string;
+
             var queryProps = new List<QueryPropertyInfo>();
             foreach (var prop in GetAllProperties(symbol))
             {
@@ -293,6 +314,17 @@ public partial class DtoGenerator
                 if (prop.GetMethod is null) continue;
                 if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn)) continue;
                 if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn)) continue;
+
+                // Bridge: [TableColumn(Filterable = false)] → skip from query
+                // If [TableColumn] exists and Filterable is explicitly false, exclude
+                var tableColAttr = prop.GetAttributes().FirstOrDefault(a =>
+                    a.AttributeClass?.ToDisplayString() == "ZibStack.NET.UI.TableColumnAttribute");
+                if (tableColAttr is not null)
+                {
+                    var filterableArg = tableColAttr.NamedArguments.FirstOrDefault(a => a.Key == "Filterable");
+                    if (filterableArg.Key is not null && filterableArg.Value.Value is false)
+                        continue;
+                }
 
                 var propType = prop.Type;
                 if (propType is INamedTypeSymbol nts2 && nts2.NullableAnnotation == NullableAnnotation.Annotated
@@ -312,7 +344,8 @@ public partial class DtoGenerator
                 queryProps.Add(new QueryPropertyInfo(prop.Name, jsonName, displayType, nullableType, isValueType));
             }
             result.QueryDtos.Add(new QueryDtoInfo(symbol.Name, ns, fqn,
-                $"{symbol.Name}Query", queryProps, sortable: true, defaultSort: null, defaultSortDirection: 0));
+                $"{symbol.Name}Query", queryProps, sortable: true,
+                defaultSort: tableDefaultSort, defaultSortDirection: 0));
         }
 
         return result;

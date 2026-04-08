@@ -267,6 +267,25 @@ public partial class DtoGenerator
 
         sb.AppendLine("        return group;");
         sb.AppendLine("    }");
+
+        // Generate permission filter helper if [ColumnPermission] attributes exist
+        if (info.ColumnPermissions.Count > 0 && info.HasResponseDto && info.ResponseName is not null)
+        {
+            var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
+            sb.AppendLine();
+            sb.AppendLine($"    /// <summary>Nulls restricted properties on the response based on user claims.</summary>");
+            sb.AppendLine($"    public static {fqResponse} ApplyColumnPermissions({fqResponse} response, System.Security.Claims.ClaimsPrincipal? user)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (user is null) return response;");
+            foreach (var kv in info.ColumnPermissions)
+            {
+                sb.AppendLine($"        if (!user.HasClaim(\"permission\", \"{kv.Value}\") && !user.IsInRole(\"{kv.Value}\"))");
+                sb.AppendLine($"            response = response with {{ {kv.Key} = default }};");
+            }
+            sb.AppendLine("        return response;");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
 
         return sb.ToString();
