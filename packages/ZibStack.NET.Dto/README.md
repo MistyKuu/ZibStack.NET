@@ -190,30 +190,42 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 
 ## Attributes
 
+**Class-level attributes:**
+
 | Attribute | Target | Description |
 |-----------|--------|-------------|
 | `[CreateDto]` | Class | Generates Create request with `Validate()` + `ToEntity()` |
 | `[UpdateDto]` | Class | Generates Update request with `Validate()` + `ApplyTo()` |
 | `[CreateOrUpdateDto]` | Class | Generates single DTO with `ValidateForCreate/Update()` + both |
 | `[ResponseDto]` | Class | Generates read-only Response DTO with `FromEntity()` + `ProjectFrom()` |
-| `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` with `Validate()` (returns `DtoValidationResult`) + `ToEntity()` |
-| `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` with `Validate()` (returns `DtoValidationResult`) + `ApplyTo()` |
-| `[PickFrom(typeof(T), ...)]` | Record (partial) | Like TS `Pick<T, K>` — whitelist of properties |
-| `[OmitFrom(typeof(T), ...)]` | Record (partial) | Like TS `Omit<T, K>` — exclude listed properties |
 | `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
 | `[QueryDto(Sortable = true)]` | Class | Adds `SortBy`, `SortDirection`, `ApplySort()`, `Apply()` to query DTO |
-| `[CrudApi]` | Class | Generates full CRUD API endpoints (Minimal API and/or Controller) using `ICrudStore<T,TKey>` |
-| `PaginatedResponse<T>` | — | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` |
-| `[PartialFrom(typeof(T))]` | Record (partial) | Generates `PatchField` properties + `ApplyTo()` for all properties of `T` |
-| `[IntersectFrom(typeof(T))]` | Record (partial) | Combine multiple types into one (like TS `&`). Apply multiple times. |
-| `[DtoIgnore]` | Property | Excludes from generated DTOs |
-| `[DtoName("json_name")]` | Property | Overrides the JSON property name |
-| `[CreateOnly]` | Property | Only included in Create (or `ValidateForCreate`/`ToEntity` in Combined) |
-| `[UpdateOnly]` | Property | Only included in Update (or `ValidateForUpdate`/`ApplyTo` in Combined) |
-| `[Immutable]` | Property | Visible in Update DTO but skipped in `ApplyTo()` |
-| `[Flatten]` | Property | Expands nested object properties into parent DTO (Response only) |
-| `[ResponseIgnore]` | Property | Excludes from Response DTO only |
-| `[RenameProperty("From", "To")]` | Class | Renames a source property in DtoFrom (maps back in ToEntity/ApplyTo) |
+| `[CrudApi]` | Class | Generates full CRUD API endpoints + auto-implies missing DTOs |
+| `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` |
+| `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` |
+| `[RenameProperty("From", "To")]` | Class | Renames a source property in DtoFor (maps back in ToEntity/ApplyTo) |
+
+**Property-level attributes:**
+
+| Attribute | Description |
+|-----------|-------------|
+| `[DtoIgnore]` | Excludes from generated DTOs |
+| `[DtoName("json_name")]` | Overrides the JSON property name |
+| `[CreateOnly]` | Only included in Create (or `ValidateForCreate`/`ToEntity` in Combined) |
+| `[UpdateOnly]` | Only included in Update (or `ValidateForUpdate`/`ApplyTo` in Combined) |
+| `[Immutable]` | Visible in Update DTO but skipped in `ApplyTo()` |
+| `[Flatten]` | Expands nested object properties into parent DTO (Response only) |
+| `[ResponseIgnore]` | Excludes from Response DTO only |
+| `[ListIgnore]` | Excludes from list Response (GET list), visible in detail Response (GET by ID) |
+
+**Generated types:**
+
+| Type | Description |
+|------|-------------|
+| `PaginatedResponse<T>` | Generic paginated wrapper with `Items`, `TotalCount`, `Page`, `PageSize` |
+| `DtoValidationResult` | Per-property validation errors with `IsValid`, `Errors`, `AddError()`, `Merge()`, `ToDictionary()` |
+
+> **Note:** `[PartialFrom]`, `[IntersectFrom]`, `[PickFrom]`, `[OmitFrom]` are in the separate [`ZibStack.NET.Utils`](https://www.nuget.org/packages/ZibStack.NET.Utils) package.
 
 ### `required` keyword
 
@@ -292,52 +304,28 @@ public partial record CreateUserRequest;
 // DTO has "Name" property, ToEntity() writes to "FirstName"
 ```
 
-## Partial types (`[PartialFrom]`, from `ZibStack.NET.Utils`)
+## Utility types (from `ZibStack.NET.Utils`)
 
-Like TypeScript's `Partial<T>` -- generates a class where every property is optional:
+TypeScript-style utility types are available in the separate [`ZibStack.NET.Utils`](../ZibStack.NET.Utils/) package:
 
 ```csharp
 using ZibStack.NET.Utils;
 
-[PartialFrom(typeof(Player))]
+[PartialFrom(typeof(Player))]       // all properties optional + ApplyTo()
 public partial record PartialPlayer;
-```
 
-Generates:
-
-```csharp
-public partial record PartialPlayer
-{
-    public PatchField<string> Name { get; init; }
-    public PatchField<int> Level { get; init; }
-    public PatchField<string?> Email { get; init; }
-    // ... all public properties from Player
-
-    public void ApplyTo(Player target) { ... }
-}
-```
-
-All properties from the target type are included (no `[DtoIgnore]` filtering). The record is `partial` so you can add your own methods and properties. No `Validate()` or `ToEntity()` -- just `ApplyTo()`.
-
-## Pick / Omit (TypeScript-style, from `ZibStack.NET.Utils`)
-
-### `[PickFrom]` — whitelist properties
-
-```csharp
-using ZibStack.NET.Utils;
-
-[PickFrom(typeof(Player), nameof(Player.Name), nameof(Player.Level))]
+[PickFrom(typeof(Player), "Name", "Level")]  // whitelist
 public partial record PlayerSummary;
-// Only Name and Level — with ApplyTo(Player)
-```
 
-### `[OmitFrom]` — exclude properties
-
-```csharp
-[OmitFrom(typeof(Player), nameof(Player.Id), nameof(Player.CreatedAt))]
+[OmitFrom(typeof(Player), "Id", "CreatedAt")]  // blacklist
 public partial record PlayerWithoutMeta;
-// All properties except Id and CreatedAt
+
+[IntersectFrom(typeof(Player))]     // combine multiple types
+[IntersectFrom(typeof(Address))]
+public partial record PlayerWithAddress;
 ```
+
+See the [ZibStack.NET.Utils README](../ZibStack.NET.Utils/) for full documentation.
 
 ## Query / Filter DTO (`[QueryDto]`)
 
@@ -853,34 +841,6 @@ Like `ApplyTo()` but returns a tuple with the list of actually changed field nam
 var (changedFields, entity) = request.ApplyWithChanges(existingProduct);
 // changedFields: ["price", "stock"]
 // Useful for audit logs, webhooks, selective cache invalidation
-```
-
-## Intersection types (`[IntersectFrom]`, from `ZibStack.NET.Utils`)
-
-Like TypeScript's `&` operator -- combine properties from multiple types into one:
-
-```csharp
-using ZibStack.NET.Utils;
-
-[IntersectFrom(typeof(Player))]
-[IntersectFrom(typeof(Address))]
-public partial record PlayerWithAddress;
-```
-
-Generates a single record with all properties from both types (deduplicated by name), and a separate `ApplyTo()` overload for each source type:
-
-```csharp
-public partial record PlayerWithAddress
-{
-    public PatchField<string> Name { get; init; }    // from Player
-    public PatchField<int> Level { get; init; }       // from Player
-    public PatchField<string> Street { get; init; }   // from Address
-    public PatchField<string> City { get; init; }     // from Address
-    // ...
-
-    public void ApplyTo(Player target) { ... }
-    public void ApplyTo(Address target) { ... }
-}
 ```
 
 ### Response DTO (`[ResponseDto]`)
