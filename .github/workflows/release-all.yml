@@ -31,6 +31,9 @@ jobs:
       - name: Test Dto
         run: dotnet test packages/ZibStack.NET.Dto/tests/ZibStack.NET.Dto.Tests/ZibStack.NET.Dto.Tests.csproj -c Release --no-build
 
+      - name: Test UI
+        run: dotnet test packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj -c Release --no-build
+
       # Pack in dependency order
       - name: Pack 1 — Aop.Abstractions
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Abstractions/ZibStack.NET.Aop.Abstractions.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
@@ -61,6 +64,9 @@ jobs:
 
       - name: Pack 10 — Validation
         run: dotnet pack packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 11 — UI
+        run: dotnet pack packages/ZibStack.NET.UI/src/ZibStack.NET.UI/ZibStack.NET.UI.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       # Push all at once (NuGet resolves deps from same push)
       - name: Push to NuGet
