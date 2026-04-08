@@ -7,7 +7,10 @@ using SampleApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(o =>
-    o.SerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
+{
+    o.SerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory());
+    o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
 builder.Services.AddOpenApi();
 
 // EF Core + SQLite
@@ -20,6 +23,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
 
+app.UseStaticFiles();
 app.MapOpenApi();
 app.MapScalarApiReference();
 

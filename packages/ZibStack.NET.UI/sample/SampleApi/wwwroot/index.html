@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZibStack.NET — ImTiredOfCrud Demo</title>
+<style>
+  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --danger: #ef4444; --success: #22c55e; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 1.5rem; }
+  h1 { font-size: 1.5rem; margin-bottom: .25rem; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; }
+  .panel h2 { font-size: 1rem; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
+  .filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin-bottom: .75rem; }
+  .filter-group { display: flex; flex-direction: column; gap: .15rem; }
+  .filter-group label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .filter-group select, .filter-group input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .35rem .5rem; border-radius: .25rem; font-size: .8rem; }
+  .filter-group input { width: 120px; }
+  .filter-group select { min-width: 60px; }
+  button { background: var(--accent); color: #fff; border: none; padding: .4rem .8rem; border-radius: .25rem; cursor: pointer; font-size: .8rem; }
+  button:hover { opacity: .9; }
+  button.secondary { background: var(--border); }
+  button.danger { background: var(--danger); }
+  button.success { background: var(--success); color: #000; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; cursor: default; white-space: nowrap; }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--accent); }
+  th .sort-arrow { font-size: .7rem; }
+  tr:hover td { background: rgba(59,130,246,.05); }
+  .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: .75rem; font-size: .8rem; color: var(--muted); }
+  .pagination button { font-size: .75rem; padding: .3rem .6rem; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .form-field { display: flex; flex-direction: column; gap: .2rem; }
+  .form-field.full { grid-column: 1 / -1; }
+  .form-field label { font-size: .75rem; color: var(--muted); }
+  .form-field input, .form-field select, .form-field textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .4rem .5rem; border-radius: .25rem; font-size: .85rem; }
+  .form-field textarea { resize: vertical; }
+  .form-field .error { color: var(--danger); font-size: .7rem; }
+  .form-actions { grid-column: 1 / -1; display: flex; gap: .5rem; margin-top: .5rem; }
+  .group-title { grid-column: 1 / -1; font-size: .8rem; color: var(--accent); font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: .25rem; margin-top: .25rem; }
+  .toast { position: fixed; top: 1rem; right: 1rem; padding: .5rem 1rem; border-radius: .25rem; font-size: .85rem; z-index: 100; animation: fadeOut 3s forwards; }
+  .toast.success { background: var(--success); color: #000; }
+  .toast.error { background: var(--danger); color: #fff; }
+  @keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
+  .actions { display: flex; gap: .25rem; }
+  .actions button { padding: .2rem .5rem; font-size: .7rem; }
+</style>
+</head>
+<body>
+
+<h1><span>[ImTiredOfCrud]</span> Demo</h1>
+<p class="subtitle">One attribute on your model. Everything below is auto-generated from table/form JSON schemas + CRUD API + Query DSL.</p>
+
+<div class="panel" id="table-panel">
+  <h2>Loading table schema...</h2>
+</div>
+
+<div class="panel" id="form-panel">
+  <h2>Loading form schema...</h2>
+</div>
+
+<script>
+const $ = (sel, ctx = document) => ctx.querySelector(sel);
+const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+
+let tableSchema, formSchema;
+let currentSort = null, currentSortDesc = false;
+let currentPage = 1, pageSize = 10;
+let editingId = null;
+let activeFilters = {};
+
+// ─── Init ───────────────────────────────────────────────────────────
+
+async function init() {
+  [tableSchema, formSchema] = await Promise.all([
+    fetch('/api/tables/product').then(r => r.json()),
+    fetch('/api/forms/product').then(r => r.json()),
+  ]);
+  currentSort = tableSchema.defaultSort?.column;
+  currentSortDesc = tableSchema.defaultSort?.direction === 'desc';
+  pageSize = tableSchema.pagination?.defaultPageSize || 10;
+  renderTable();
+  renderForm();
+  loadData();
+}
+
+// ─── Table ──────────────────────────────────────────────────────────
+
+function renderTable() {
+  const cols = tableSchema.columns.filter(c => c.visible !== false);
+  const panel = $('#table-panel');
+  panel.innerHTML = `
+    <h2>Products</h2>
+    <div class="filters" id="filters"></div>
+    <table>
+      <thead><tr>
+        ${cols.map(c => `<th class="${c.sortable ? 'sortable' : ''}" data-col="${c.name}">
+          ${c.label} ${c.sortable ? '<span class="sort-arrow" id="sort-' + c.name + '"></span>' : ''}
+        </th>`).join('')}
+        <th>Actions</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="pagination">
+      <span id="page-info"></span>
+      <div>
+        <button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button>
+        <button class="secondary" id="next-btn" onclick="nextPage()">Next</button>
+      </div>
+    </div>`;
+
+  // Sort click handlers
+  $$('th.sortable', panel).forEach(th => {
+    th.onclick = () => {
+      const col = th.dataset.col;
+      if (currentSort === col) currentSortDesc = !currentSortDesc;
+      else { currentSort = col; currentSortDesc = false; }
+      currentPage = 1;
+      loadData();
+    };
+  });
+
+  renderFilters(cols);
+}
+
+function renderFilters(cols) {
+  const container = $('#filters');
+  const filterCols = cols.filter(c => c.filterable);
+  container.innerHTML = filterCols.map(c => `
+    <div class="filter-group">
+      <label>${c.label}</label>
+      <div style="display:flex;gap:.2rem">
+        <select id="fop-${c.name}" style="width:60px">
+          ${(c.filterOperators || ['=']).map(op => `<option value="${op}" ${op === '=*' && c.type === 'string' ? 'selected' : op === '=' && c.type !== 'string' ? 'selected' : ''}>${opLabel(op)}</option>`).join('')}
+        </select>
+        ${c.options
+          ? `<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>`
+          : c.type === 'boolean'
+            ? `<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`
+            : `<input id="fval-${c.name}" placeholder="Filter...">`}
+      </div>
+    </div>`).join('') + `
+    <div class="filter-group" style="align-self:end">
+      <button onclick="applyFilters()">Filter</button>
+      <button class="secondary" onclick="clearFilters()">Clear</button>
+    </div>`;
+}
+
+function opLabel(op) {
+  return { '=':'=', '!=':'!=', '<':'<', '>':'>', '<=':'<=', '>=':'>=',
+    '=*':'~', '!*':'!~', '^':'A..', '!^':'!A..', '$':'..Z', '!$':'!..Z',
+    '=in=':'in', '=out=':'!in' }[op] || op;
+}
+
+function applyFilters() {
+  activeFilters = {};
+  const cols = tableSchema.columns.filter(c => c.filterable && c.visible !== false);
+  cols.forEach(c => {
+    const val = $(`#fval-${c.name}`)?.value?.trim();
+    const op = $(`#fop-${c.name}`)?.value || '=';
+    if (val) activeFilters[c.name] = { op, val };
+  });
+  currentPage = 1;
+  loadData();
+}
+
+function clearFilters() {
+  activeFilters = {};
+  tableSchema.columns.filter(c => c.filterable).forEach(c => {
+    const el = $(`#fval-${c.name}`);
+    if (el) el.value = '';
+  });
+  currentPage = 1;
+  loadData();
+}
+
+function buildFilterString() {
+  return Object.entries(activeFilters)
+    .map(([field, {op, val}]) => {
+      const col = field.charAt(0).toUpperCase() + field.slice(1);
+      return `${col}${op}${val}`;
+    }).join(',');
+}
+
+async function loadData() {
+  const params = new URLSearchParams();
+  params.set('page', currentPage);
+  params.set('pageSize', pageSize);
+
+  const filter = buildFilterString();
+  if (filter) params.set('filter', filter);
+  if (currentSort) params.set('sort', (currentSortDesc ? '-' : '') + currentSort.charAt(0).toUpperCase() + currentSort.slice(1));
+
+  const url = `${tableSchema.apiUrl}?${params}`;
+  const data = await fetch(url).then(r => r.json());
+
+  const cols = tableSchema.columns.filter(c => c.visible !== false);
+  const tbody = $('#tbody');
+  tbody.innerHTML = data.items.map(item => `<tr>
+    ${cols.map(c => `<td>${formatCell(item[c.name], c)}</td>`).join('')}
+    <td class="actions">
+      <button onclick="editItem(${item[tableSchema.keyProperty]})">Edit</button>
+      <button class="danger" onclick="deleteItem(${item[tableSchema.keyProperty]})">Del</button>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="999" style="text-align:center;color:var(--muted)">No data</td></tr>';
+
+  // Update sort arrows
+  tableSchema.columns.filter(c => c.sortable).forEach(c => {
+    const el = $(`#sort-${c.name}`);
+    if (el) el.textContent = currentSort === c.name ? (currentSortDesc ? ' ▼' : ' ▲') : '';
+  });
+
+  // Pagination
+  const totalPages = Math.ceil(data.totalCount / pageSize) || 1;
+  $('#page-info').textContent = `Page ${currentPage} of ${totalPages} (${data.totalCount} items)`;
+  $('#prev-btn').disabled = currentPage <= 1;
+  $('#next-btn').disabled = currentPage >= totalPages;
+}
+
+function formatCell(val, col) {
+  if (val == null) return '<span style="color:var(--muted)">—</span>';
+  if (col.type === 'boolean') return val ? '✓' : '✗';
+  if (col.format === 'currency') return `$${Number(val).toFixed(2)}`;
+  return String(val);
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; loadData(); } }
+function nextPage() { currentPage++; loadData(); }
+
+// ─── Form ───────────────────────────────────────────────────────────
+
+function renderForm() {
+  const panel = $('#form-panel');
+  const groups = formSchema.groups || [];
+  const fields = formSchema.fields || [];
+
+  let html = `<h2 id="form-title">Create Product</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
+
+  if (groups.length > 0) {
+    groups.sort((a, b) => a.order - b.order).forEach(g => {
+      html += `<div class="group-title">${g.label || g.name}</div>`;
+      fields.filter(f => f.group === g.name).sort((a, b) => a.order - b.order).forEach(f => {
+        html += renderField(f);
+      });
+    });
+    // Fields without group
+    const ungrouped = fields.filter(f => !f.group);
+    if (ungrouped.length) {
+      ungrouped.sort((a, b) => a.order - b.order).forEach(f => { html += renderField(f); });
+    }
+  } else {
+    fields.sort((a, b) => a.order - b.order).forEach(f => { html += renderField(f); });
+  }
+
+  html += `<div class="form-actions">
+    <button type="submit" class="success" id="submit-btn">Create</button>
+    <button type="button" class="secondary" onclick="resetForm()">Cancel</button>
+  </div></form>`;
+
+  panel.innerHTML = html;
+}
+
+function renderField(f) {
+  if (f.hidden) return `<input type="hidden" name="${f.name}" id="field-${f.name}">`;
+  const fullClass = f.uiHint === 'textarea' ? ' full' : '';
+  let input;
+
+  if (f.uiHint === 'select' && f.options) {
+    input = `<select name="${f.name}" id="field-${f.name}">
+      ${f.options.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+    </select>`;
+  } else if (f.uiHint === 'checkbox') {
+    input = `<label style="display:flex;align-items:center;gap:.5rem">
+      <input type="checkbox" name="${f.name}" id="field-${f.name}"> ${f.label || f.name}
+    </label>`;
+    return `<div class="form-field${fullClass}">${input}<div class="error" id="err-${f.name}"></div></div>`;
+  } else if (f.uiHint === 'textarea') {
+    const rows = f.props?.rows || 3;
+    input = `<textarea name="${f.name}" id="field-${f.name}" rows="${rows}" placeholder="${f.placeholder || ''}"></textarea>`;
+  } else if (f.uiHint === 'slider') {
+    const min = f.props?.min ?? 0, max = f.props?.max ?? 100, step = f.props?.step ?? 1;
+    input = `<input type="range" name="${f.name}" id="field-${f.name}" min="${min}" max="${max}" step="${step}">`;
+  } else {
+    const type = f.type === 'integer' || f.type === 'decimal' ? 'number' : f.type === 'date' ? 'date' : 'text';
+    const step = f.type === 'decimal' ? ' step="0.01"' : '';
+    input = `<input type="${type}" name="${f.name}" id="field-${f.name}" placeholder="${f.placeholder || ''}"${step}
+      ${f.validation?.minLength ? `minlength="${f.validation.minLength}"` : ''}
+      ${f.validation?.maxLength ? `maxlength="${f.validation.maxLength}"` : ''}
+      ${f.validation?.min != null ? `min="${f.validation.min}"` : ''}
+      ${f.validation?.max != null ? `max="${f.validation.max}"` : ''}
+      ${f.required ? 'required' : ''}>`;
+  }
+
+  return `<div class="form-field${fullClass}">
+    <label for="field-${f.name}">${f.label || f.name}${f.required ? ' *' : ''}</label>
+    ${input}
+    <div class="error" id="err-${f.name}"></div>
+  </div>`;
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  const fields = formSchema.fields.filter(f => !f.hidden || f.name !== formSchema.keyProperty);
+  const body = {};
+
+  fields.forEach(f => {
+    const el = $(`#field-${f.name}`);
+    if (!el) return;
+    if (f.uiHint === 'checkbox') body[f.name] = el.checked;
+    else if (f.type === 'integer') body[f.name] = el.value ? parseInt(el.value) : 0;
+    else if (f.type === 'decimal') body[f.name] = el.value ? parseFloat(el.value) : 0;
+    else body[f.name] = el.value || null;
+  });
+
+  // Clear errors
+  formSchema.fields.forEach(f => { const err = $(`#err-${f.name}`); if (err) err.textContent = ''; });
+
+  try {
+    const isEdit = editingId != null;
+    const url = isEdit ? `${formSchema.apiUrl}/${editingId}` : formSchema.apiUrl;
+    const method = isEdit ? 'PATCH' : 'POST';
+
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+    if (res.ok) {
+      toast(isEdit ? 'Updated!' : 'Created!', 'success');
+      resetForm();
+      loadData();
+    } else if (res.status === 400) {
+      const err = await res.json();
+      if (err.errors) Object.entries(err.errors).forEach(([k, msgs]) => {
+        const el = $(`#err-${k.charAt(0).toLowerCase() + k.slice(1)}`);
+        if (el) el.textContent = Array.isArray(msgs) ? msgs.join(', ') : msgs;
+      });
+      else toast('Validation failed', 'error');
+    } else {
+      toast(`Error: ${res.status}`, 'error');
+    }
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function editItem(id) {
+  const res = await fetch(`${formSchema.apiUrl}/${id}`);
+  if (!res.ok) return;
+  const item = await res.json();
+
+  editingId = id;
+  $('#form-title').textContent = `Edit Product #${id}`;
+  $('#submit-btn').textContent = 'Update';
+
+  formSchema.fields.forEach(f => {
+    const el = $(`#field-${f.name}`);
+    if (!el) return;
+    if (f.uiHint === 'checkbox') el.checked = !!item[f.name];
+    else el.value = item[f.name] ?? '';
+  });
+
+  $('#form-panel').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetForm() {
+  editingId = null;
+  $('#form-title').textContent = 'Create Product';
+  $('#submit-btn').textContent = 'Create';
+  $('#crud-form').reset();
+  formSchema.fields.forEach(f => { const err = $(`#err-${f.name}`); if (err) err.textContent = ''; });
+}
+
+async function deleteItem(id) {
+  if (!confirm('Delete this item?')) return;
+  const res = await fetch(`${formSchema.apiUrl}/${id}`, { method: 'DELETE' });
+  if (res.ok) { toast('Deleted', 'success'); loadData(); }
+  else toast('Delete failed', 'error');
+}
+
+function toast(msg, type) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+init();
+</script>
+</body>
+</html>
