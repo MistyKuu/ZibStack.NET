@@ -3,6 +3,8 @@ title: ZibStack.NET.Result
 description: Functional Result monad for .NET — eliminate manual error propagation across layers with Map, Bind, Match, and async pipelines.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Result.svg)](https://www.nuget.org/packages/ZibStack.NET.Result) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Result)
+
 Functional `Result<T>` monad for .NET — eliminate manual error propagation across layers.
 
 ## Install

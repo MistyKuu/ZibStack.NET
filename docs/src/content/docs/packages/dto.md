@@ -1,9 +1,13 @@
 ---
 title: ZibStack.NET.Dto
-description: Source generator for CRUD DTOs and API endpoints with PatchField, validation, and ProblemDetails.
+description: A C# source generator that produces strongly-typed Create, Update, Response, and Query DTOs from domain models, with optional full CRUD API endpoint generation.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Dto.svg)](https://www.nuget.org/packages/ZibStack.NET.Dto) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Dto)
+
 A C# source generator that produces strongly-typed **Create**, **Update**, **Response**, and **Query** DTOs from your domain models, and optionally generates **full CRUD API endpoints** (Minimal API + MVC Controllers). No reflection, no runtime overhead. Supports generics, inheritance, nested types, flattening, validation propagation, and more.
+
+> **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Dto/sample/SampleApi)
 
 ## Install
 
@@ -328,7 +332,7 @@ public partial record PlayerWithoutMeta;
 public partial record PlayerWithAddress;
 ```
 
-See the [ZibStack.NET.Utils README](/ZibStack.NET/packages/utils/) for full documentation.
+See the [ZibStack.NET.Utils documentation](/ZibStack.NET/packages/utils/) for full documentation.
 
 ## Query / Filter DTO (`[QueryDto]`)
 
@@ -599,7 +603,7 @@ Ready-made implementations are available as separate packages:
 
 **EF Core** — add `[GenerateCrudStores]` to your DbContext and the store implementations + DI registration are generated automatically:
 
-```csharp
+```
 dotnet add package ZibStack.NET.EntityFramework
 dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 ```

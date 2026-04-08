@@ -1,9 +1,13 @@
 ---
 title: ZibStack.NET.UI
-description: Source generator for UI form and table metadata — compile-time form descriptors, table columns, and JSON schemas.
+description: Source generator for UI form and table metadata — compile-time form descriptors, table column definitions, and JSON schemas with no reflection.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.UI.svg)](https://www.nuget.org/packages/ZibStack.NET.UI) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI)
+
 Source generator for **UI form and table metadata**. Annotate your models and get compile-time form descriptors, table column definitions, and JSON schemas — no reflection, no runtime overhead.
+
+> **See the working samples:** [SampleApi](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI/sample/SampleApi) | [SampleBlazor](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI/sample/SampleBlazor) | [React App](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.UI/sample/react-app)
 
 ## Features
 

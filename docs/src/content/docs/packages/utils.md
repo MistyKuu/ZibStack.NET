@@ -3,6 +3,8 @@ title: ZibStack.NET.Utils
 description: A C# source generator providing TypeScript-style utility types (Partial, Intersect, Pick, Omit) with no reflection or runtime overhead.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Utils.svg)](https://www.nuget.org/packages/ZibStack.NET.Utils) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Utils)
+
 A C# source generator that provides TypeScript-style utility types. No reflection, no runtime overhead.
 
 ## Install

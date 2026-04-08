@@ -3,7 +3,11 @@ title: ZibStack.NET.EntityFramework
 description: EF Core integration for ZibStack.NET.Dto CRUD API with auto-generated store implementations and DI registration.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.EntityFramework.svg)](https://www.nuget.org/packages/ZibStack.NET.EntityFramework) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.EntityFramework)
+
 EF Core integration for [ZibStack.NET.Dto](https://www.nuget.org/packages/ZibStack.NET.Dto) CRUD API. Auto-generates `EfCrudStore` implementations and DI registration from your `DbContext`.
+
+> **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Dto/sample/SampleApi)
 
 ## Install
 

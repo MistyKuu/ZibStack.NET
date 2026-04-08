@@ -3,6 +3,8 @@ title: ZibStack.NET.Dapper
 description: Dapper integration for ZibStack.NET.Dto CRUD API with a source-generated DapperCrudStore base class.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Dapper.svg)](https://www.nuget.org/packages/ZibStack.NET.Dapper) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Dapper)
+
 Dapper integration for [ZibStack.NET.Dto](https://www.nuget.org/packages/ZibStack.NET.Dto) CRUD API. Provides a `DapperCrudStore<TEntity, TKey>` base class via source generation.
 
 ## Install

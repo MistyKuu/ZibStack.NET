@@ -5,6 +5,8 @@ description: Step-by-step guide to building a complete REST API with EF Core and
 
 This guide walks you through building a fully functional CRUD REST API backed by SQLite — from zero to working endpoints in under 5 minutes.
 
+> **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Dto/sample/SampleApi)
+
 ## Prerequisites
 
 - .NET 10 SDK (or 8+)
@@ -16,8 +18,8 @@ This guide walks you through building a fully functional CRUD REST API backed by
 dotnet new web -n MyCrudApi
 cd MyCrudApi
 dotnet add package ZibStack.NET.Dto
+dotnet add package ZibStack.NET.Validation
 dotnet add package ZibStack.NET.EntityFramework
-dotnet add package ZibStack.NET.Utils
 dotnet add package Microsoft.EntityFrameworkCore.Sqlite
 dotnet add package Microsoft.AspNetCore.OpenApi
 dotnet add package Scalar.AspNetCore
@@ -28,20 +30,21 @@ dotnet add package Scalar.AspNetCore
 ```csharp
 // Models/Player.cs
 using ZibStack.NET.Dto;
+using ZibStack.NET.Validation;
 
 [CrudApi]
-public class Player
+[Validate]
+public partial class Player
 {
     [DtoIgnore] public int Id { get; set; }
 
-    [System.ComponentModel.DataAnnotations.MinLength(2)]
-    [System.ComponentModel.DataAnnotations.MaxLength(50)]
+    [Required] [MinLength(2)] [MaxLength(50)]
     public required string Name { get; set; }
 
-    [System.ComponentModel.DataAnnotations.Range(1, 100)]
+    [Range(1, 100)]
     public int Level { get; set; }
 
-    [System.ComponentModel.DataAnnotations.EmailAddress]
+    [Email]
     public string? Email { get; set; }
 
     [DtoIgnore] public DateTime CreatedAt { get; set; }

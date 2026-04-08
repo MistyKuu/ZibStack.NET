@@ -10,9 +10,10 @@ ZibStack.NET is a collection of **source generators** for .NET. Each package is 
 ## Quick Install
 
 <Tabs>
-  <TabItem label="CRUD API (most popular)">
+  <TabItem label="CRUD API">
     ```bash
     dotnet add package ZibStack.NET.Dto
+    dotnet add package ZibStack.NET.Validation
     dotnet add package ZibStack.NET.EntityFramework
     dotnet add package Microsoft.EntityFrameworkCore.Sqlite
     ```
@@ -41,13 +42,18 @@ Define a model, add one attribute, and get a full REST API with database persist
 ```csharp
 // Models/Player.cs
 using ZibStack.NET.Dto;
+using ZibStack.NET.Validation;
 
 [CrudApi]
-public class Player
+[Validate]
+public partial class Player
 {
     [DtoIgnore] public int Id { get; set; }
+    [Required] [MinLength(2)]
     public required string Name { get; set; }
+    [Range(1, 100)]
     public int Level { get; set; }
+    [Email]
     public string? Email { get; set; }
 }
 ```

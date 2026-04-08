@@ -3,7 +3,11 @@ title: ZibStack.NET.Log
 description: Lightweight, compile-time logging for .NET 8+ using C# interceptors with zero-allocation logging wrappers and interpolated string support.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Log.svg)](https://www.nuget.org/packages/ZibStack.NET.Log) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Log)
+
 Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[Log]` to any method and ZibStack.NET.Log generates zero-allocation logging wrappers automatically — no reflection, no IL weaving, no runtime proxies. Also provides **interpolated string logging** (`LogInformationEx($"...")`) with structured logging support.
+
+> **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Log/sample/SampleApi)
 
 ## Quick Start
 

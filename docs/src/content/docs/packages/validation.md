@@ -3,6 +3,8 @@ title: ZibStack.NET.Validation
 description: Source-generated validation for .NET — add validation attributes, get a compile-time Validate() method with no reflection or runtime overhead.
 ---
 
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Validation.svg)](https://www.nuget.org/packages/ZibStack.NET.Validation) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Validation)
+
 Source-generated validation for .NET. Add validation attributes, get a compile-time `Validate()` method — no reflection, no runtime overhead.
 
 ## Install
