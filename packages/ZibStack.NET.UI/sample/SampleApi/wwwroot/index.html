@@ -7,12 +7,31 @@
 <style>
   :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --danger: #ef4444; --success: #22c55e; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; padding: 1.5rem; }
-  h1 { font-size: 1.5rem; margin-bottom: .25rem; }
-  h1 span { color: var(--accent); }
-  .subtitle { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Header */
+  header { padding: .5rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  header h1 { font-size: 1.1rem; white-space: nowrap; }
+  header h1 em { color: var(--accent); font-style: normal; }
+  .tabs { display: flex; gap: 0; }
+  .tab { padding: .4rem .8rem; font-size: .8rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .status-bar { margin-left: auto; font-size: .75rem; color: var(--muted); }
+  .status-bar.error { color: var(--danger); }
+  .status-bar.success { color: var(--success); }
+
+  /* Layout */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .editor-pane { width: 40%; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  #editor { flex: 1; }
+  .content-pane { flex: 1; overflow-y: auto; }
+  .tab-content { display: none; padding: 1rem; }
+  .tab-content.active { display: block; }
+
+  /* Panels */
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; }
-  .panel h2 { font-size: 1rem; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
+  .panel h2 { font-size: 1rem; margin-bottom: .75rem; }
   .filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin-bottom: .75rem; }
   .filter-group { display: flex; flex-direction: column; gap: .15rem; }
   .filter-group label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
@@ -26,9 +45,8 @@
   button.success { background: var(--success); color: #000; }
   table { width: 100%; border-collapse: collapse; font-size: .85rem; }
   th, td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; cursor: default; white-space: nowrap; }
-  th.sortable { cursor: pointer; }
-  th.sortable:hover { color: var(--accent); }
+  th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; cursor: default; white-space: nowrap; }
+  th.sortable { cursor: pointer; } th.sortable:hover { color: var(--accent); }
   th .sort-arrow { font-size: .7rem; }
   tr:hover td { background: rgba(59,130,246,.05); }
   .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: .75rem; font-size: .8rem; color: var(--muted); }
@@ -48,346 +66,289 @@
   @keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
   .actions { display: flex; gap: .25rem; }
   .actions button { padding: .2rem .5rem; font-size: .7rem; }
+  .badge { display: inline-block; background: var(--border); color: var(--text); padding: .1rem .4rem; border-radius: .15rem; font-size: .65rem; margin: .1rem; }
+  .badge.sort { background: #1d4ed8; } .badge.filter { background: #7c3aed; }
+  .empty { color: var(--muted); font-style: italic; text-align: center; padding: 2rem; }
+  pre.json { background: var(--bg); border: 1px solid var(--border); border-radius: .25rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 400px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 
-<h1><span>[ImTiredOfCrud]</span> Demo</h1>
-<p class="subtitle">One attribute on your model. Everything below is auto-generated from table/form JSON schemas + CRUD API + Query DSL.</p>
+<header>
+  <h1><em>[ImTiredOfCrud]</em> Playground</h1>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('data')">Data</div>
+    <div class="tab" onclick="switchTab('schema')">Schema</div>
+  </div>
+  <div class="status-bar" id="status">Ready — edit the model and see changes live</div>
+</header>
 
-<div class="panel" id="table-panel">
-  <h2>Loading table schema...</h2>
+<div class="main">
+  <div class="editor-pane">
+    <div id="editor"></div>
+  </div>
+  <div class="content-pane">
+    <div class="tab-content active" id="tab-data">
+      <div class="panel" id="table-panel"><div class="empty">Compiling...</div></div>
+      <div class="panel" id="form-panel"><div class="empty">Compiling...</div></div>
+    </div>
+    <div class="tab-content" id="tab-schema">
+      <div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table">Compiling...</pre></div>
+      <div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form">Compiling...</pre></div>
+    </div>
+  </div>
 </div>
 
-<div class="panel" id="form-panel">
-  <h2>Loading form schema...</h2>
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script>
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
-let tableSchema, formSchema;
+let tableSchema = null, formSchema = null;
 let currentSort = null, currentSortDesc = false;
 let currentPage = 1, pageSize = 10;
-let editingId = null;
-let activeFilters = {};
+let editingId = null, activeFilters = {};
+let compileTimer = null, editor;
 
-// ─── Init ───────────────────────────────────────────────────────────
+const defaultCode = `[ImTiredOfCrud(DefaultSort = "Name")]
+[UiFormGroup("basic", Label = "Basic Info", Order = 1)]
+[UiFormGroup("details", Label = "Details", Order = 2)]
+public partial class Product
+{
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
+    public int Id { get; set; }
 
-async function init() {
-  [tableSchema, formSchema] = await Promise.all([
-    fetch('/api/tables/product').then(r => r.json()),
-    fetch('/api/forms/product').then(r => r.json()),
-  ]);
-  currentSort = tableSchema.defaultSort?.column;
-  currentSortDesc = tableSchema.defaultSort?.direction === 'desc';
-  pageSize = tableSchema.pagination?.defaultPageSize || 10;
-  renderTable();
-  renderForm();
-  loadData();
+    [Required] [MaxLength(200)]
+    [UiFormField(Label = "Product Name", Placeholder = "Enter name...", Group = "basic")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+
+    [MaxLength(500)]
+    [UiFormField(Label = "Description", Group = "basic")]
+    [TextArea(Rows = 3)]
+    [UiTableColumn(Filterable = true)]
+    public string? Description { get; set; }
+
+    [Range(0, 999999)]
+    [UiFormField(Label = "Price", Group = "details")]
+    [UiTableColumn(Sortable = true, Filterable = true, Format = "currency")]
+    public decimal Price { get; set; }
+
+    [Range(0, 10000)]
+    [UiFormField(Label = "Stock", Group = "details")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public int Stock { get; set; }
+
+    [UiFormField(Label = "Active")]
+    [Checkbox]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public bool IsActive { get; set; } = true;
+}`;
+
+// ─── Tabs ───────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  $$('.tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === name));
+  $$('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
+}
+
+// ─── Monaco Editor ──────────────────────────────────────────────────
+
+require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
+require(['vs/editor/editor.main'], function () {
+  monaco.editor.defineTheme('zibstack', { base: 'vs-dark', inherit: true, rules: [], colors: { 'editor.background': '#1e293b' } });
+  editor = monaco.editor.create($('#editor'), {
+    value: defaultCode, language: 'csharp', theme: 'zibstack', fontSize: 13,
+    minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, padding: { top: 10 },
+  });
+  editor.onDidChangeModelContent(() => { clearTimeout(compileTimer); compileTimer = setTimeout(compile, 600); });
+  // Initial compile
+  compile();
+});
+
+// ─── Compile ────────────────────────────────────────────────────────
+
+async function compile() {
+  const status = $('#status');
+  status.className = 'status-bar'; status.textContent = 'Compiling...';
+  const start = performance.now();
+  try {
+    const res = await fetch('/api/playground', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: editor.getValue() })
+    });
+    const data = await res.json();
+    const ms = Math.round(performance.now() - start);
+
+    if (data.error && !data.formSchema && !data.tableSchema) {
+      status.className = 'status-bar error'; status.textContent = `Error (${ms}ms): ${data.error.substring(0,120)}`;
+      return;
+    }
+
+    tableSchema = data.tableSchema ? JSON.parse(data.tableSchema) : null;
+    formSchema = data.formSchema ? JSON.parse(data.formSchema) : null;
+
+    // Use live product endpoint if schemas match, otherwise preview-only
+    if (tableSchema && !tableSchema.apiUrl) tableSchema.apiUrl = '/api/products';
+    if (formSchema && !formSchema.apiUrl) formSchema.apiUrl = '/api/products';
+
+    status.className = 'status-bar success'; status.textContent = `Compiled (${ms}ms)`;
+
+    // Update schema tab
+    $('#schema-table').textContent = tableSchema ? JSON.stringify(tableSchema, null, 2) : 'No table schema';
+    $('#schema-form').textContent = formSchema ? JSON.stringify(formSchema, null, 2) : 'No form schema';
+
+    // Update data tab
+    currentSort = tableSchema?.defaultSort?.column || null;
+    currentSortDesc = tableSchema?.defaultSort?.direction === 'desc';
+    currentPage = 1; activeFilters = {}; editingId = null;
+    renderTable(); renderForm(); loadData();
+  } catch (ex) {
+    status.className = 'status-bar error'; status.textContent = ex.message;
+  }
 }
 
 // ─── Table ──────────────────────────────────────────────────────────
 
 function renderTable() {
+  if (!tableSchema) { $('#table-panel').innerHTML = '<div class="empty">No [UiTable] or [ImTiredOfCrud]</div>'; return; }
   const cols = tableSchema.columns.filter(c => c.visible !== false);
   const panel = $('#table-panel');
-  panel.innerHTML = `
-    <h2>Products</h2>
+  panel.innerHTML = `<h2>${esc(tableSchema.name)}</h2>
     <div class="filters" id="filters"></div>
-    <table>
-      <thead><tr>
-        ${cols.map(c => `<th class="${c.sortable ? 'sortable' : ''}" data-col="${c.name}">
-          ${c.label} ${c.sortable ? '<span class="sort-arrow" id="sort-' + c.name + '"></span>' : ''}
-        </th>`).join('')}
-        <th>Actions</th>
-      </tr></thead>
-      <tbody id="tbody"></tbody>
-    </table>
-    <div class="pagination">
-      <span id="page-info"></span>
-      <div>
-        <button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button>
-        <button class="secondary" id="next-btn" onclick="nextPage()">Next</button>
-      </div>
-    </div>`;
-
-  // Sort click handlers
+    <table><thead><tr>
+      ${cols.map(c => `<th class="${c.sortable?'sortable':''}" data-col="${c.name}">${esc(c.label||c.name)} ${c.sortable?'<span class="sort-arrow" id="sort-'+c.name+'"></span>':''}</th>`).join('')}
+      <th>Actions</th>
+    </tr></thead><tbody id="tbody"></tbody></table>
+    <div class="pagination"><span id="page-info"></span><div>
+      <button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button>
+      <button class="secondary" id="next-btn" onclick="nextPage()">Next</button>
+    </div></div>`;
   $$('th.sortable', panel).forEach(th => {
-    th.onclick = () => {
-      const col = th.dataset.col;
-      if (currentSort === col) currentSortDesc = !currentSortDesc;
-      else { currentSort = col; currentSortDesc = false; }
-      currentPage = 1;
-      loadData();
-    };
+    th.onclick = () => { const c = th.dataset.col; if (currentSort===c) currentSortDesc=!currentSortDesc; else { currentSort=c; currentSortDesc=false; } currentPage=1; loadData(); };
   });
-
   renderFilters(cols);
 }
 
 function renderFilters(cols) {
-  const container = $('#filters');
-  const filterCols = cols.filter(c => c.filterable);
-  container.innerHTML = filterCols.map(c => `
-    <div class="filter-group">
-      <label>${c.label}</label>
-      <div style="display:flex;gap:.2rem">
-        <select id="fop-${c.name}" style="width:60px">
-          ${(c.filterOperators || ['=']).map(op => `<option value="${op}" ${op === '=*' && c.type === 'string' ? 'selected' : op === '=' && c.type !== 'string' ? 'selected' : ''}>${opLabel(op)}</option>`).join('')}
-        </select>
-        ${c.options
-          ? `<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>`
-          : c.type === 'boolean'
-            ? `<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`
-            : `<input id="fval-${c.name}" placeholder="Filter...">`}
-      </div>
-    </div>`).join('') + `
-    <div class="filter-group" style="align-self:end">
-      <button onclick="applyFilters()">Filter</button>
-      <button class="secondary" onclick="clearFilters()">Clear</button>
-    </div>`;
+  const ct = $('#filters'); if(!ct) return;
+  const fc = cols.filter(c => c.filterable);
+  ct.innerHTML = fc.map(c => `<div class="filter-group"><label>${esc(c.label||c.name)}</label><div style="display:flex;gap:.2rem">
+    <select id="fop-${c.name}" style="width:60px">${(c.filterOperators||['=']).map(op=>`<option value="${op}" ${op==='=*'&&c.type==='string'?'selected':op==='='&&c.type!=='string'?'selected':''}>${opLabel(op)}</option>`).join('')}</select>
+    ${c.options?`<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`
+      :c.type==='boolean'?`<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`
+      :`<input id="fval-${c.name}" placeholder="...">`}
+  </div></div>`).join('') + `<div class="filter-group" style="align-self:end"><button onclick="applyFilters()">Filter</button> <button class="secondary" onclick="clearFilters()">Clear</button></div>`;
 }
 
-function opLabel(op) {
-  return { '=':'=', '!=':'!=', '<':'<', '>':'>', '<=':'<=', '>=':'>=',
-    '=*':'~', '!*':'!~', '^':'A..', '!^':'!A..', '$':'..Z', '!$':'!..Z',
-    '=in=':'in', '=out=':'!in' }[op] || op;
-}
+function opLabel(op) { return {'=':'=','!=':'!=','<':'<','>':'>','<=':'<=','>=':'>=','=*':'~','!*':'!~','^':'A..','!^':'!A..','$':'..Z','!$':'!..Z','=in=':'in','=out=':'!in'}[op]||op; }
 
 function applyFilters() {
   activeFilters = {};
-  const cols = tableSchema.columns.filter(c => c.filterable && c.visible !== false);
-  cols.forEach(c => {
-    const val = $(`#fval-${c.name}`)?.value?.trim();
-    const op = $(`#fop-${c.name}`)?.value || '=';
-    if (val) activeFilters[c.name] = { op, val };
-  });
-  currentPage = 1;
-  loadData();
+  tableSchema.columns.filter(c=>c.filterable&&c.visible!==false).forEach(c => {
+    const v=$(`#fval-${c.name}`)?.value?.trim(), op=$(`#fop-${c.name}`)?.value||'=';
+    if(v) activeFilters[c.name]={op,val:v};
+  }); currentPage=1; loadData();
 }
-
-function clearFilters() {
-  activeFilters = {};
-  tableSchema.columns.filter(c => c.filterable).forEach(c => {
-    const el = $(`#fval-${c.name}`);
-    if (el) el.value = '';
-  });
-  currentPage = 1;
-  loadData();
-}
-
-function buildFilterString() {
-  return Object.entries(activeFilters)
-    .map(([field, {op, val}]) => {
-      const col = field.charAt(0).toUpperCase() + field.slice(1);
-      return `${col}${op}${val}`;
-    }).join(',');
-}
+function clearFilters() { activeFilters={}; tableSchema.columns.filter(c=>c.filterable).forEach(c=>{const e=$(`#fval-${c.name}`);if(e)e.value='';}); currentPage=1; loadData(); }
 
 async function loadData() {
-  const params = new URLSearchParams();
-  params.set('page', currentPage);
-  params.set('pageSize', pageSize);
-
-  const filter = buildFilterString();
-  if (filter) params.set('filter', filter);
-  if (currentSort) params.set('sort', (currentSortDesc ? '-' : '') + currentSort.charAt(0).toUpperCase() + currentSort.slice(1));
-
-  const url = `${tableSchema.apiUrl}?${params}`;
-  const data = await fetch(url).then(r => r.json());
-
-  const cols = tableSchema.columns.filter(c => c.visible !== false);
-  const tbody = $('#tbody');
-  tbody.innerHTML = data.items.map(item => `<tr>
-    ${cols.map(c => `<td>${formatCell(item[c.name], c)}</td>`).join('')}
-    <td class="actions">
-      <button onclick="editItem(${item[tableSchema.keyProperty]})">Edit</button>
-      <button class="danger" onclick="deleteItem(${item[tableSchema.keyProperty]})">Del</button>
-    </td>
-  </tr>`).join('') || '<tr><td colspan="999" style="text-align:center;color:var(--muted)">No data</td></tr>';
-
-  // Update sort arrows
-  tableSchema.columns.filter(c => c.sortable).forEach(c => {
-    const el = $(`#sort-${c.name}`);
-    if (el) el.textContent = currentSort === c.name ? (currentSortDesc ? ' ▼' : ' ▲') : '';
-  });
-
-  // Pagination
-  const totalPages = Math.ceil(data.totalCount / pageSize) || 1;
-  $('#page-info').textContent = `Page ${currentPage} of ${totalPages} (${data.totalCount} items)`;
-  $('#prev-btn').disabled = currentPage <= 1;
-  $('#next-btn').disabled = currentPage >= totalPages;
+  if (!tableSchema?.apiUrl) return;
+  const p = new URLSearchParams(); p.set('page',currentPage); p.set('pageSize',pageSize);
+  const f = Object.entries(activeFilters).map(([k,{op,val}])=>`${k.charAt(0).toUpperCase()+k.slice(1)}${op}${val}`).join(',');
+  if(f) p.set('filter',f);
+  if(currentSort) p.set('sort',(currentSortDesc?'-':'')+currentSort.charAt(0).toUpperCase()+currentSort.slice(1));
+  try {
+    const data = await fetch(`${tableSchema.apiUrl}?${p}`).then(r=>r.json());
+    const cols = tableSchema.columns.filter(c=>c.visible!==false);
+    const key = tableSchema.keyProperty || 'id';
+    const tbody = $('#tbody'); if(!tbody) return;
+    tbody.innerHTML = (data.items||[]).map(item=>`<tr>${cols.map(c=>`<td>${fmtCell(item[c.name],c)}</td>`).join('')}<td class="actions"><button onclick="editItem(${item[key]})">Edit</button> <button class="danger" onclick="deleteItem(${item[key]})">Del</button></td></tr>`).join('')||'<tr><td colspan="999" style="text-align:center;color:var(--muted)">No data</td></tr>';
+    tableSchema.columns.filter(c=>c.sortable).forEach(c=>{const e=$(`#sort-${c.name}`);if(e)e.textContent=currentSort===c.name?(currentSortDesc?' ▼':' ▲'):'';});
+    const tp = Math.ceil((data.totalCount||0)/pageSize)||1;
+    const pi=$('#page-info'); if(pi) pi.textContent=`Page ${currentPage} of ${tp} (${data.totalCount||0} items)`;
+    const pb=$('#prev-btn'); if(pb) pb.disabled=currentPage<=1;
+    const nb=$('#next-btn'); if(nb) nb.disabled=currentPage>=tp;
+  } catch(e) { /* endpoint may not exist for playground models */ }
 }
-
-function formatCell(val, col) {
-  if (val == null) return '<span style="color:var(--muted)">—</span>';
-  if (col.type === 'boolean') return val ? '✓' : '✗';
-  if (col.format === 'currency') return `$${Number(val).toFixed(2)}`;
-  return String(val);
-}
-
-function prevPage() { if (currentPage > 1) { currentPage--; loadData(); } }
+function fmtCell(v,c) { if(v==null) return '<span style="color:var(--muted)">—</span>'; if(c.type==='boolean') return v?'✓':'✗'; if(c.format==='currency') return `$${Number(v).toFixed(2)}`; return String(v); }
+function prevPage() { if(currentPage>1){currentPage--;loadData();} }
 function nextPage() { currentPage++; loadData(); }
 
 // ─── Form ───────────────────────────────────────────────────────────
 
 function renderForm() {
+  if (!formSchema) { $('#form-panel').innerHTML = '<div class="empty">No [UiForm] or [ImTiredOfCrud]</div>'; return; }
   const panel = $('#form-panel');
-  const groups = formSchema.groups || [];
-  const fields = formSchema.fields || [];
-
-  let html = `<h2 id="form-title">Create Product</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
-
-  if (groups.length > 0) {
-    groups.sort((a, b) => a.order - b.order).forEach(g => {
-      html += `<div class="group-title">${g.label || g.name}</div>`;
-      fields.filter(f => f.group === g.name).sort((a, b) => a.order - b.order).forEach(f => {
-        html += renderField(f);
-      });
-    });
-    // Fields without group
-    const ungrouped = fields.filter(f => !f.group);
-    if (ungrouped.length) {
-      ungrouped.sort((a, b) => a.order - b.order).forEach(f => { html += renderField(f); });
-    }
-  } else {
-    fields.sort((a, b) => a.order - b.order).forEach(f => { html += renderField(f); });
-  }
-
-  html += `<div class="form-actions">
-    <button type="submit" class="success" id="submit-btn">Create</button>
-    <button type="button" class="secondary" onclick="resetForm()">Cancel</button>
-  </div></form>`;
-
-  panel.innerHTML = html;
+  let h = `<h2 id="form-title">Create ${esc(formSchema.name)}</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
+  const groups = (formSchema.groups||[]).sort((a,b)=>a.order-b.order);
+  const fields = formSchema.fields||[];
+  if (groups.length) {
+    groups.forEach(g => { h+=`<div class="group-title">${esc(g.label||g.name)}</div>`; fields.filter(f=>f.group===g.name).sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);}); });
+    fields.filter(f=>!f.group).forEach(f=>{h+=renderField(f);});
+  } else { fields.sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);}); }
+  h += `<div class="form-actions"><button type="submit" class="success" id="submit-btn">Create</button><button type="button" class="secondary" onclick="resetForm()">Cancel</button></div></form>`;
+  panel.innerHTML = h;
 }
 
 function renderField(f) {
-  if (f.hidden) return `<input type="hidden" name="${f.name}" id="field-${f.name}">`;
-  const fullClass = f.uiHint === 'textarea' ? ' full' : '';
-  let input;
-
-  if (f.uiHint === 'select' && f.options) {
-    input = `<select name="${f.name}" id="field-${f.name}">
-      ${f.options.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
-    </select>`;
-  } else if (f.uiHint === 'checkbox') {
-    input = `<label style="display:flex;align-items:center;gap:.5rem">
-      <input type="checkbox" name="${f.name}" id="field-${f.name}"> ${f.label || f.name}
-    </label>`;
-    return `<div class="form-field${fullClass}">${input}<div class="error" id="err-${f.name}"></div></div>`;
-  } else if (f.uiHint === 'textarea') {
-    const rows = f.props?.rows || 3;
-    input = `<textarea name="${f.name}" id="field-${f.name}" rows="${rows}" placeholder="${f.placeholder || ''}"></textarea>`;
-  } else if (f.uiHint === 'slider') {
-    const min = f.props?.min ?? 0, max = f.props?.max ?? 100, step = f.props?.step ?? 1;
-    input = `<input type="range" name="${f.name}" id="field-${f.name}" min="${min}" max="${max}" step="${step}">`;
-  } else {
-    const type = f.type === 'integer' || f.type === 'decimal' ? 'number' : f.type === 'date' ? 'date' : 'text';
-    const step = f.type === 'decimal' ? ' step="0.01"' : '';
-    input = `<input type="${type}" name="${f.name}" id="field-${f.name}" placeholder="${f.placeholder || ''}"${step}
-      ${f.validation?.minLength ? `minlength="${f.validation.minLength}"` : ''}
-      ${f.validation?.maxLength ? `maxlength="${f.validation.maxLength}"` : ''}
-      ${f.validation?.min != null ? `min="${f.validation.min}"` : ''}
-      ${f.validation?.max != null ? `max="${f.validation.max}"` : ''}
-      ${f.required ? 'required' : ''}>`;
-  }
-
-  return `<div class="form-field${fullClass}">
-    <label for="field-${f.name}">${f.label || f.name}${f.required ? ' *' : ''}</label>
-    ${input}
-    <div class="error" id="err-${f.name}"></div>
-  </div>`;
+  if(f.hidden) return `<input type="hidden" name="${f.name}" id="field-${f.name}">`;
+  const full = f.uiHint==='textarea'?' full':'';
+  let inp;
+  if(f.uiHint==='select'&&f.options) inp=`<select name="${f.name}" id="field-${f.name}">${f.options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('')}</select>`;
+  else if(f.uiHint==='checkbox') { inp=`<label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" name="${f.name}" id="field-${f.name}"> ${esc(f.label||f.name)}</label>`; return `<div class="form-field${full}">${inp}<div class="error" id="err-${f.name}"></div></div>`; }
+  else if(f.uiHint==='textarea') inp=`<textarea name="${f.name}" id="field-${f.name}" rows="${f.props?.rows||3}" placeholder="${esc(f.placeholder||'')}"></textarea>`;
+  else if(f.uiHint==='slider') inp=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
+  else { const t=f.type==='integer'||f.type==='decimal'?'number':'text'; const s=f.type==='decimal'?' step="0.01"':''; inp=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`; }
+  return `<div class="form-field${full}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${inp}<div class="error" id="err-${f.name}"></div></div>`;
 }
 
 async function submitForm(e) {
-  e.preventDefault();
-  const fields = formSchema.fields.filter(f => !f.hidden || f.name !== formSchema.keyProperty);
+  e.preventDefault(); if(!formSchema?.apiUrl) return;
   const body = {};
-
-  fields.forEach(f => {
-    const el = $(`#field-${f.name}`);
-    if (!el) return;
-    if (f.uiHint === 'checkbox') body[f.name] = el.checked;
-    else if (f.type === 'integer') body[f.name] = el.value ? parseInt(el.value) : 0;
-    else if (f.type === 'decimal') body[f.name] = el.value ? parseFloat(el.value) : 0;
-    else body[f.name] = el.value || null;
+  (formSchema.fields||[]).forEach(f => { const el=$(`#field-${f.name}`); if(!el) return;
+    if(f.uiHint==='checkbox') body[f.name]=el.checked;
+    else if(f.type==='integer') body[f.name]=el.value?parseInt(el.value):0;
+    else if(f.type==='decimal') body[f.name]=el.value?parseFloat(el.value):0;
+    else body[f.name]=el.value||null;
   });
-
-  // Clear errors
-  formSchema.fields.forEach(f => { const err = $(`#err-${f.name}`); if (err) err.textContent = ''; });
-
+  (formSchema.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
   try {
-    const isEdit = editingId != null;
-    const url = isEdit ? `${formSchema.apiUrl}/${editingId}` : formSchema.apiUrl;
-    const method = isEdit ? 'PATCH' : 'POST';
-
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-
-    if (res.ok) {
-      toast(isEdit ? 'Updated!' : 'Created!', 'success');
-      resetForm();
-      loadData();
-    } else if (res.status === 400) {
-      const err = await res.json();
-      if (err.errors) Object.entries(err.errors).forEach(([k, msgs]) => {
-        const el = $(`#err-${k.charAt(0).toLowerCase() + k.slice(1)}`);
-        if (el) el.textContent = Array.isArray(msgs) ? msgs.join(', ') : msgs;
-      });
-      else toast('Validation failed', 'error');
-    } else {
-      toast(`Error: ${res.status}`, 'error');
-    }
-  } catch (ex) {
-    toast(ex.message, 'error');
-  }
+    const isEdit=editingId!=null;
+    const res = await fetch(isEdit?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl, { method:isEdit?'PATCH':'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    if(res.ok) { toast(isEdit?'Updated!':'Created!','success'); resetForm(); loadData(); }
+    else if(res.status===400) { const err=await res.json(); if(err.errors) Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;}); else toast('Validation failed','error'); }
+    else toast(`Error: ${res.status}`,'error');
+  } catch(ex) { toast(ex.message,'error'); }
 }
 
 async function editItem(id) {
-  const res = await fetch(`${formSchema.apiUrl}/${id}`);
-  if (!res.ok) return;
-  const item = await res.json();
-
-  editingId = id;
-  $('#form-title').textContent = `Edit Product #${id}`;
-  $('#submit-btn').textContent = 'Update';
-
-  formSchema.fields.forEach(f => {
-    const el = $(`#field-${f.name}`);
-    if (!el) return;
-    if (f.uiHint === 'checkbox') el.checked = !!item[f.name];
-    else el.value = item[f.name] ?? '';
-  });
-
-  $('#form-panel').scrollIntoView({ behavior: 'smooth' });
+  if(!formSchema?.apiUrl) return;
+  const res = await fetch(`${formSchema.apiUrl}/${id}`); if(!res.ok) return;
+  const item = await res.json(); editingId=id;
+  const ft=$('#form-title'); if(ft) ft.textContent=`Edit ${formSchema.name} #${id}`;
+  const sb=$('#submit-btn'); if(sb) sb.textContent='Update';
+  (formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});
+  $('#form-panel').scrollIntoView({behavior:'smooth'});
 }
 
 function resetForm() {
-  editingId = null;
-  $('#form-title').textContent = 'Create Product';
-  $('#submit-btn').textContent = 'Create';
-  $('#crud-form').reset();
-  formSchema.fields.forEach(f => { const err = $(`#err-${f.name}`); if (err) err.textContent = ''; });
+  editingId=null;
+  const ft=$('#form-title'); if(ft) ft.textContent=`Create ${formSchema?.name||''}`;
+  const sb=$('#submit-btn'); if(sb) sb.textContent='Create';
+  const form=$('#crud-form'); if(form) form.reset();
+  (formSchema?.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
 }
 
 async function deleteItem(id) {
-  if (!confirm('Delete this item?')) return;
-  const res = await fetch(`${formSchema.apiUrl}/${id}`, { method: 'DELETE' });
-  if (res.ok) { toast('Deleted', 'success'); loadData(); }
-  else toast('Delete failed', 'error');
+  if(!formSchema?.apiUrl||!confirm('Delete?')) return;
+  const res=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});
+  if(res.ok){toast('Deleted','success');loadData();}else toast('Failed','error');
 }
 
-function toast(msg, type) {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
-}
-
-init();
+function toast(msg,type) { const e=document.createElement('div');e.className=`toast ${type}`;e.textContent=msg;document.body.appendChild(e);setTimeout(()=>e.remove(),3200); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 </body>
 </html>
