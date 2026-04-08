@@ -78,12 +78,36 @@ public class MyHandler : IAspectHandler
 
 ### Around handler — full control over execution
 
-Use `IAroundAspectHandler` to wrap the method call. You control whether to call, how many times, and what to return:
+Use `IAroundAspectHandler` to wrap the method call. You control whether to call, how many times, and what to return.
+
+**Strongly-typed (recommended)** — use `IAroundAspectHandler<T>` for typed `proceed` and return value:
 
 ```csharp
-[AspectHandler(typeof(CircuitBreakerHandler))]
-public class CircuitBreakerAttribute : AspectAttribute { }
+[AspectHandler(typeof(CacheHandler))]
+public class CacheAttribute : AspectAttribute { }
 
+public class CacheHandler : IAroundAspectHandler<Order>
+{
+    private readonly Dictionary<string, Order> _cache = new();
+
+    public Order? Around(AspectContext ctx, Func<Order?> proceed)
+    {
+        var key = $"{ctx.MethodName}:{ctx.FormatParameters()}";
+        if (_cache.TryGetValue(key, out var cached)) return cached;
+        var result = proceed();    // strongly typed!
+        if (result is not null) _cache[key] = result;
+        return result;
+    }
+}
+
+// Usage:
+[Cache]
+public Order GetOrder(int id) { ... }  // T matches Order
+```
+
+**Non-generic (for void or mixed return types)** — use `IAroundAspectHandler` with `object?`:
+
+```csharp
 public class CircuitBreakerHandler : IAroundAspectHandler
 {
     private static int _failures;
@@ -185,9 +209,24 @@ public void OnAfter(AspectContext ctx)
 
 ZibStack.NET.Aop supports two aspect execution models. Choose based on your performance needs:
 
-### Runtime Handlers (`IAspectHandler` / `IAroundAspectHandler`)
+### Runtime Handlers
 
-Simple C# classes. The generator creates handler instances and `AspectContext` at runtime:
+Simple C# classes. The generator creates handler instances and `AspectContext` at runtime.
+
+**Handler interfaces:**
+
+| Interface | Use case |
+|-----------|----------|
+| `IAspectHandler` | Before/After/OnException — sync methods |
+| `IAsyncAspectHandler` | Before/After/OnException — async methods |
+| `IAroundAspectHandler` | Full control over execution — `object?` return |
+| `IAroundAspectHandler<T>` | Full control — **strongly-typed** return `T?` |
+| `IAsyncAroundAspectHandler` | Async full control — `object?` return |
+| `IAsyncAroundAspectHandler<T>` | Async full control — **strongly-typed** return `T?` |
+
+The generic `<T>` variants are preferred — the generator matches `T` against the intercepted method's return type and generates typed `Func<T?>` instead of `Func<object?>`. Use non-generic for void methods or handlers applied across different return types.
+
+**Example:**
 
 ```csharp
 // What you write:
