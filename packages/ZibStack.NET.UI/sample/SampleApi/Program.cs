@@ -26,6 +26,7 @@ app.MapScalarApiReference();
 
 // Auto-generated from [ImTiredOfCrud] — full CRUD + UI metadata
 app.MapPlayerEndpoints();
+app.MapTeamEndpoints();
 
 app.MapControllers();
 app.Run();

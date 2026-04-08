@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ZibStack.NET.Utils;
+namespace ZibStack.NET.Core;
 
 internal sealed class UtilsPropertyInfo
 {

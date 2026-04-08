@@ -55,8 +55,8 @@ public partial class DtoGenerator
         foreach (var a in symbol.GetAttributes())
         {
             INamedTypeSymbol? targetType = null;
-            if (a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.IntersectFromAttribute" ||
-                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Utils.PartialFromAttribute")
+            if (a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Core.IntersectFromAttribute" ||
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Core.PartialFromAttribute")
             {
                 if (a.ConstructorArguments.Length > 0)
                     targetType = a.ConstructorArguments[0].Value as INamedTypeSymbol;

@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\..\..\ZibStack.NET.Utils\src\ZibStack.NET.Utils\ZibStack.NET.Utils.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Core\src\ZibStack.NET.Core\ZibStack.NET.Core.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.EntityFramework\src\ZibStack.NET.EntityFramework\ZibStack.NET.EntityFramework.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.UI\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace ZibStack.NET.Utils;
+namespace ZibStack.NET.Core;
 
-public partial class UtilsGenerator
+public partial class CoreGenerator
 {
     private static string GeneratePartialFromSource(PartialFromInfo info)
     {

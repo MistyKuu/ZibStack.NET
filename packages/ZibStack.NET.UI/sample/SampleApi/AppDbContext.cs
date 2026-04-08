@@ -8,6 +8,7 @@ namespace SampleApi;
 public class AppDbContext : DbContext
 {
     public DbSet<Player> Players => Set<Player>();
+    public DbSet<Team> Teams => Set<Team>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 

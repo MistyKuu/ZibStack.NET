@@ -8,13 +8,13 @@
     <NoWarn>RS2008</NoWarn>
     <IsRoslynComponent>true</IsRoslynComponent>
 
-    <PackageId>ZibStack.NET.Utils</PackageId>
-    <Description>Source generator for TypeScript-style utility types: PartialFrom, IntersectFrom, PickFrom, OmitFrom.</Description>
+    <PackageId>ZibStack.NET.Core</PackageId>
+    <Description>Source generator for shared attributes and TypeScript-style utility types: PartialFrom, IntersectFrom, PickFrom, OmitFrom, OneToMany, OneToOne, Entity.</Description>
     <Authors>$(Authors)</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
-    <PackageTags>source-generator;partial;intersect;pick;omit;typescript;csharp;codegen</PackageTags>
+    <PackageTags>source-generator;partial;intersect;pick;omit;relations;entity;csharp;codegen</PackageTags>
     <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')">README.md</PackageReadmeFile>
 
     <IncludeBuildOutput>false</IncludeBuildOutput>

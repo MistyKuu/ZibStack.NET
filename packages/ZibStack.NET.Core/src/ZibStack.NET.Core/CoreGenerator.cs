@@ -4,24 +4,38 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ZibStack.NET.Utils;
+namespace ZibStack.NET.Core;
 
 [Generator]
-public partial class UtilsGenerator : IIncrementalGenerator
+public partial class CoreGenerator : IIncrementalGenerator
 {
-    private const string PartialFromAttributeFqn = "ZibStack.NET.Utils.PartialFromAttribute";
-    private const string IntersectFromAttributeFqn = "ZibStack.NET.Utils.IntersectFromAttribute";
-    private const string PickFromAttributeFqn = "ZibStack.NET.Utils.PickFromAttribute";
-    private const string OmitFromAttributeFqn = "ZibStack.NET.Utils.OmitFromAttribute";
+    // ─── Utility type attributes ────────────────────────────────────────
+    private const string PartialFromAttributeFqn = "ZibStack.NET.Core.PartialFromAttribute";
+    private const string IntersectFromAttributeFqn = "ZibStack.NET.Core.IntersectFromAttribute";
+    private const string PickFromAttributeFqn = "ZibStack.NET.Core.PickFromAttribute";
+    private const string OmitFromAttributeFqn = "ZibStack.NET.Core.OmitFromAttribute";
+
+    // ─── Relationship / entity attributes ───────────────────────────────
+    private const string OneToManyAttributeFqn = "ZibStack.NET.Core.OneToManyAttribute";
+    private const string OneToOneAttributeFqn = "ZibStack.NET.Core.OneToOneAttribute";
+    private const string EntityAttributeFqn = "ZibStack.NET.Core.EntityAttribute";
+    private const string ChildTableAttributeFqn = "ZibStack.NET.Core.ChildTableAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         context.RegisterPostInitializationOutput(static ctx =>
         {
+            // Utility type attributes
             ctx.AddSource("PartialFromAttribute.g.cs", PartialFromAttributeSource);
             ctx.AddSource("IntersectFromAttribute.g.cs", IntersectFromAttributeSource);
             ctx.AddSource("PickFromAttribute.g.cs", PickFromAttributeSource);
             ctx.AddSource("OmitFromAttribute.g.cs", OmitFromAttributeSource);
+
+            // Relationship / entity attributes
+            ctx.AddSource("OneToManyAttribute.g.cs", OneToManyAttributeSource);
+            ctx.AddSource("OneToOneAttribute.g.cs", OneToOneAttributeSource);
+            ctx.AddSource("EntityAttribute.g.cs", EntityAttributeSource);
+            ctx.AddSource("ChildTableAttribute.g.cs", ChildTableAttributeSource);
         });
 
         // [PartialFrom]

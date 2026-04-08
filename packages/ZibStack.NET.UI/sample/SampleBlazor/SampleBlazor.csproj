@@ -12,6 +12,9 @@
     <ProjectReference Include="..\..\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.Core\src\ZibStack.NET.Core\ZibStack.NET.Core.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

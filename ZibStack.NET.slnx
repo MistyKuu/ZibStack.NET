@@ -11,9 +11,9 @@
   <Folder Name="/packages/ZibStack.NET.Aop/tests/">
     <Project Path="packages/ZibStack.NET.Aop/tests/ZibStack.NET.Aop.Tests/ZibStack.NET.Aop.Tests.csproj" />
   </Folder>
-  <Folder Name="/packages/ZibStack.NET.Utils/" />
-  <Folder Name="/packages/ZibStack.NET.Utils/src/">
-    <Project Path="packages/ZibStack.NET.Utils/src/ZibStack.NET.Utils/ZibStack.NET.Utils.csproj" />
+  <Folder Name="/packages/ZibStack.NET.Core/" />
+  <Folder Name="/packages/ZibStack.NET.Core/src/">
+    <Project Path="packages/ZibStack.NET.Core/src/ZibStack.NET.Core/ZibStack.NET.Core.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.EntityFramework/" />
   <Folder Name="/packages/ZibStack.NET.EntityFramework/src/">

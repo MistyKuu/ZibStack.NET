@@ -6,9 +6,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ZibStack.NET.Utils;
+namespace ZibStack.NET.Core;
 
-public partial class UtilsGenerator
+public partial class CoreGenerator
 {
     private static string SanitizeHintName(string name)
         => name.Replace('<', '_').Replace('>', '_').Replace(',', '_').Replace(' ', '_').Replace('?', '_');

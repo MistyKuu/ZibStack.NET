@@ -1,3 +1,4 @@
+using ZibStack.NET.Core;
 using ZibStack.NET.Dto;
 using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
@@ -59,6 +60,11 @@ public partial class Player
     [UiFormField(Group = "contact", Label = "Email Address")]
     [UiTableColumn(Filterable = true)]
     public string? Email { get; set; }
+
+    // ─── Relation: belongs to Team ──────────────────────────────────
+    [UiFormField(Group = "basic", Label = "Team")]
+    [UiTableColumn(Sortable = true)]
+    public int? TeamId { get; set; }
 
     // Audit — auto-filled by generated store
     [DtoIgnore] [UiFormIgnore] public DateTime CreatedAt { get; set; }

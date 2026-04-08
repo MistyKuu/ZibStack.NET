@@ -1,5 +1,5 @@
 using ZibStack.NET.Dto;
-using ZibStack.NET.Utils;
+using ZibStack.NET.Core;
 
 namespace ZibStack.NET.Dto.Tests;
 

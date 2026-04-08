@@ -29,8 +29,8 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     private const string UiTableColumnAttributeFqn = "ZibStack.NET.UI.UiTableColumnAttribute";
     private const string UiTableIgnoreAttributeFqn = "ZibStack.NET.UI.UiTableIgnoreAttribute";
 
-    // ERP: class-level
-    private const string ChildTableAttributeFqn = "ZibStack.NET.UI.ChildTableAttribute";
+    // ERP: class-level (ChildTable defined in ZibStack.NET.Core)
+    private const string ChildTableAttributeFqn = "ZibStack.NET.Core.ChildTableAttribute";
     private const string RowActionAttributeFqn = "ZibStack.NET.UI.RowActionAttribute";
     private const string ToolbarActionAttributeFqn = "ZibStack.NET.UI.ToolbarActionAttribute";
     private const string PermissionAttributeFqn = "ZibStack.NET.UI.PermissionAttribute";
@@ -41,10 +41,10 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     private const string ComputedAttributeFqn = "ZibStack.NET.UI.ComputedAttribute";
     private const string ColumnStyleAttributeFqn = "ZibStack.NET.UI.ColumnStyleAttribute";
 
-    // Relationship attributes
-    private const string OneToManyAttributeFqn = "ZibStack.NET.UI.OneToManyAttribute";
-    private const string OneToOneAttributeFqn = "ZibStack.NET.UI.OneToOneAttribute";
-    private const string EntityAttributeFqn = "ZibStack.NET.UI.EntityAttribute";
+    // Relationship attributes (defined in ZibStack.NET.Core)
+    private const string OneToManyAttributeFqn = "ZibStack.NET.Core.OneToManyAttribute";
+    private const string OneToOneAttributeFqn = "ZibStack.NET.Core.OneToOneAttribute";
+    private const string EntityAttributeFqn = "ZibStack.NET.Core.EntityAttribute";
 
     // UI control hints
     private const string TextAreaAttributeFqn = "ZibStack.NET.UI.TextAreaAttribute";
@@ -97,12 +97,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             ctx.AddSource("PasswordInputAttribute.g.cs", PasswordInputAttributeSource);
 
             // ERP attributes
-            // Relationship attributes
-            ctx.AddSource("OneToManyAttribute.g.cs", OneToManyAttributeSource);
-            ctx.AddSource("OneToOneAttribute.g.cs", OneToOneAttributeSource);
-            ctx.AddSource("EntityAttribute.g.cs", EntityAttributeSource);
-
-            ctx.AddSource("ChildTableAttribute.g.cs", ChildTableAttributeSource);
+            // Note: OneToMany, OneToOne, Entity, ChildTable moved to ZibStack.NET.Core
             ctx.AddSource("RowActionAttribute.g.cs", RowActionAttributeSource);
             ctx.AddSource("ToolbarActionAttribute.g.cs", ToolbarActionAttributeSource);
             ctx.AddSource("PermissionAttribute.g.cs", PermissionAttributeSource);
