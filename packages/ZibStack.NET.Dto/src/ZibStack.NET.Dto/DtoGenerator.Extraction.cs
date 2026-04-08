@@ -180,7 +180,7 @@ public partial class DtoGenerator
             var nestedName = ((INamedTypeSymbol)unwrapped2).Name;
             var nestedResponseDtoAttr = unwrapped2.GetAttributes()
                 .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ResponseDtoAttributeFqn);
-            var customName = nestedResponseDtoAttr.NamedArguments
+            var customName = nestedResponseDtoAttr?.NamedArguments
                 .FirstOrDefault(a => a.Key == "Name").Value.Value as string;
             var responseName = customName ?? $"{nestedName}Response";
             var nestedNs = unwrapped2.ContainingNamespace.IsGlobalNamespace
@@ -240,7 +240,7 @@ public partial class DtoGenerator
         var attr = symbol.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attributeFqn);
 
-        if (attr.ConstructorArguments.Length == 0) return null;
+        if (attr is null || attr.ConstructorArguments.Length == 0) return null;
         var targetType = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
         if (targetType is null) return null;
 
@@ -394,6 +394,8 @@ public partial class DtoGenerator
 
         var attr = symbol.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == QueryDtoAttributeFqn);
+
+        if (attr is null) return null;
 
         var nameArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
         var sortable = attr.NamedArguments.FirstOrDefault(a => a.Key == "Sortable").Value.Value is true;

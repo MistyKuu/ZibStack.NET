@@ -24,7 +24,7 @@ public partial class UtilsGenerator
         var attr = symbol.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == PartialFromAttributeFqn);
 
-        if (attr.ConstructorArguments.Length == 0) return null;
+        if (attr is null || attr.ConstructorArguments.Length == 0) return null;
         var targetType = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
         if (targetType is null) return null;
 
@@ -89,7 +89,7 @@ public partial class UtilsGenerator
         var attr = symbol.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attributeFqn);
 
-        if (attr.ConstructorArguments.Length == 0) return null;
+        if (attr is null || attr.ConstructorArguments.Length == 0) return null;
         var targetType = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
         if (targetType is null) return null;
 
