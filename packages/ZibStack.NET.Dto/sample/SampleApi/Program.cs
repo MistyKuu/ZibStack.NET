@@ -6,40 +6,32 @@ using ZibStack.NET.Dto.Sample.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers()
-    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
-
-// PatchField converter for Minimal API endpoints
+// JSON converters for PatchField
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
 
-// OpenAPI
+// OpenAPI + Scalar
 builder.Services.AddOpenApi();
 
-// EF Core + SQLite — database file lives next to the project
+// EF Core + SQLite
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlite("Data Source=sample.db"));
 
-// Auto-generated CRUD stores for all DbSets in AppDbContext
+// Auto-generated CRUD stores (with audit timestamps)
 builder.Services.AddAppDbContextCrudStores();
 
 var app = builder.Build();
 
-// Auto-create/migrate the database on startup
+// Auto-create database
 using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-}
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
 
-// OpenAPI doc + Scalar UI
+// API docs
 app.MapOpenApi();
 app.MapScalarApiReference();
 
-// Generated minimal API endpoints
+// Auto-generated CRUD endpoints
 app.MapPlayerEndpoints();
 app.MapTeamEndpoints();
 
-// Legacy hand-written controllers still work
-app.MapControllers();
 app.Run();

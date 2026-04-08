@@ -14,15 +14,7 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Player>(e =>
-        {
-            e.HasKey(p => p.Id);
-            e.OwnsOne(p => p.Address);
-        });
-
-        modelBuilder.Entity<Team>(e =>
-        {
-            e.HasKey(t => t.Id);
-        });
+        // Auto-generated entity configs (Required, MaxLength from validation attrs)
+        modelBuilder.ApplyGeneratedConfigurations();
     }
 }
