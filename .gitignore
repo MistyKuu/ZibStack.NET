@@ -16,3 +16,6 @@ Thumbs.db
 
 ## NuGet
 *.nupkg
+*.db
+*.db-shm
+*.db-wal
