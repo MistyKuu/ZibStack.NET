@@ -458,6 +458,7 @@ public partial class DtoGenerator
 
         // Collect navigation property paths for DSL filtering (1 level deep)
         var navigationPaths = new List<QueryNavigationPath>();
+        var collectionPaths = new List<QueryCollectionPath>();
         foreach (var prop in GetAllProperties(symbol))
         {
             if (prop.DeclaredAccessibility != Accessibility.Public) continue;
@@ -486,6 +487,45 @@ public partial class DtoGenerator
                     isNavigation = true;
                     propType = unwrapped;
                 }
+            }
+
+            // Check for OneToMany (ICollection<T>)
+            var hasOneToMany = prop.GetAttributes().Any(a =>
+                a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Core.OneToManyAttribute");
+            if (hasOneToMany && propType is INamedTypeSymbol collNts2)
+            {
+                var elementType = collNts2.AllInterfaces
+                    .Concat(new[] { collNts2 })
+                    .Where(i => i.IsGenericType && (i.ConstructedFrom.ToDisplayString().StartsWith("System.Collections.Generic.ICollection") || i.ConstructedFrom.ToDisplayString().StartsWith("System.Collections.Generic.IEnumerable")))
+                    .SelectMany(i => i.TypeArguments)
+                    .OfType<INamedTypeSymbol>()
+                    .FirstOrDefault();
+                if (elementType is null && collNts2.TypeArguments.Length == 1)
+                    elementType = collNts2.TypeArguments[0] as INamedTypeSymbol;
+
+                if (elementType is not null)
+                {
+                    collectionPaths.Add(new QueryCollectionPath(
+                        $"{prop.Name.ToLowerInvariant()}.count", prop.Name, elementType.ToDisplayString(), "Count", "int", true));
+
+                    foreach (var subProp in GetAllProperties(elementType))
+                    {
+                        if (subProp.DeclaredAccessibility != Accessibility.Public) continue;
+                        if (subProp.GetMethod is null) continue;
+                        var st = subProp.Type;
+                        var stv = st.IsValueType;
+                        if (st is INamedTypeSymbol sn && sn.NullableAnnotation == NullableAnnotation.Annotated && sn.TypeArguments.Length == 1)
+                            st = sn.TypeArguments[0];
+                        if (st.TypeKind == TypeKind.Class && st.SpecialType == SpecialType.None && st.ToDisplayString() != "string") continue;
+                        if (st.TypeKind == TypeKind.Interface || st.TypeKind == TypeKind.Array) continue;
+
+                        collectionPaths.Add(new QueryCollectionPath(
+                            $"{prop.Name.ToLowerInvariant()}.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), stv));
+                        collectionPaths.Add(new QueryCollectionPath(
+                            $"{prop.Name.ToLowerInvariant()}.all.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), stv));
+                    }
+                }
+                continue;
             }
 
             if (!isNavigation) continue;
@@ -531,7 +571,8 @@ public partial class DtoGenerator
             sortable,
             defaultSort,
             defaultSortDirection,
-            navigationPaths);
+            navigationPaths,
+            collectionPaths: collectionPaths);
     } catch { return null; } }
 
     private static IEnumerable<IPropertySymbol> GetAllProperties(INamedTypeSymbol symbol)

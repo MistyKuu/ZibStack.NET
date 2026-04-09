@@ -870,7 +870,9 @@ public partial class DtoGenerator
                     var subField = nav.DotPath.Substring(kv.Key.Length + 1);
                     var subExpr = nav.ExpressionPath.Substring(nav.ExpressionPath.IndexOf('.') + 1);
                     var jsonSubName = char.ToLowerInvariant(subExpr[0]) + subExpr.Substring(1);
-                    sb.AppendLine($"            if (fields.Contains(\"{nav.DotPath}\")) nav[\"{jsonSubName}\"] = entity.{nav.ExpressionPath};");
+                    // Null-safe: entity.Category?.Name instead of entity.Category.Name
+                    var safeExpr = nav.ExpressionPath.Replace(".", "?.");
+                    sb.AppendLine($"            if (fields.Contains(\"{nav.DotPath}\")) nav[\"{jsonSubName}\"] = entity.{safeExpr};");
                 }
                 sb.AppendLine($"            result[\"{jsonNavName}\"] = nav;");
                 sb.AppendLine("        }");
