@@ -1,16 +1,21 @@
 # ZibStack.NET
 
-A collection of .NET source generators and utilities for common application concerns — logging, DTOs, and more.
+A collection of .NET source generators and utilities for common application concerns — logging, DTOs, CRUD APIs, validation, UI metadata, and more. Zero reflection, zero runtime overhead.
 
+## Why?
 
-Why?
-Logs - In enterprise systems it's important to have logs everywhere. It is a bit annoying to wrap every single mkethod in try catch just for logs. [Log] attributes adds logs to every public method in the class.
-Again logs - LogInformation and other Log methods from ILogger are annoying because for structured logging to work you need to do _logger.LogInformation("Hey {user}", userObject) instead of just _logger.LogInformation($"Hey {user}"). YOu cant use interpolated strings. Ex m
+**Logging is tedious.** In enterprise systems you need logs everywhere. Wrapping every method in try-catch just for entry/exit logging is boilerplate hell. `[Log]` on a class adds structured logging to every public method — automatic entry, exit, exception, and timing. One attribute, done.
+
+**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. Our `LogInformationEx` methods fix this: `_logger.LogInformationEx($"User {user} bought {product}")` gives you interpolated strings AND structured logging. Zero allocation.
+
+**TypeScript has it, C# doesn't.** `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, intersection types — if you write frontend code, you miss these in C#. Now you can: `[PartialFrom(typeof(Player))]` generates `PatchField<T>` properties with `ApplyTo()` for patching. `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]` — all source-generated, strongly-typed.
+
+**CRUD is 80% copy-paste.** Define a model, write Create/Update/Response DTOs, wire up endpoints, add validation, build query filters, set up EF stores. Or: `[ImTiredOfCrud]` — one attribute generates everything. CRUD API + DTOs + validation + query DSL (filter/sort/select with OR, grouping, IN, dot notation on relations) + form/table UI schemas with `filterOperators` per column. One attribute, full stack.
 
 
 **[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)** | **[Live Playground](https://zibstack-net.onrender.com/index.html)**
 
-> **Try the Playground** — edit C# models with `[ImTiredOfCrud]` and see generated endpoints, DTOs, query DSL, form/table schemas update in real-time. Hosted on Render free tier so initial load may be slow — for best experience clone the repo and run locally: `cd packages/ZibStack.NET.UI/sample/SampleApi && dotnet run`
+> **Try the Playground** — edit C# models with `[ImTiredOfCrud]` and other attributes to see generated endpoints, DTOs, query DSL, form/table schemas update in real-time. Hosted on Render free tier so initial load may be slow — for best experience clone the repo and run locally: `cd packages/ZibStack.NET.UI/sample/SampleApi && dotnet run`
 
 ## Packages
 
