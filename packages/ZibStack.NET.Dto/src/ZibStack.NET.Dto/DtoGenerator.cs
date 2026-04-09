@@ -249,8 +249,11 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(queryDtoDeclarations, static (spc, info) =>
+        context.RegisterSourceOutput(queryDtoDeclarations.Combine(hasQueryDsl).Combine(hasEfCore), static (spc, pair) =>
         {
+            var ((info, hasDsl), hasEf) = pair;
+            info.HasQueryDsl = hasDsl;
+            info.HasEfCore = hasEf;
             var source = GenerateQueryDtoSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Query.g.cs", source);
         });
