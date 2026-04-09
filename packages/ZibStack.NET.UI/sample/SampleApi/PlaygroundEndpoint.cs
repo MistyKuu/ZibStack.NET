@@ -24,6 +24,87 @@ public static class PlaygroundEndpoint
                 return Results.Ok(new PlaygroundResult { Error = ex.Message });
             }
         });
+
+        app.MapGet("/api/playground/attributes", () => Results.Ok(GetAttributes()));
+    }
+
+    private static List<AttributeInfo>? _cachedAttributes;
+
+    private static List<AttributeInfo> GetAttributes()
+    {
+        if (_cachedAttributes != null) return _cachedAttributes;
+
+        // Run generators on empty compilation to collect all PostInit attribute sources
+        var emptyTree = CSharpSyntaxTree.ParseText("namespace Empty { }");
+        var compilation = CSharpCompilation.Create("AttrScan",
+            new[] { emptyTree }, References.Value,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+                .WithNullableContextOptions(NullableContextOptions.Enable));
+
+        var (uiDriver, dtoDriver, coreDriver, validationDriver) = Drivers.Value;
+        var attrs = new List<AttributeInfo>();
+
+        var drivers = new[] {
+            (uiDriver, "UI"), (dtoDriver, "Dto"), (coreDriver, "Core"), (validationDriver, "Validation")
+        };
+
+        foreach (var (driver, package) in drivers)
+        {
+            var result = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out _);
+            foreach (var genResult in result.GetRunResult().Results)
+            foreach (var src in genResult.GeneratedSources)
+            {
+                if (!src.HintName.EndsWith("Attribute.g.cs")) continue;
+                var code = src.SourceText.ToString();
+                var info = ParseAttributeSource(code, package);
+                if (info != null) attrs.Add(info);
+            }
+        }
+
+        _cachedAttributes = attrs.OrderBy(a => a.Package).ThenBy(a => a.Name).ToList();
+        return _cachedAttributes;
+    }
+
+    private static AttributeInfo? ParseAttributeSource(string source, string package)
+    {
+        // Extract class name
+        var classMatch = Regex.Match(source, @"sealed class (\w+Attribute)");
+        if (!classMatch.Success) return null;
+        var fullName = classMatch.Groups[1].Value;
+        var name = fullName.Replace("Attribute", "");
+
+        // Extract summary
+        var summaryMatch = Regex.Match(source, @"<summary>(.*?)</summary>", RegexOptions.Singleline);
+        var description = summaryMatch.Success
+            ? Regex.Replace(summaryMatch.Groups[1].Value.Trim(), @"\s+", " ").Replace("&lt;", "<").Replace("&gt;", ">").Replace("&amp;", "&")
+            : "";
+
+        // Extract target from AttributeUsage
+        var targetMatch = Regex.Match(source, @"AttributeTargets\.(\w+)");
+        var target = targetMatch.Success ? targetMatch.Groups[1].Value.ToLowerInvariant() : "class";
+        if (target.Contains("|")) target = "class/property";
+
+        // Extract properties (public ... { get; set; } or public ... { get; })
+        var props = new List<string>();
+        foreach (Match m in Regex.Matches(source, @"public [\w<>?]+ (\w+) \{ get;"))
+        {
+            var propName = m.Groups[1].Value;
+            if (propName == "TargetType") propName = "targetType";
+            props.Add(propName);
+        }
+
+        // Extract constructor params
+        foreach (Match m in Regex.Matches(source, @"(\w+Attribute)\((.*?)\)", RegexOptions.Singleline))
+        {
+            var paramStr = m.Groups[2].Value;
+            foreach (Match p in Regex.Matches(paramStr, @"(?:string|int|System\.Type|bool)\s+(\w+)"))
+            {
+                var pName = p.Groups[1].Value;
+                if (!props.Contains(pName)) props.Insert(0, pName);
+            }
+        }
+
+        return new AttributeInfo(name, target, package, description, string.Join(", ", props));
     }
 
     private static PlaygroundResult Compile(string code)
@@ -190,8 +271,8 @@ public static class PlaygroundEndpoint
 }
 
 public record PlaygroundRequest { public string? Code { get; init; } }
-
 public record GeneratedFile(string Category, string FileName, string Source);
+public record AttributeInfo(string Name, string Target, string Package, string Description, string Props);
 
 public record PlaygroundResult
 {
