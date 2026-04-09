@@ -109,10 +109,9 @@ public partial class DtoGenerator
                 sb.AppendLine($"            {storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
-                if (info.HasQueryDsl)
-                    sb.AppendLine("            q = query.Apply(q, filter, sort);");
-                else
-                    sb.AppendLine("            q = query.Apply(q);");
+                sb.AppendLine(info.HasQueryDsl
+                    ? "            q = query.Apply(q, filter, sort);"
+                    : "            q = query.Apply(q);");
             }
             else
             {
