@@ -3,95 +3,87 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZibStack.NET — ImTiredOfCrud Demo</title>
+<title>ZibStack.NET — ImTiredOfCrud Playground</title>
 <style>
-  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --danger: #ef4444; --success: #22c55e; }
+  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --danger: #ef4444; --success: #22c55e; --code-bg: #0d1117; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-
-  /* Header */
   header { padding: .5rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
-  header h1 { font-size: 1.1rem; white-space: nowrap; }
-  header h1 em { color: var(--accent); font-style: normal; }
-  .tabs { display: flex; gap: 0; }
-  .tab { padding: .4rem .8rem; font-size: .8rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .status-bar { margin-left: auto; font-size: .75rem; color: var(--muted); }
-  .status-bar.error { color: var(--danger); }
-  .status-bar.success { color: var(--success); }
-
-  /* Layout */
+  header h1 { font-size: 1.1rem; white-space: nowrap; } header h1 em { color: var(--accent); font-style: normal; }
+  .tabs { display: flex; gap: 0; flex-wrap: wrap; }
+  .tab { padding: .4rem .7rem; font-size: .78rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .tab:hover { color: var(--text); } .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .count { background: var(--border); color: var(--text); font-size: .6rem; padding: 0 .3rem; border-radius: .15rem; margin-left: .2rem; }
+  .status-bar { margin-left: auto; font-size: .72rem; color: var(--muted); white-space: nowrap; }
+  .status-bar.error { color: var(--danger); } .status-bar.success { color: var(--success); }
   .main { display: flex; flex: 1; overflow: hidden; }
-  .editor-pane { width: 40%; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .editor-pane { width: 40%; min-width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
   #editor { flex: 1; }
   .content-pane { flex: 1; overflow-y: auto; }
-  .tab-content { display: none; padding: 1rem; }
-  .tab-content.active { display: block; }
-
-  /* Panels */
+  .tab-content { display: none; padding: 1rem; } .tab-content.active { display: block; }
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; }
-  .panel h2 { font-size: 1rem; margin-bottom: .75rem; }
+  .panel h2 { font-size: .95rem; margin-bottom: .75rem; } .panel h3 { font-size: .8rem; color: var(--accent); margin: .75rem 0 .35rem; }
   .filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin-bottom: .75rem; }
   .filter-group { display: flex; flex-direction: column; gap: .15rem; }
   .filter-group label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   .filter-group select, .filter-group input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .35rem .5rem; border-radius: .25rem; font-size: .8rem; }
-  .filter-group input { width: 120px; }
-  .filter-group select { min-width: 60px; }
+  .filter-group input { width: 120px; } .filter-group select { min-width: 60px; }
   button { background: var(--accent); color: #fff; border: none; padding: .4rem .8rem; border-radius: .25rem; cursor: pointer; font-size: .8rem; }
-  button:hover { opacity: .9; }
-  button.secondary { background: var(--border); }
-  button.danger { background: var(--danger); }
-  button.success { background: var(--success); color: #000; }
+  button:hover { opacity: .9; } button.secondary { background: var(--border); } button.danger { background: var(--danger); } button.success { background: var(--success); color: #000; }
   table { width: 100%; border-collapse: collapse; font-size: .85rem; }
   th, td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; cursor: default; white-space: nowrap; }
   th.sortable { cursor: pointer; } th.sortable:hover { color: var(--accent); }
-  th .sort-arrow { font-size: .7rem; }
   tr:hover td { background: rgba(59,130,246,.05); }
   .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: .75rem; font-size: .8rem; color: var(--muted); }
   .pagination button { font-size: .75rem; padding: .3rem .6rem; }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-  .form-field { display: flex; flex-direction: column; gap: .2rem; }
-  .form-field.full { grid-column: 1 / -1; }
+  .form-field { display: flex; flex-direction: column; gap: .2rem; } .form-field.full { grid-column: 1 / -1; }
   .form-field label { font-size: .75rem; color: var(--muted); }
   .form-field input, .form-field select, .form-field textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .4rem .5rem; border-radius: .25rem; font-size: .85rem; }
-  .form-field textarea { resize: vertical; }
-  .form-field .error { color: var(--danger); font-size: .7rem; }
+  .form-field textarea { resize: vertical; } .form-field .error { color: var(--danger); font-size: .7rem; }
   .form-actions { grid-column: 1 / -1; display: flex; gap: .5rem; margin-top: .5rem; }
   .group-title { grid-column: 1 / -1; font-size: .8rem; color: var(--accent); font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: .25rem; margin-top: .25rem; }
   .toast { position: fixed; top: 1rem; right: 1rem; padding: .5rem 1rem; border-radius: .25rem; font-size: .85rem; z-index: 100; animation: fadeOut 3s forwards; }
-  .toast.success { background: var(--success); color: #000; }
-  .toast.error { background: var(--danger); color: #fff; }
+  .toast.success { background: var(--success); color: #000; } .toast.error { background: var(--danger); color: #fff; }
   @keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
-  .actions { display: flex; gap: .25rem; }
-  .actions button { padding: .2rem .5rem; font-size: .7rem; }
-  .badge { display: inline-block; background: var(--border); color: var(--text); padding: .1rem .4rem; border-radius: .15rem; font-size: .65rem; margin: .1rem; }
-  .badge.sort { background: #1d4ed8; } .badge.filter { background: #7c3aed; }
+  .actions { display: flex; gap: .25rem; } .actions button { padding: .2rem .5rem; font-size: .7rem; }
   .empty { color: var(--muted); font-style: italic; text-align: center; padding: 2rem; }
-  pre.json { background: var(--bg); border: 1px solid var(--border); border-radius: .25rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 400px; white-space: pre-wrap; }
+  pre.code { background: var(--code-bg); border: 1px solid var(--border); border-radius: .35rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 500px; white-space: pre; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; line-height: 1.4; color: #c9d1d9; }
+  pre.json { background: var(--code-bg); border: 1px solid var(--border); border-radius: .35rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 400px; white-space: pre-wrap; font-family: 'Cascadia Code', Consolas, monospace; color: #c9d1d9; }
+  .file-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
+  .file-header .filename { font-size: .75rem; color: var(--accent); font-family: monospace; }
+  .file-header .lines { font-size: .65rem; color: var(--muted); }
 </style>
 </head>
 <body>
 
 <header>
   <h1><em>[ImTiredOfCrud]</em> Playground</h1>
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('data')">Data</div>
-    <div class="tab" onclick="switchTab('schema')">Schema</div>
+  <div class="tabs" id="tab-bar">
+    <div class="tab active" data-tab="data">Data</div>
+    <div class="tab" data-tab="endpoints">Endpoints</div>
+    <div class="tab" data-tab="dtos">DTOs</div>
+    <div class="tab" data-tab="query">Query</div>
+    <div class="tab" data-tab="database">Database</div>
+    <div class="tab" data-tab="ui">UI Descriptors</div>
+    <div class="tab" data-tab="schema">JSON Schema</div>
   </div>
-  <div class="status-bar" id="status">Ready — edit the model and see changes live</div>
+  <div class="status-bar" id="status">Ready</div>
 </header>
 
 <div class="main">
-  <div class="editor-pane">
-    <div id="editor"></div>
-  </div>
+  <div class="editor-pane"><div id="editor"></div></div>
   <div class="content-pane">
     <div class="tab-content active" id="tab-data">
       <div class="panel" id="table-panel"><div class="empty">Compiling...</div></div>
       <div class="panel" id="form-panel"><div class="empty">Compiling...</div></div>
     </div>
+    <div class="tab-content" id="tab-endpoints"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-dtos"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-query"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-database"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-ui"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-schema">
       <div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table">Compiling...</pre></div>
       <div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form">Compiling...</pre></div>
@@ -101,14 +93,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script>
-const $ = (sel, ctx = document) => ctx.querySelector(sel);
-const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+const $ = (s,c=document) => c.querySelector(s);
+const $$ = (s,c=document) => [...c.querySelectorAll(s)];
 
-let tableSchema = null, formSchema = null;
-let currentSort = null, currentSortDesc = false;
-let currentPage = 1, pageSize = 10;
-let editingId = null, activeFilters = {};
-let compileTimer = null, editor;
+let tableSchema=null, formSchema=null, currentSort=null, currentSortDesc=false;
+let currentPage=1, pageSize=10, editingId=null, activeFilters={}, compileTimer, editor;
 
 const defaultCode = `[ImTiredOfCrud(DefaultSort = "Name")]
 [UiFormGroup("basic", Label = "Basic Info", Order = 1)]
@@ -146,209 +135,165 @@ public partial class Product
     public bool IsActive { get; set; } = true;
 }`;
 
-// ─── Tabs ───────────────────────────────────────────────────────────
+// ─── Tabs ───
+$('#tab-bar').addEventListener('click', e => {
+  const tab = e.target.closest('.tab'); if(!tab) return;
+  $$('.tab').forEach(t=>t.classList.remove('active'));
+  tab.classList.add('active');
+  $$('.tab-content').forEach(t=>t.classList.toggle('active', t.id==='tab-'+tab.dataset.tab));
+});
 
-function switchTab(name) {
-  $$('.tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase() === name));
-  $$('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + name));
-}
-
-// ─── Monaco Editor ──────────────────────────────────────────────────
-
+// ─── Monaco ─
 require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
-require(['vs/editor/editor.main'], function () {
-  monaco.editor.defineTheme('zibstack', { base: 'vs-dark', inherit: true, rules: [], colors: { 'editor.background': '#1e293b' } });
-  editor = monaco.editor.create($('#editor'), {
-    value: defaultCode, language: 'csharp', theme: 'zibstack', fontSize: 13,
-    minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, padding: { top: 10 },
-  });
-  editor.onDidChangeModelContent(() => { clearTimeout(compileTimer); compileTimer = setTimeout(compile, 600); });
-  // Initial compile
+require(['vs/editor/editor.main'], function() {
+  monaco.editor.defineTheme('zibstack', { base:'vs-dark', inherit:true, rules:[], colors:{'editor.background':'#1e293b'} });
+  editor = monaco.editor.create($('#editor'), { value:defaultCode, language:'csharp', theme:'zibstack', fontSize:13, minimap:{enabled:false}, scrollBeyondLastLine:false, automaticLayout:true, padding:{top:10} });
+  editor.onDidChangeModelContent(() => { clearTimeout(compileTimer); compileTimer=setTimeout(compile,600); });
   compile();
 });
 
-// ─── Compile ────────────────────────────────────────────────────────
-
+// ─── Compile ─
 async function compile() {
-  const status = $('#status');
-  status.className = 'status-bar'; status.textContent = 'Compiling...';
-  const start = performance.now();
+  const status=$('#status'); status.className='status-bar'; status.textContent='Compiling...';
+  const start=performance.now();
   try {
-    const res = await fetch('/api/playground', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: editor.getValue() })
-    });
+    const res = await fetch('/api/playground', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code:editor.getValue()}) });
     const data = await res.json();
-    const ms = Math.round(performance.now() - start);
+    const ms = Math.round(performance.now()-start);
 
     if (data.error && !data.formSchema && !data.tableSchema) {
-      status.className = 'status-bar error'; status.textContent = `Error (${ms}ms): ${data.error.substring(0,120)}`;
+      status.className='status-bar error'; status.textContent=`Error (${ms}ms): ${data.error.substring(0,120)}`;
       return;
     }
 
-    tableSchema = data.tableSchema ? JSON.parse(data.tableSchema) : null;
+    tableSchema = data.formSchema ? (data.tableSchema ? JSON.parse(data.tableSchema) : null) : null;
     formSchema = data.formSchema ? JSON.parse(data.formSchema) : null;
+    if (data.tableSchema) tableSchema = JSON.parse(data.tableSchema);
 
-    // Use live product endpoint if schemas match, otherwise preview-only
-    if (tableSchema && !tableSchema.apiUrl) tableSchema.apiUrl = '/api/products';
-    if (formSchema && !formSchema.apiUrl) formSchema.apiUrl = '/api/products';
+    if (tableSchema && !tableSchema.apiUrl) tableSchema.apiUrl='/api/products';
+    if (formSchema && !formSchema.apiUrl) formSchema.apiUrl='/api/products';
 
-    status.className = 'status-bar success'; status.textContent = `Compiled (${ms}ms)`;
+    const genFiles = data.generated || [];
+    const counts = {};
+    genFiles.forEach(f => { counts[f.category] = (counts[f.category]||0)+1; });
 
-    // Update schema tab
-    $('#schema-table').textContent = tableSchema ? JSON.stringify(tableSchema, null, 2) : 'No table schema';
-    $('#schema-form').textContent = formSchema ? JSON.stringify(formSchema, null, 2) : 'No form schema';
+    status.className='status-bar success';
+    status.textContent=`Compiled (${ms}ms) — ${genFiles.length} files generated`;
 
-    // Update data tab
-    currentSort = tableSchema?.defaultSort?.column || null;
-    currentSortDesc = tableSchema?.defaultSort?.direction === 'desc';
-    currentPage = 1; activeFilters = {}; editingId = null;
+    // Update tab counts
+    updateTabCount('endpoints', counts['Endpoints']);
+    updateTabCount('dtos', counts['DTOs']);
+    updateTabCount('query', counts['Query']);
+    updateTabCount('database', counts['Database']);
+    updateTabCount('ui', counts['UI']);
+
+    // Schema tab
+    $('#schema-table').textContent = tableSchema ? JSON.stringify(tableSchema,null,2) : 'No table schema';
+    $('#schema-form').textContent = formSchema ? JSON.stringify(formSchema,null,2) : 'No form schema';
+
+    // Code tabs
+    renderCodeTab('tab-endpoints', genFiles.filter(f=>f.category==='Endpoints'), 'Endpoints');
+    renderCodeTab('tab-dtos', genFiles.filter(f=>f.category==='DTOs'), 'DTOs');
+    renderCodeTab('tab-query', genFiles.filter(f=>f.category==='Query'), 'Query DSL');
+    renderCodeTab('tab-database', genFiles.filter(f=>f.category==='Database'), 'Database (EF Core)');
+    renderCodeTab('tab-ui', genFiles.filter(f=>f.category==='UI'), 'UI Descriptors');
+
+    // Data tab
+    currentSort=tableSchema?.defaultSort?.column||null;
+    currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
+    currentPage=1; activeFilters={}; editingId=null;
     renderTable(); renderForm(); loadData();
-  } catch (ex) {
-    status.className = 'status-bar error'; status.textContent = ex.message;
-  }
+  } catch(ex) { status.className='status-bar error'; status.textContent=ex.message; }
 }
 
-// ─── Table ──────────────────────────────────────────────────────────
+function updateTabCount(tabName, count) {
+  const tab = $(`.tab[data-tab="${tabName}"]`);
+  if(!tab) return;
+  let badge = tab.querySelector('.count');
+  if(count) {
+    if(!badge) { badge=document.createElement('span'); badge.className='count'; tab.appendChild(badge); }
+    badge.textContent=count;
+  } else if(badge) badge.remove();
+}
 
+function renderCodeTab(tabId, files, title) {
+  const el = $(`#${tabId}`);
+  if (!files.length) { el.innerHTML=`<div class="empty">No ${title} generated. Add [ImTiredOfCrud] or relevant attributes.</div>`; return; }
+  el.innerHTML = files.map(f => {
+    const lines = f.source.split('\n').length;
+    const cleanName = f.fileName.replace('.g.cs','').replace(/^.*?_Models_/,'').replace(/^.*?_/,'');
+    return `<div class="panel">
+      <div class="file-header"><span class="filename">${esc(cleanName)}</span><span class="lines">${lines} lines — ${esc(f.fileName)}</span></div>
+      <pre class="code">${highlightCSharp(f.source)}</pre>
+    </div>`;
+  }).join('');
+}
+
+function highlightCSharp(src) {
+  return esc(src)
+    .replace(/\b(public|private|static|partial|class|record|namespace|using|return|var|new|if|else|switch|case|async|await|readonly|override|virtual|sealed|int|string|bool|decimal|void|null|true|false|this|typeof|nameof|is|not)\b/g, '<span style="color:#ff7b72">$1</span>')
+    .replace(/\b(IQueryable|Task|List|Dictionary|HashSet|CancellationToken|IEnumerable|ValueTask|IOrderedQueryable)\b/g, '<span style="color:#79c0ff">$1</span>')
+    .replace(/(\/\/.*)/g, '<span style="color:#8b949e">$1</span>')
+    .replace(/(\[[\w.]+(?:\(.*?\))?\])/g, '<span style="color:#d2a8ff">$1</span>')
+    .replace(/("(?:[^"\\]|\\.)*")/g, '<span style="color:#a5d6ff">$1</span>');
+}
+
+// ─── Table ──
 function renderTable() {
-  if (!tableSchema) { $('#table-panel').innerHTML = '<div class="empty">No [UiTable] or [ImTiredOfCrud]</div>'; return; }
-  const cols = tableSchema.columns.filter(c => c.visible !== false);
-  const panel = $('#table-panel');
-  panel.innerHTML = `<h2>${esc(tableSchema.name)}</h2>
-    <div class="filters" id="filters"></div>
-    <table><thead><tr>
-      ${cols.map(c => `<th class="${c.sortable?'sortable':''}" data-col="${c.name}">${esc(c.label||c.name)} ${c.sortable?'<span class="sort-arrow" id="sort-'+c.name+'"></span>':''}</th>`).join('')}
-      <th>Actions</th>
-    </tr></thead><tbody id="tbody"></tbody></table>
-    <div class="pagination"><span id="page-info"></span><div>
-      <button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button>
-      <button class="secondary" id="next-btn" onclick="nextPage()">Next</button>
-    </div></div>`;
-  $$('th.sortable', panel).forEach(th => {
-    th.onclick = () => { const c = th.dataset.col; if (currentSort===c) currentSortDesc=!currentSortDesc; else { currentSort=c; currentSortDesc=false; } currentPage=1; loadData(); };
-  });
-  renderFilters(cols);
+  if(!tableSchema){$('#table-panel').innerHTML='<div class="empty">No [UiTable] or [ImTiredOfCrud]</div>';return;}
+  const cols=tableSchema.columns.filter(c=>c.visible!==false), panel=$('#table-panel');
+  panel.innerHTML=`<h2>${esc(tableSchema.name)}</h2><div class="filters" id="filters"></div>
+    <table><thead><tr>${cols.map(c=>`<th class="${c.sortable?'sortable':''}" data-col="${c.name}">${esc(c.label||c.name)} ${c.sortable?'<span class="sort-arrow" id="sort-'+c.name+'"></span>':''}</th>`).join('')}<th>Actions</th></tr></thead><tbody id="tbody"></tbody></table>
+    <div class="pagination"><span id="page-info"></span><div><button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button> <button class="secondary" id="next-btn" onclick="nextPage()">Next</button></div></div>`;
+  $$('th.sortable',panel).forEach(th=>{th.onclick=()=>{const c=th.dataset.col;if(currentSort===c)currentSortDesc=!currentSortDesc;else{currentSort=c;currentSortDesc=false;}currentPage=1;loadData();};});
+  const ct=$('#filters');if(!ct)return;const fc=cols.filter(c=>c.filterable);
+  ct.innerHTML=fc.map(c=>`<div class="filter-group"><label>${esc(c.label||c.name)}</label><div style="display:flex;gap:.2rem"><select id="fop-${c.name}" style="width:60px">${(c.filterOperators||['=']).map(op=>`<option value="${op}" ${op==='=*'&&c.type==='string'?'selected':op==='='&&c.type!=='string'?'selected':''}>${opLabel(op)}</option>`).join('')}</select>${c.options?`<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`:c.type==='boolean'?`<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`:`<input id="fval-${c.name}" placeholder="...">`}</div></div>`).join('')+`<div class="filter-group" style="align-self:end"><button onclick="applyFilters()">Filter</button> <button class="secondary" onclick="clearFilters()">Clear</button></div>`;
 }
-
-function renderFilters(cols) {
-  const ct = $('#filters'); if(!ct) return;
-  const fc = cols.filter(c => c.filterable);
-  ct.innerHTML = fc.map(c => `<div class="filter-group"><label>${esc(c.label||c.name)}</label><div style="display:flex;gap:.2rem">
-    <select id="fop-${c.name}" style="width:60px">${(c.filterOperators||['=']).map(op=>`<option value="${op}" ${op==='=*'&&c.type==='string'?'selected':op==='='&&c.type!=='string'?'selected':''}>${opLabel(op)}</option>`).join('')}</select>
-    ${c.options?`<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`
-      :c.type==='boolean'?`<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`
-      :`<input id="fval-${c.name}" placeholder="...">`}
-  </div></div>`).join('') + `<div class="filter-group" style="align-self:end"><button onclick="applyFilters()">Filter</button> <button class="secondary" onclick="clearFilters()">Clear</button></div>`;
-}
-
-function opLabel(op) { return {'=':'=','!=':'!=','<':'<','>':'>','<=':'<=','>=':'>=','=*':'~','!*':'!~','^':'A..','!^':'!A..','$':'..Z','!$':'!..Z','=in=':'in','=out=':'!in'}[op]||op; }
-
-function applyFilters() {
-  activeFilters = {};
-  tableSchema.columns.filter(c=>c.filterable&&c.visible!==false).forEach(c => {
-    const v=$(`#fval-${c.name}`)?.value?.trim(), op=$(`#fop-${c.name}`)?.value||'=';
-    if(v) activeFilters[c.name]={op,val:v};
-  }); currentPage=1; loadData();
-}
-function clearFilters() { activeFilters={}; tableSchema.columns.filter(c=>c.filterable).forEach(c=>{const e=$(`#fval-${c.name}`);if(e)e.value='';}); currentPage=1; loadData(); }
+function opLabel(op){return{'=':'=','!=':'!=','<':'<','>':'>','<=':'<=','>=':'>=','=*':'~','!*':'!~','^':'A..','!^':'!A..','$':'..Z','!$':'!..Z','=in=':'in','=out=':'!in'}[op]||op;}
+function applyFilters(){activeFilters={};tableSchema.columns.filter(c=>c.filterable&&c.visible!==false).forEach(c=>{const v=$(`#fval-${c.name}`)?.value?.trim(),op=$(`#fop-${c.name}`)?.value||'=';if(v)activeFilters[c.name]={op,val:v};});currentPage=1;loadData();}
+function clearFilters(){activeFilters={};tableSchema.columns.filter(c=>c.filterable).forEach(c=>{const e=$(`#fval-${c.name}`);if(e)e.value='';});currentPage=1;loadData();}
 
 async function loadData() {
-  if (!tableSchema?.apiUrl) return;
-  const p = new URLSearchParams(); p.set('page',currentPage); p.set('pageSize',pageSize);
-  const f = Object.entries(activeFilters).map(([k,{op,val}])=>`${k.charAt(0).toUpperCase()+k.slice(1)}${op}${val}`).join(',');
-  if(f) p.set('filter',f);
-  if(currentSort) p.set('sort',(currentSortDesc?'-':'')+currentSort.charAt(0).toUpperCase()+currentSort.slice(1));
-  try {
-    const data = await fetch(`${tableSchema.apiUrl}?${p}`).then(r=>r.json());
-    const cols = tableSchema.columns.filter(c=>c.visible!==false);
-    const key = tableSchema.keyProperty || 'id';
-    const tbody = $('#tbody'); if(!tbody) return;
-    tbody.innerHTML = (data.items||[]).map(item=>`<tr>${cols.map(c=>`<td>${fmtCell(item[c.name],c)}</td>`).join('')}<td class="actions"><button onclick="editItem(${item[key]})">Edit</button> <button class="danger" onclick="deleteItem(${item[key]})">Del</button></td></tr>`).join('')||'<tr><td colspan="999" style="text-align:center;color:var(--muted)">No data</td></tr>';
-    tableSchema.columns.filter(c=>c.sortable).forEach(c=>{const e=$(`#sort-${c.name}`);if(e)e.textContent=currentSort===c.name?(currentSortDesc?' ▼':' ▲'):'';});
-    const tp = Math.ceil((data.totalCount||0)/pageSize)||1;
-    const pi=$('#page-info'); if(pi) pi.textContent=`Page ${currentPage} of ${tp} (${data.totalCount||0} items)`;
-    const pb=$('#prev-btn'); if(pb) pb.disabled=currentPage<=1;
-    const nb=$('#next-btn'); if(nb) nb.disabled=currentPage>=tp;
-  } catch(e) { /* endpoint may not exist for playground models */ }
+  if(!tableSchema?.apiUrl)return;const p=new URLSearchParams();p.set('page',currentPage);p.set('pageSize',pageSize);
+  const f=Object.entries(activeFilters).map(([k,{op,val}])=>`${k.charAt(0).toUpperCase()+k.slice(1)}${op}${val}`).join(',');
+  if(f)p.set('filter',f);if(currentSort)p.set('sort',(currentSortDesc?'-':'')+currentSort.charAt(0).toUpperCase()+currentSort.slice(1));
+  try{const data=await fetch(`${tableSchema.apiUrl}?${p}`).then(r=>r.json());const cols=tableSchema.columns.filter(c=>c.visible!==false);const key=tableSchema.keyProperty||'id';const tbody=$('#tbody');if(!tbody)return;
+  tbody.innerHTML=(data.items||[]).map(item=>`<tr>${cols.map(c=>`<td>${fmtCell(item[c.name],c)}</td>`).join('')}<td class="actions"><button onclick="editItem(${item[key]})">Edit</button> <button class="danger" onclick="deleteItem(${item[key]})">Del</button></td></tr>`).join('')||'<tr><td colspan="999" style="text-align:center;color:var(--muted)">No data</td></tr>';
+  tableSchema.columns.filter(c=>c.sortable).forEach(c=>{const e=$(`#sort-${c.name}`);if(e)e.textContent=currentSort===c.name?(currentSortDesc?' ▼':' ▲'):'';});
+  const tp=Math.ceil((data.totalCount||0)/pageSize)||1;const pi=$('#page-info');if(pi)pi.textContent=`Page ${currentPage} of ${tp} (${data.totalCount||0} items)`;
+  const pb=$('#prev-btn');if(pb)pb.disabled=currentPage<=1;const nb=$('#next-btn');if(nb)nb.disabled=currentPage>=tp;}catch(e){}
 }
-function fmtCell(v,c) { if(v==null) return '<span style="color:var(--muted)">—</span>'; if(c.type==='boolean') return v?'✓':'✗'; if(c.format==='currency') return `$${Number(v).toFixed(2)}`; return String(v); }
-function prevPage() { if(currentPage>1){currentPage--;loadData();} }
-function nextPage() { currentPage++; loadData(); }
+function fmtCell(v,c){if(v==null)return'<span style="color:var(--muted)">—</span>';if(c.type==='boolean')return v?'✓':'✗';if(c.format==='currency')return`$${Number(v).toFixed(2)}`;return String(v);}
+function prevPage(){if(currentPage>1){currentPage--;loadData();}}
+function nextPage(){currentPage++;loadData();}
 
-// ─── Form ───────────────────────────────────────────────────────────
-
-function renderForm() {
-  if (!formSchema) { $('#form-panel').innerHTML = '<div class="empty">No [UiForm] or [ImTiredOfCrud]</div>'; return; }
-  const panel = $('#form-panel');
-  let h = `<h2 id="form-title">Create ${esc(formSchema.name)}</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
-  const groups = (formSchema.groups||[]).sort((a,b)=>a.order-b.order);
-  const fields = formSchema.fields||[];
-  if (groups.length) {
-    groups.forEach(g => { h+=`<div class="group-title">${esc(g.label||g.name)}</div>`; fields.filter(f=>f.group===g.name).sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);}); });
-    fields.filter(f=>!f.group).forEach(f=>{h+=renderField(f);});
-  } else { fields.sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);}); }
-  h += `<div class="form-actions"><button type="submit" class="success" id="submit-btn">Create</button><button type="button" class="secondary" onclick="resetForm()">Cancel</button></div></form>`;
-  panel.innerHTML = h;
+// ─── Form ──
+function renderForm(){
+  if(!formSchema){$('#form-panel').innerHTML='<div class="empty">No [UiForm] or [ImTiredOfCrud]</div>';return;}
+  const panel=$('#form-panel');let h=`<h2 id="form-title">Create ${esc(formSchema.name)}</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
+  const groups=(formSchema.groups||[]).sort((a,b)=>a.order-b.order),fields=formSchema.fields||[];
+  if(groups.length){groups.forEach(g=>{h+=`<div class="group-title">${esc(g.label||g.name)}</div>`;fields.filter(f=>f.group===g.name).sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);});});fields.filter(f=>!f.group).forEach(f=>{h+=renderField(f);});}
+  else fields.sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);});
+  h+=`<div class="form-actions"><button type="submit" class="success" id="submit-btn">Create</button><button type="button" class="secondary" onclick="resetForm()">Cancel</button></div></form>`;panel.innerHTML=h;
 }
-
-function renderField(f) {
-  if(f.hidden) return `<input type="hidden" name="${f.name}" id="field-${f.name}">`;
-  const full = f.uiHint==='textarea'?' full':'';
-  let inp;
-  if(f.uiHint==='select'&&f.options) inp=`<select name="${f.name}" id="field-${f.name}">${f.options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('')}</select>`;
-  else if(f.uiHint==='checkbox') { inp=`<label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" name="${f.name}" id="field-${f.name}"> ${esc(f.label||f.name)}</label>`; return `<div class="form-field${full}">${inp}<div class="error" id="err-${f.name}"></div></div>`; }
-  else if(f.uiHint==='textarea') inp=`<textarea name="${f.name}" id="field-${f.name}" rows="${f.props?.rows||3}" placeholder="${esc(f.placeholder||'')}"></textarea>`;
-  else if(f.uiHint==='slider') inp=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
-  else { const t=f.type==='integer'||f.type==='decimal'?'number':'text'; const s=f.type==='decimal'?' step="0.01"':''; inp=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`; }
-  return `<div class="form-field${full}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${inp}<div class="error" id="err-${f.name}"></div></div>`;
+function renderField(f){if(f.hidden)return`<input type="hidden" name="${f.name}" id="field-${f.name}">`;const full=f.uiHint==='textarea'?' full':'';let inp;
+  if(f.uiHint==='select'&&f.options)inp=`<select name="${f.name}" id="field-${f.name}">${f.options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('')}</select>`;
+  else if(f.uiHint==='checkbox'){inp=`<label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" name="${f.name}" id="field-${f.name}"> ${esc(f.label||f.name)}</label>`;return`<div class="form-field${full}">${inp}<div class="error" id="err-${f.name}"></div></div>`;}
+  else if(f.uiHint==='textarea')inp=`<textarea name="${f.name}" id="field-${f.name}" rows="${f.props?.rows||3}" placeholder="${esc(f.placeholder||'')}"></textarea>`;
+  else if(f.uiHint==='slider')inp=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
+  else{const t=f.type==='integer'||f.type==='decimal'?'number':'text';const s=f.type==='decimal'?' step="0.01"':'';inp=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`;}
+  return`<div class="form-field${full}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${inp}<div class="error" id="err-${f.name}"></div></div>`;
 }
-
-async function submitForm(e) {
-  e.preventDefault(); if(!formSchema?.apiUrl) return;
-  const body = {};
-  (formSchema.fields||[]).forEach(f => { const el=$(`#field-${f.name}`); if(!el) return;
-    if(f.uiHint==='checkbox') body[f.name]=el.checked;
-    else if(f.type==='integer') body[f.name]=el.value?parseInt(el.value):0;
-    else if(f.type==='decimal') body[f.name]=el.value?parseFloat(el.value):0;
-    else body[f.name]=el.value||null;
-  });
+async function submitForm(e){e.preventDefault();if(!formSchema?.apiUrl)return;const body={};(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')body[f.name]=el.checked;else if(f.type==='integer')body[f.name]=el.value?parseInt(el.value):0;else if(f.type==='decimal')body[f.name]=el.value?parseFloat(el.value):0;else body[f.name]=el.value||null;});
   (formSchema.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
-  try {
-    const isEdit=editingId!=null;
-    const res = await fetch(isEdit?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl, { method:isEdit?'PATCH':'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    if(res.ok) { toast(isEdit?'Updated!':'Created!','success'); resetForm(); loadData(); }
-    else if(res.status===400) { const err=await res.json(); if(err.errors) Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;}); else toast('Validation failed','error'); }
-    else toast(`Error: ${res.status}`,'error');
-  } catch(ex) { toast(ex.message,'error'); }
+  try{const isEdit=editingId!=null;const res=await fetch(isEdit?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl,{method:isEdit?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(res.ok){toast(isEdit?'Updated!':'Created!','success');resetForm();loadData();}else if(res.status===400){const err=await res.json();if(err.errors)Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;});else toast('Validation failed','error');}else toast(`Error: ${res.status}`,'error');}catch(ex){toast(ex.message,'error');}
 }
-
-async function editItem(id) {
-  if(!formSchema?.apiUrl) return;
-  const res = await fetch(`${formSchema.apiUrl}/${id}`); if(!res.ok) return;
-  const item = await res.json(); editingId=id;
-  const ft=$('#form-title'); if(ft) ft.textContent=`Edit ${formSchema.name} #${id}`;
-  const sb=$('#submit-btn'); if(sb) sb.textContent='Update';
-  (formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});
-  $('#form-panel').scrollIntoView({behavior:'smooth'});
-}
-
-function resetForm() {
-  editingId=null;
-  const ft=$('#form-title'); if(ft) ft.textContent=`Create ${formSchema?.name||''}`;
-  const sb=$('#submit-btn'); if(sb) sb.textContent='Create';
-  const form=$('#crud-form'); if(form) form.reset();
-  (formSchema?.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
-}
-
-async function deleteItem(id) {
-  if(!formSchema?.apiUrl||!confirm('Delete?')) return;
-  const res=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});
-  if(res.ok){toast('Deleted','success');loadData();}else toast('Failed','error');
-}
-
-function toast(msg,type) { const e=document.createElement('div');e.className=`toast ${type}`;e.textContent=msg;document.body.appendChild(e);setTimeout(()=>e.remove(),3200); }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+async function editItem(id){if(!formSchema?.apiUrl)return;const res=await fetch(`${formSchema.apiUrl}/${id}`);if(!res.ok)return;const item=await res.json();editingId=id;const ft=$('#form-title');if(ft)ft.textContent=`Edit ${formSchema.name} #${id}`;const sb=$('#submit-btn');if(sb)sb.textContent='Update';(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});$('#form-panel').scrollIntoView({behavior:'smooth'});}
+function resetForm(){editingId=null;const ft=$('#form-title');if(ft)ft.textContent=`Create ${formSchema?.name||''}`;const sb=$('#submit-btn');if(sb)sb.textContent='Create';const form=$('#crud-form');if(form)form.reset();(formSchema?.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});}
+async function deleteItem(id){if(!formSchema?.apiUrl||!confirm('Delete?'))return;const res=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(res.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
+function toast(msg,type){const e=document.createElement('div');e.className=`toast ${type}`;e.textContent=msg;document.body.appendChild(e);setTimeout(()=>e.remove(),3200);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
 </body>
 </html>
