@@ -44,9 +44,12 @@ public static class PlaygroundEndpoint
         var (uiDriver, dtoDriver, coreDriver, validationDriver) = Drivers.Value;
         var attrs = new List<AttributeInfo>();
 
-        var drivers = new[] {
+        var drivers = new List<(GeneratorDriver driver, string package)> {
             (uiDriver, "UI"), (dtoDriver, "Dto"), (coreDriver, "Core"), (validationDriver, "Validation")
         };
+
+        // Note: Log and Aop use interceptors (not source generators for attributes)
+        // Their attributes are added manually below
 
         foreach (var (driver, package) in drivers)
         {
@@ -60,6 +63,15 @@ public static class PlaygroundEndpoint
                 if (info != null) attrs.Add(info);
             }
         }
+
+        // Log and Aop use interceptors (not source-generated attributes) — add manually
+        attrs.Add(new AttributeInfo("Log", "method/class", "Log", "Automatic entry/exit/exception logging with zero allocation", "Level?, ObjectLogging?"));
+        attrs.Add(new AttributeInfo("Sensitive", "parameter", "Log", "Masks parameter value in log output", ""));
+        attrs.Add(new AttributeInfo("ZibLogDefaults", "assembly", "Log", "Override assembly-level logging defaults", "EntryExitLevel?, ObjectLogging?"));
+        attrs.Add(new AttributeInfo("Trace", "method", "Aop", "OpenTelemetry-compatible tracing — creates Activity spans", ""));
+        attrs.Add(new AttributeInfo("Timing", "method", "Aop", "Lightweight method timing via ITimingRecorder", ""));
+        attrs.Add(new AttributeInfo("AspectHandler", "class", "Aop", "Links an aspect attribute to its handler type", "handlerType"));
+        attrs.Add(new AttributeInfo("AspectAttribute", "class", "Aop", "Base class for custom aspect attributes", ""));
 
         _cachedAttributes = attrs.OrderBy(a => a.Package).ThenBy(a => a.Name).ToList();
         return _cachedAttributes;
@@ -262,11 +274,15 @@ public static class PlaygroundEndpoint
             }
         }
         if (!File.Exists(dllPath)) return Array.Empty<ISourceGenerator>();
-        var assembly = Assembly.LoadFrom(dllPath);
-        return assembly.GetTypes()
-            .Where(t => t.GetInterfaces().Any(i => i.FullName == "Microsoft.CodeAnalysis.IIncrementalGenerator" || i.FullName == "Microsoft.CodeAnalysis.ISourceGenerator"))
-            .Select(t => { var i = Activator.CreateInstance(t); if (i is ISourceGenerator sg) return sg; if (i is IIncrementalGenerator ig) return ig.AsSourceGenerator(); return null; })
-            .Where(g => g != null).ToArray()!;
+        try
+        {
+            var assembly = Assembly.LoadFrom(dllPath);
+            return assembly.GetTypes()
+                .Where(t => t.GetInterfaces().Any(i => i.FullName == "Microsoft.CodeAnalysis.IIncrementalGenerator" || i.FullName == "Microsoft.CodeAnalysis.ISourceGenerator"))
+                .Select(t => { var i = Activator.CreateInstance(t); if (i is ISourceGenerator sg) return sg; if (i is IIncrementalGenerator ig) return ig.AsSourceGenerator(); return null; })
+                .Where(g => g != null).ToArray()!;
+        }
+        catch { return Array.Empty<ISourceGenerator>(); }
     }
 }
 
