@@ -118,7 +118,7 @@
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script>
 const $=(s,c=document)=>c.querySelector(s), $$=(s,c=document)=>[...c.querySelectorAll(s)];
-let tableSchema=null,formSchema=null,currentSort=null,currentSortDesc=false,currentPage=1,pageSize=10,editingId=null,activeFilters={},compileTimer,editor,allAttributes=[];
+let tableSchema=null,formSchema=null,currentSort=null,currentSortDesc=false,currentPage=1,pageSize=10,editingId=null,activeFilters={},compileTimer,editor,allAttributes=[],lastGenerated=null;
 const demoMode = new URLSearchParams(location.search).has('demo');
 
 // ─── Samples ────────────────────────────────────────────────────────
@@ -507,7 +507,7 @@ async function compile() {
     if(data.error&&!data.formSchema&&!data.tableSchema){status.className='status-bar error';status.textContent=`Error (${ms}ms): ${data.error.substring(0,100)}`;return;}
     tableSchema=data.tableSchema?JSON.parse(data.tableSchema):null; formSchema=data.formSchema?JSON.parse(data.formSchema):null;
     if(tableSchema&&!tableSchema.apiUrl)tableSchema.apiUrl='/api/products'; if(formSchema&&!formSchema.apiUrl)formSchema.apiUrl='/api/products';
-    const gf=data.generated||[],counts={};gf.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
+    const gf=data.generated||[];lastGenerated=gf;const counts={};gf.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
     status.className='status-bar success';status.textContent=`${ms}ms | ${gf.length} files`;
     ['endpoints','dtos','query','database','ui'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI'}[t]]));
     $('#schema-table').textContent=tableSchema?JSON.stringify(tableSchema,null,2):'No table schema';
@@ -534,11 +534,37 @@ function hlCs(src){const tks=[];let i=0;function tk(c,t){const id=`\x00${i++}\x0
 
 function renderExamples() {
   const el=$('#tab-examples');
-  if (!tableSchema && !formSchema) { el.innerHTML='<div class="empty">No schemas generated — add [ImTiredOfCrud], [CrudApi], [ZQuery], [UiForm], or [UiTable]</div>'; return; }
+
+  // Try extracting fields from Query generated source if no table schema
+  let cols = (tableSchema?.columns || []).filter(c => c.visible !== false);
+  if (!cols.length && lastGenerated) {
+    const qFile = lastGenerated.find(f => f.category === 'Query');
+    if (qFile) {
+      // Parse property names from "public Type? PropName { get; init; }"
+      const matches = [...qFile.source.matchAll(/public\s+[\w<>?.]+\s+(\w+)\s*\{\s*get;\s*init;\s*\}/g)];
+      cols = matches.filter(m => m[1] !== 'SortBy' && m[1] !== 'SortDirection').map(m => {
+        const name = m[1].charAt(0).toLowerCase() + m[1].slice(1);
+        const typeMatch = m[0].match(/public\s+([\w<>?.]+)/);
+        const rawType = typeMatch ? typeMatch[1].replace('?','') : 'string';
+        const type = rawType.includes('int') || rawType.includes('long') ? 'integer' : rawType.includes('decimal') || rawType.includes('double') || rawType.includes('float') ? 'decimal' : rawType.includes('bool') ? 'boolean' : rawType.includes('DateTime') ? 'date' : 'string';
+        const ops = type === 'string' ? ['=','!=','=*','!*','^','!^','$','!$','=in=','=out='] : type === 'boolean' ? ['=','!='] : ['=','!=','<','>','<=','>=','=in=','=out='];
+        return { name, type, filterable: true, sortable: true, filterOperators: ops, visible: true };
+      });
+    }
+    // Also extract dot-notation fields from ApplyFilter
+    if (qFile) {
+      const navMatches = [...qFile.source.matchAll(/"([\w.]+\.\w+)"\s*=>/g)];
+      navMatches.forEach(m => {
+        if (!cols.find(c => c.name === m[1]))
+          cols.push({ name: m[1], type: 'string', filterable: true, sortable: true, filterOperators: ['=','!=','=*','^','=in='], visible: true });
+      });
+    }
+  }
+
+  if (!cols.length && !tableSchema && !formSchema) { el.innerHTML='<div class="empty">No schemas or query generated — add [ImTiredOfCrud], [CrudApi], [ZQuery], [UiForm], or [UiTable]</div>'; return; }
   let h = '';
   const api = tableSchema?.apiUrl || formSchema?.apiUrl || '/api/{entity}';
   const key = tableSchema?.keyProperty || formSchema?.keyProperty || 'id';
-  const cols = (tableSchema?.columns || []).filter(c => c.visible !== false);
   const filterCols = cols.filter(c => c.filterable);
   const sortCols = cols.filter(c => c.sortable);
 
