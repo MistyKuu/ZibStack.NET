@@ -399,9 +399,15 @@ public partial class Player
     public Team? Team { get; set; }
 }`,
 
-zquery: `// [ZQuery] — standalone query DSL without CRUD or UI
-// Generates: typed filter/sort + DSL filter/sort/select
-// Supports nested relations via dot notation (Team.Name, Team.City)
+zquery: `// [ZQuery] — standalone query DSL
+// Supports: flat fields, OneToOne (dot notation), OneToMany (Any/All/Count)
+
+public partial class Tag
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int ProductId { get; set; }
+}
 
 public partial class Category
 {
@@ -422,29 +428,44 @@ public partial class Product
     public int Stock { get; set; }
     public bool IsActive { get; set; }
 
-    // Relation — enables dot notation: Category.Name, Category.Region
+    // OneToOne — dot notation: Category.Name, Category.Region
     public int? CategoryId { get; set; }
     [OneToOne]
     public Category? Category { get; set; }
+
+    // OneToMany — collection filtering: Tags.Name, Tags.All.Name, Tags.Count
+    [OneToMany]
+    public ICollection<Tag> Tags { get; set; } = new List<Tag>();
 }
 
 // Generated ProductQuery supports:
 //
-// Flat fields:
-//   q.ApplyFilter(query, "Price>100,Name=*laptop/i")
-//   q.ApplySort(query, "-Price,Name")
+// Flat:
+//   ?filter=Price>100,Name=*laptop/i
+//   ?sort=-Price,Name
 //
-// Nested via dot notation (auto JOIN in EF Core):
-//   q.ApplyFilter(query, "Category.Name=Electronics")
-//   q.ApplyFilter(query, "Category.Region=*europe/i")
-//   q.ApplySort(query, "Category.Name")
+// OneToOne (JOIN):
+//   ?filter=Category.Name=Electronics
+//   ?sort=Category.Name
+//
+// OneToMany — Any (at least one child matches):
+//   ?filter=Tags.Name=*sale        → WHERE EXISTS(SELECT 1 FROM Tags t WHERE t.Name LIKE '%sale%')
+//
+// OneToMany — All (every child must match):
+//   ?filter=Tags.All.Name!=legacy  → WHERE NOT EXISTS(SELECT 1 FROM Tags t WHERE t.Name = 'legacy')
+//
+// OneToMany — Count:
+//   ?filter=Tags.Count>3           → WHERE (SELECT COUNT(*) FROM Tags t WHERE t.ProductId = p.Id) > 3
+//   ?filter=Tags.Count=0           → products with no tags
+//
+// Standalone count (no data returned):
+//   ?filter=Price>100&count=true   → { "count": 42 }
 //
 // Combined:
-//   q.Apply(query, "Price>50,Category.Name=Electronics", "-Price")
+//   ?filter=Price>50,Category.Name=Electronics,Tags.Count>0&sort=-Price
 //
 // Select with nested:
-//   ProductQuery.ProjectFields(entity, {"name", "price", "category.name"})
-//   → { "name": "Laptop", "price": 1299, "category": { "name": "Electronics" } }`,
+//   ?select=Name,Price,Category.Name → { "name": "...", "price": 99, "category": { "name": "..." } }`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
