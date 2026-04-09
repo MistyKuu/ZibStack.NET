@@ -97,7 +97,7 @@ public partial class DtoGenerator
                 : null;
 
             // DSL filter/sort/select params (when ZibStack.NET.Query is referenced)
-            var dslParams = info.HasQueryDsl ? ", string? filter = null, string? sort = null, string? select = null" : "";
+            var dslParams = info.HasQueryDsl ? ", string? filter = null, string? sort = null, string? select = null, bool count = false" : "";
             var fqQuery = info.HasQueryDto && info.QueryName is not null
                 ? (info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName)
                 : null;
@@ -118,6 +118,12 @@ public partial class DtoGenerator
                 sb.AppendLine($"        group.MapGet(\"\", ({storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
+            }
+
+            // count=true — return just the count without fetching data
+            if (info.HasQueryDsl)
+            {
+                sb.AppendLine("            if (count) return Results.Ok(new { count = q.Count() });");
             }
 
             // select= field projection (when ZibStack.NET.Query is referenced)

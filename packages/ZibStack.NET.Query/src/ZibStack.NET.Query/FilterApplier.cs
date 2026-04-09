@@ -42,6 +42,82 @@ public static class FilterApplier
     }
 
     /// <summary>
+    /// Builds a predicate for OneToMany: collection.Any(child => childPredicate).
+    /// </summary>
+    public static Expression<Func<T, bool>>? BuildCollectionAnyPredicate<T, TChild, TProp>(
+        Expression<Func<T, IEnumerable<TChild>>> collectionSelector,
+        Expression<Func<TChild, TProp>> childPropertySelector,
+        FilterClause clause)
+    {
+        var childPredicate = BuildPredicate(childPropertySelector, clause);
+        if (childPredicate is null) return null;
+        return BuildCollectionQuantifier(collectionSelector, childPredicate, "Any");
+    }
+
+    /// <summary>
+    /// Builds a predicate for OneToMany: collection.All(child => childPredicate).
+    /// </summary>
+    public static Expression<Func<T, bool>>? BuildCollectionAllPredicate<T, TChild, TProp>(
+        Expression<Func<T, IEnumerable<TChild>>> collectionSelector,
+        Expression<Func<TChild, TProp>> childPropertySelector,
+        FilterClause clause)
+    {
+        var childPredicate = BuildPredicate(childPropertySelector, clause);
+        if (childPredicate is null) return null;
+        return BuildCollectionQuantifier(collectionSelector, childPredicate, "All");
+    }
+
+    /// <summary>
+    /// Builds a predicate for collection.Count op value (e.g. Players.Count > 5).
+    /// </summary>
+    public static Expression<Func<T, bool>>? BuildCollectionCountPredicate<T, TChild>(
+        Expression<Func<T, IEnumerable<TChild>>> collectionSelector,
+        FilterClause clause)
+    {
+        if (!int.TryParse(clause.Value, out var countValue)) return null;
+
+        var param = collectionSelector.Parameters[0];
+        var collection = collectionSelector.Body;
+
+        // Call Enumerable.Count<TChild>(collection)
+        var countMethod = typeof(Enumerable).GetMethods()
+            .First(m => m.Name == "Count" && m.GetParameters().Length == 1)
+            .MakeGenericMethod(typeof(TChild));
+        var countCall = Expression.Call(countMethod, collection);
+        var valueExpr = Expression.Constant(countValue);
+
+        Expression body = clause.Operator switch
+        {
+            FilterOperator.Equals => Expression.Equal(countCall, valueExpr),
+            FilterOperator.NotEquals => Expression.NotEqual(countCall, valueExpr),
+            FilterOperator.GreaterThan => Expression.GreaterThan(countCall, valueExpr),
+            FilterOperator.GreaterThanOrEqual => Expression.GreaterThanOrEqual(countCall, valueExpr),
+            FilterOperator.LessThan => Expression.LessThan(countCall, valueExpr),
+            FilterOperator.LessThanOrEqual => Expression.LessThanOrEqual(countCall, valueExpr),
+            _ => Expression.Equal(countCall, valueExpr),
+        };
+
+        return Expression.Lambda<Func<T, bool>>(body, param);
+    }
+
+    private static Expression<Func<T, bool>> BuildCollectionQuantifier<T, TChild>(
+        Expression<Func<T, IEnumerable<TChild>>> collectionSelector,
+        Expression<Func<TChild, bool>> childPredicate,
+        string methodName)
+    {
+        var param = collectionSelector.Parameters[0];
+        var collection = collectionSelector.Body;
+
+        // Call Enumerable.Any/All<TChild>(collection, childPredicate)
+        var method = typeof(Enumerable).GetMethods()
+            .First(m => m.Name == methodName && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(TChild));
+        var call = Expression.Call(method, collection, childPredicate);
+
+        return Expression.Lambda<Func<T, bool>>(call, param);
+    }
+
+    /// <summary>
     /// Applies a filter expression tree to a query. The predicateBuilder resolves each leaf clause
     /// to a predicate using the generated per-entity field allowlist.
     /// </summary>

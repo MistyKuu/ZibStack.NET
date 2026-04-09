@@ -688,6 +688,23 @@ public partial class DtoGenerator
             {
                 sb.AppendLine($"                \"{nav.DotPath}\" => ZibStack.NET.Query.FilterApplier.BuildPredicate<{info.ClassName}, {nav.OriginalTypeName}>(x => x.{nav.ExpressionPath}, clause),");
             }
+            // OneToMany collection paths (Any/All/Count)
+            foreach (var col in info.CollectionPaths)
+            {
+                if (col.ChildPropertyName == "Count")
+                {
+                    sb.AppendLine($"                \"{col.DotPath}\" => ZibStack.NET.Query.FilterApplier.BuildCollectionCountPredicate<{info.ClassName}, {col.ElementTypeName}>(x => x.{col.CollectionName}, clause),");
+                }
+                else if (col.DotPath.Contains(".all."))
+                {
+                    sb.AppendLine($"                \"{col.DotPath}\" => ZibStack.NET.Query.FilterApplier.BuildCollectionAllPredicate<{info.ClassName}, {col.ElementTypeName}, {col.ChildPropertyTypeName}>(x => x.{col.CollectionName}, p => p.{col.ChildPropertyName}, clause),");
+                }
+                else
+                {
+                    // Default = Any
+                    sb.AppendLine($"                \"{col.DotPath}\" => ZibStack.NET.Query.FilterApplier.BuildCollectionAnyPredicate<{info.ClassName}, {col.ElementTypeName}, {col.ChildPropertyTypeName}>(x => x.{col.CollectionName}, p => p.{col.ChildPropertyName}, clause),");
+                }
+            }
             sb.AppendLine("                _ => null,");
             sb.AppendLine("            });");
             sb.AppendLine("        }");

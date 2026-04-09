@@ -347,6 +347,7 @@ public partial class DtoGenerator
             // Collect navigation property paths for DSL filtering and select
             var navPaths = new List<QueryNavigationPath>();
             var navNames = new List<string>();
+            var collectionPaths = new List<QueryCollectionPath>();
             foreach (var prop in GetAllProperties(symbol))
             {
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
@@ -370,6 +371,48 @@ public partial class DtoGenerator
                         pType = unwrapped;
                     }
                 }
+                // Check for OneToMany (ICollection<T>)
+                var hasOneToMany = prop.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Core.OneToManyAttribute");
+                if (hasOneToMany && pType is INamedTypeSymbol collNts)
+                {
+                    // Extract element type from ICollection<T>
+                    var elementType = collNts.AllInterfaces
+                        .Concat(new[] { collNts })
+                        .Where(i => i.IsGenericType && i.ConstructedFrom.ToDisplayString().StartsWith("System.Collections.Generic.ICollection") || i.ConstructedFrom.ToDisplayString().StartsWith("System.Collections.Generic.IEnumerable"))
+                        .SelectMany(i => i.TypeArguments)
+                        .OfType<INamedTypeSymbol>()
+                        .FirstOrDefault();
+                    if (elementType is null && collNts.TypeArguments.Length == 1)
+                        elementType = collNts.TypeArguments[0] as INamedTypeSymbol;
+
+                    if (elementType is not null)
+                    {
+                        // Add Count path
+                        collectionPaths.Add(new QueryCollectionPath(
+                            $"{prop.Name.ToLowerInvariant()}.count", prop.Name, elementType.ToDisplayString(), "Count", "int", true));
+
+                        // Add sub-property paths (Any/All)
+                        foreach (var subProp in GetAllProperties(elementType))
+                        {
+                            if (subProp.DeclaredAccessibility != Accessibility.Public) continue;
+                            if (subProp.GetMethod is null) continue;
+                            var subType = subProp.Type;
+                            var subIsValueType = subType.IsValueType;
+                            if (subType is INamedTypeSymbol subNts2 && subNts2.NullableAnnotation == NullableAnnotation.Annotated && subNts2.TypeArguments.Length == 1)
+                                subType = subNts2.TypeArguments[0];
+                            if (subType.TypeKind == TypeKind.Class && subType.SpecialType == SpecialType.None && subType.ToDisplayString() != "string") continue;
+                            if (subType.TypeKind == TypeKind.Interface || subType.TypeKind == TypeKind.Array) continue;
+
+                            collectionPaths.Add(new QueryCollectionPath(
+                                $"{prop.Name.ToLowerInvariant()}.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), subIsValueType));
+                            collectionPaths.Add(new QueryCollectionPath(
+                                $"{prop.Name.ToLowerInvariant()}.all.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), subIsValueType));
+                        }
+                    }
+                    continue;
+                }
+
                 if (!isNav) continue;
                 navNames.Add(prop.Name);
 
@@ -399,7 +442,7 @@ public partial class DtoGenerator
             result.QueryDtos.Add(new QueryDtoInfo(symbol.Name, ns, fqn,
                 $"{symbol.Name}Query", queryProps, sortable: true,
                 defaultSort: tableDefaultSort, defaultSortDirection: 0,
-                navigationPaths: navPaths, navigationNames: navNames));
+                navigationPaths: navPaths, navigationNames: navNames, collectionPaths: collectionPaths));
         }
 
         return result;

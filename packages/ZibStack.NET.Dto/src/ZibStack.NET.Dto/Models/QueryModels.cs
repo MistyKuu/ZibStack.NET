@@ -20,6 +20,32 @@ internal sealed class QueryPropertyInfo
     }
 }
 
+/// <summary>A OneToMany collection navigation for DSL filtering (e.g. "Players.Name" → x.Players.Any(p => p.Name == v)).</summary>
+internal sealed class QueryCollectionPath
+{
+    /// <summary>Dot path for switch key (e.g. "players.name").</summary>
+    public string DotPath { get; }
+    /// <summary>Collection property name (e.g. "Players").</summary>
+    public string CollectionName { get; }
+    /// <summary>Collection element type FQN (e.g. "Player").</summary>
+    public string ElementTypeName { get; }
+    /// <summary>Child property name (e.g. "Name").</summary>
+    public string ChildPropertyName { get; }
+    /// <summary>Child property type (e.g. "string").</summary>
+    public string ChildPropertyTypeName { get; }
+    public bool IsValueType { get; }
+
+    public QueryCollectionPath(string dotPath, string collectionName, string elementTypeName, string childPropertyName, string childPropertyTypeName, bool isValueType)
+    {
+        DotPath = dotPath;
+        CollectionName = collectionName;
+        ElementTypeName = elementTypeName;
+        ChildPropertyName = childPropertyName;
+        ChildPropertyTypeName = childPropertyTypeName;
+        IsValueType = isValueType;
+    }
+}
+
 /// <summary>A navigation property path for DSL filtering (e.g. "Team.Name" → x => x.Team.Name).</summary>
 internal sealed class QueryNavigationPath
 {
@@ -48,6 +74,7 @@ internal sealed class QueryDtoInfo
     public string QueryName { get; }
     public List<QueryPropertyInfo> Properties { get; }
     public List<QueryNavigationPath> NavigationPaths { get; }
+    public List<QueryCollectionPath> CollectionPaths { get; }
     /// <summary>Top-level navigation property names (e.g. "Team") for Include generation.</summary>
     public List<string> NavigationNames { get; }
     public bool Sortable { get; }
@@ -56,7 +83,7 @@ internal sealed class QueryDtoInfo
     public bool HasQueryDsl { get; set; }
     public bool HasEfCore { get; set; }
 
-    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0, List<QueryNavigationPath>? navigationPaths = null, List<string>? navigationNames = null)
+    public QueryDtoInfo(string className, string? ns, string fullyQualifiedName, string queryName, List<QueryPropertyInfo> properties, bool sortable = false, string? defaultSort = null, int defaultSortDirection = 0, List<QueryNavigationPath>? navigationPaths = null, List<string>? navigationNames = null, List<QueryCollectionPath>? collectionPaths = null)
     {
         ClassName = className;
         Namespace = ns;
@@ -64,6 +91,7 @@ internal sealed class QueryDtoInfo
         QueryName = queryName;
         Properties = properties;
         NavigationPaths = navigationPaths ?? new List<QueryNavigationPath>();
+        CollectionPaths = collectionPaths ?? new List<QueryCollectionPath>();
         NavigationNames = navigationNames ?? new List<string>();
         Sortable = sortable;
         DefaultSort = defaultSort;
