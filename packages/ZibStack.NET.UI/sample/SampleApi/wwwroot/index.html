@@ -21,7 +21,7 @@
 
   .main { display: flex; flex: 1; overflow: hidden; }
   .editor-pane { width: 42%; min-width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-  .attr-bar { padding: .4rem .5rem; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; flex-wrap: wrap; gap: .25rem .3rem; align-items: center; max-height: 14rem; overflow-y: auto; }
+  .attr-bar { padding: .5rem; border-top: 1px solid var(--border); flex-shrink: 0; display: grid; grid-template-columns: 1fr; gap: .3rem; height: 8rem; overflow-y: auto; }
   .attr-bar .attr-group { display: inline-flex; gap: .2rem; align-items: center; }
   .attr-bar .attr-label { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-right: .1rem; }
   .attr-tag { font-size: .65rem; padding: .1rem .35rem; border-radius: .15rem; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
@@ -457,9 +457,10 @@ async function loadAttributes() {
     const bar=$('#attr-bar'); const groups = {};
     allAttributes.forEach(a => { (groups[a.package]||(groups[a.package]=[])).push(a); });
     bar.innerHTML = Object.entries(groups).map(([pkg,attrs]) =>
-      `<span class="attr-label">${pkg}</span>` +
-      attrs.map(a => `<span class="attr-tag ${pkg.toLowerCase()}" data-attr="${a.name}">[${a.name}]</span>`).join('')
-    ).join('<span style="margin:0 .3rem;color:var(--border)">|</span>');
+      `<div style="display:flex;flex-wrap:wrap;gap:.2rem;align-items:center"><span class="attr-label">${pkg}</span>` +
+      attrs.map(a => `<span class="attr-tag ${pkg.toLowerCase()}" data-attr="${a.name}">[${a.name}]</span>`).join('') +
+      `</div>`
+    ).join('');
   } catch(e) { $('#attr-bar').textContent = 'Failed to load attributes'; }
 }
 
