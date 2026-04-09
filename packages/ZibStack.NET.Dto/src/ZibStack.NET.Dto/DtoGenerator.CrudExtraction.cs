@@ -264,7 +264,7 @@ public partial class DtoGenerator
                     var dtoNameAttr = prop.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == DtoNameAttributeFqn);
                     var dtoName = dtoNameAttr?.ConstructorArguments.Length > 0 ? dtoNameAttr.ConstructorArguments[0].Value as string : null;
                     var propName = dtoName ?? prop.Name;
-                    var propJsonName = dtoName != null ? ToCamelCase(dtoName) : jsonName;
+                    var propJsonName = dtoName != null ? (char.ToLowerInvariant(dtoName[0]) + dtoName.Substring(1)) : jsonName;
                     properties.Add(new ResponsePropertyInfo(propName, propJsonName, propType2.ToDisplayString(), validationAttrs, sourcePropertyName: prop.Name));
                 }
                 else
