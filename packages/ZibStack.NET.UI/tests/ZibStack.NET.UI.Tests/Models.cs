@@ -119,19 +119,23 @@ public partial class FormWithRadioAndFile
     public string? LockedField { get; set; }
 }
 
-// ─── ERP models (backward compat with [ChildTable]) ─────────────────
+// ─── ERP models ─────────────────────────────────────────────────────
 
-public partial class CountyView { }
+public partial class CountyView
+{
+    public int VoivodeshipId { get; set; }
+}
 
 [UiTable(SchemaUrl = "/custom/postalcodes")]
-public partial class PostalCodeView { }
+public partial class PostalCodeView
+{
+    public int VoivodeshipId { get; set; }
+}
 
 [UiTable(DefaultSort = "Name", DefaultPageSize = 50)]
 [Permission("voivodeship.read")]
 [ColumnPermission("Budget", "finance.read")]
 [DataFilter("VoivodeshipId")]
-[ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
-[ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
 [RowAction("showDetails", Label = "Szczegóły", Endpoint = "/api/voivodeships/{id}")]
 [RowAction("generateReport", Label = "Raport", Icon = "file",
            Endpoint = "/api/voivodeships/{id}/report", Method = "POST",
@@ -163,6 +167,12 @@ public partial class VoivodeshipView
     public int CountyCount { get; set; }
 
     public int VoivodeshipId { get; set; }
+
+    [OneToMany(ForeignKey = "VoivodeshipId", Label = "Powiaty")]
+    public ICollection<CountyView> Counties { get; set; } = new List<CountyView>();
+
+    [OneToMany(ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
+    public ICollection<PostalCodeView> PostalCodes { get; set; } = new List<PostalCodeView>();
 }
 
 // ─── Relationship models ([OneToMany] / [OneToOne]) ─────────────────

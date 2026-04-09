@@ -32,8 +32,6 @@ public partial class PostalCodeView
 [Permission("voivodeship.read")]
 [ColumnPermission("Budget", "finance.read")]
 [DataFilter("VoivodeshipId")]
-[ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Powiaty")]
-[ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
 [RowAction("showDetails", Label = "Szczegóły", Endpoint = "/api/voivodeships/{id}")]
 [RowAction("generateReport", Label = "Raport", Icon = "file",
            Endpoint = "/api/voivodeships/{id}/report", Method = "POST",
@@ -84,4 +82,10 @@ public partial class VoivodeshipView
     [TextArea(Rows = 3)]
     [UiTableIgnore]
     public string? Notes { get; set; }
+
+    [OneToMany(ForeignKey = "VoivodeshipId", Label = "Powiaty")]
+    public ICollection<CountyView> Counties { get; set; } = new List<CountyView>();
+
+    [OneToMany(ForeignKey = "VoivodeshipId", Label = "Kody pocztowe")]
+    public ICollection<PostalCodeView> PostalCodes { get; set; } = new List<PostalCodeView>();
 }

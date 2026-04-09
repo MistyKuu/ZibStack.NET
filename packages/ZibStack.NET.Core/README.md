@@ -37,7 +37,6 @@ public class Team
 [Entity(TableName = "Players", Schema = "dbo")]
 public partial class Player { ... }
 
-[ChildTable(typeof(TaskItem), ForeignKey = "ProjectId", Label = "Tasks")]
 public partial class Project { ... }
 ```
 

@@ -274,7 +274,6 @@ public enum Language { English, Polish, German, French }`,
 [Permission("department.read")]
 [ColumnPermission("Budget", "finance.read")]
 [DataFilter("DepartmentId")]
-[ChildTable(typeof(EmployeeView), ForeignKey = "DepartmentId", Label = "Employees")]
 public partial class DepartmentView
 {
     [UiTableColumn(IsVisible = false)] public int Id { get; set; }
@@ -298,6 +297,9 @@ public partial class DepartmentView
 
     [UiTableColumn(Sortable = true)]
     public DateTime CreatedAt { get; set; }
+
+    [OneToMany(ForeignKey = "DepartmentId", Label = "Employees")]
+    public ICollection<EmployeeView> Employees { get; set; } = new List<EmployeeView>();
 }
 
 [UiTable(SchemaUrl = "/api/tables/employee")]

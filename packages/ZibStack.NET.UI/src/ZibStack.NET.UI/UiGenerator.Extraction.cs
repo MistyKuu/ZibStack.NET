@@ -669,29 +669,6 @@ public partial class UiGenerator
 
             switch (fqn)
             {
-                case ChildTableAttributeFqn:
-                    if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is INamedTypeSymbol targetType)
-                    {
-                        var foreignKey = GetNamedArgString(attr, "ForeignKey") ?? "";
-                        var label = GetNamedArgString(attr, "Label") ?? targetType.Name;
-                        var childSchemaUrl = GetNamedArgString(attr, "SchemaUrl");
-
-                        if (childSchemaUrl == null)
-                        {
-                            var targetTableAttr = GetAttribute(targetType, UiTableAttributeFqn);
-                            if (targetTableAttr != null)
-                                childSchemaUrl = GetNamedArgString(targetTableAttr, "SchemaUrl");
-                        }
-
-                        if (childSchemaUrl == null)
-                        {
-                            var targetName = targetType.Name;
-                            if (targetName.EndsWith("View")) targetName = targetName.Substring(0, targetName.Length - 4);
-                            childSchemaUrl = "/api/tables/" + targetName.ToLowerInvariant();
-                        }
-                        info.Relations.Add(new RelationInfo(RelationKind.OneToMany, targetType.Name, ToCamelCase(targetType.Name), ToCamelCase(foreignKey), label, childSchemaUrl));
-                    }
-                    break;
 
                 case RowActionAttributeFqn:
                     if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string raName)

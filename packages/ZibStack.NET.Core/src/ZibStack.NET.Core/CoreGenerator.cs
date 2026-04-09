@@ -19,7 +19,6 @@ public partial class CoreGenerator : IIncrementalGenerator
     private const string OneToManyAttributeFqn = "ZibStack.NET.Core.OneToManyAttribute";
     private const string OneToOneAttributeFqn = "ZibStack.NET.Core.OneToOneAttribute";
     private const string EntityAttributeFqn = "ZibStack.NET.Core.EntityAttribute";
-    private const string ChildTableAttributeFqn = "ZibStack.NET.Core.ChildTableAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -35,7 +34,6 @@ public partial class CoreGenerator : IIncrementalGenerator
             ctx.AddSource("OneToManyAttribute.g.cs", OneToManyAttributeSource);
             ctx.AddSource("OneToOneAttribute.g.cs", OneToOneAttributeSource);
             ctx.AddSource("EntityAttribute.g.cs", EntityAttributeSource);
-            ctx.AddSource("ChildTableAttribute.g.cs", ChildTableAttributeSource);
         });
 
         // [PartialFrom]

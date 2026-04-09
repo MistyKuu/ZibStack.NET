@@ -434,7 +434,6 @@ Form JSON also includes a `children` block:
 
 ### Backward Compatibility
 
-`[ChildTable]` continues to work — it is mapped internally to `RelationInfo` with `OneToMany` kind. You can mix both styles in the same project.
 
 ## EF Core Integration (`[Entity]`)
 
@@ -579,9 +578,7 @@ public partial class CountyTableView
     public int Population { get; set; }
 }
 
-// Parent table — [ChildTable] resolves SchemaUrl from CountyTableView's [UiTable]
 [UiTable(DefaultSort = "Name", DefaultPageSize = 50, SchemaUrl = "/api/tables/voivodeship")]
-[ChildTable(typeof(CountyTableView), ForeignKey = "VoivodeshipId", Label = "Counties")]
 [RowAction("edit", Label = "Edit", Endpoint = "/api/voivodeships/{id}")]
 [ToolbarAction("export", Label = "Export", Endpoint = "/api/voivodeships/export",
                SelectionMode = "multiple")]
@@ -880,7 +877,6 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 | Attribute | Purpose | Parameters |
 |-----------|---------|-----------|
-| `[ChildTable(typeof(T))]` | Hierarchical drill-down (legacy, prefer `[OneToMany]`) | `ForeignKey`, `Label`, `SchemaUrl?` (AllowMultiple) |
 | `[RowAction("name")]` | Per-row action button | `Label`, `Icon?`, `Endpoint`, `Method?`, `Confirmation?`, `Permission?` (AllowMultiple) |
 | `[ToolbarAction("name")]` | Global toolbar action | `Label`, `Icon?`, `Endpoint`, `Method?`, `Confirmation?`, `Permission?`, `SelectionMode?` (AllowMultiple) |
 | `[Permission("name")]` | Required view permission | — |
@@ -896,7 +892,6 @@ See [react-app](sample/react-app/) for full DynamicField, DynamicForm, DynamicTa
 
 ## SchemaUrl Resolution
 
-Both `[OneToMany]`/`[OneToOne]` and legacy `[ChildTable]` resolve `SchemaUrl` for drill-down with the following priority:
 
 1. **Explicit** — `SchemaUrl = "/custom/url"` on the attribute itself
 2. **From target type** — `[UiTable(SchemaUrl = "/api/tables/county")]` on `T` itself

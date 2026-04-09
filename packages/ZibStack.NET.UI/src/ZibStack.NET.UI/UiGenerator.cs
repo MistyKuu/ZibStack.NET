@@ -30,8 +30,6 @@ public sealed partial class UiGenerator : IIncrementalGenerator
     private const string UiTableColumnAttributeFqn = "ZibStack.NET.UI.UiTableColumnAttribute";
     private const string UiTableIgnoreAttributeFqn = "ZibStack.NET.UI.UiTableIgnoreAttribute";
 
-    // ERP: class-level (ChildTable defined in ZibStack.NET.Core)
-    private const string ChildTableAttributeFqn = "ZibStack.NET.Core.ChildTableAttribute";
     private const string RowActionAttributeFqn = "ZibStack.NET.UI.RowActionAttribute";
     private const string ToolbarActionAttributeFqn = "ZibStack.NET.UI.ToolbarActionAttribute";
     private const string PermissionAttributeFqn = "ZibStack.NET.UI.PermissionAttribute";
@@ -98,7 +96,7 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             ctx.AddSource("PasswordInputAttribute.g.cs", PasswordInputAttributeSource);
 
             // ERP attributes
-            // Note: OneToMany, OneToOne, Entity, ChildTable moved to ZibStack.NET.Core
+            // Note: OneToMany, OneToOne, Entity moved to ZibStack.NET.Core
             ctx.AddSource("RowActionAttribute.g.cs", RowActionAttributeSource);
             ctx.AddSource("ToolbarActionAttribute.g.cs", ToolbarActionAttributeSource);
             ctx.AddSource("PermissionAttribute.g.cs", PermissionAttributeSource);

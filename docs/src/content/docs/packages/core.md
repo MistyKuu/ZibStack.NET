@@ -64,13 +64,10 @@ Opt-in for EF Core `IEntityTypeConfiguration<T>` generation.
 public partial class Player { ... }
 ```
 
-### `[ChildTable]`
 
 Defines a child table relationship for hierarchical drill-down (ERP-style).
 
 ```csharp
-[ChildTable(typeof(CountyView), ForeignKey = "VoivodeshipId", Label = "Counties")]
-[ChildTable(typeof(PostalCodeView), ForeignKey = "VoivodeshipId", Label = "Postal Codes")]
 public partial class VoivodeshipView { ... }
 ```
 
