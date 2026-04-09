@@ -21,7 +21,7 @@
 
   .main { display: flex; flex: 1; overflow: hidden; }
   .editor-pane { width: 42%; min-width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-  .attr-bar { padding: .4rem .5rem; border-bottom: 1px solid var(--border); overflow-x: auto; white-space: nowrap; flex-shrink: 0; display: flex; gap: .3rem; align-items: center; }
+  .attr-bar { padding: .4rem .5rem; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; flex-wrap: wrap; gap: .25rem .3rem; align-items: center; max-height: 5.5rem; overflow-y: auto; }
   .attr-bar .attr-group { display: inline-flex; gap: .2rem; align-items: center; }
   .attr-bar .attr-label { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-right: .1rem; }
   .attr-tag { font-size: .65rem; padding: .1rem .35rem; border-radius: .15rem; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
@@ -82,6 +82,7 @@
     <option value="validation">Validation</option>
     <option value="utility-types">Utility Types (Pick, Omit, Partial)</option>
     <option value="relations">Relations + Entity</option>
+    <option value="aop">AOP Aspects</option>
   </select>
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="data">Data</div>
@@ -116,6 +117,7 @@
 <script>
 const $=(s,c=document)=>c.querySelector(s), $$=(s,c=document)=>[...c.querySelectorAll(s)];
 let tableSchema=null,formSchema=null,currentSort=null,currentSortDesc=false,currentPage=1,pageSize=10,editingId=null,activeFilters={},compileTimer,editor,allAttributes=[];
+const demoMode = new URLSearchParams(location.search).has('demo');
 
 // ─── Samples ────────────────────────────────────────────────────────
 const samples = {
@@ -394,6 +396,53 @@ public partial class Player
     [OneToOne]
     public Team? Team { get; set; }
 }`,
+
+aop: `// AOP — custom aspects via interceptors (ZibStack.NET.Aop)
+// Note: Aop uses C# interceptors, not source-generated attributes.
+// These attributes are defined in ZibStack.NET.Aop, not generated here.
+// This sample shows the pattern — the playground won't generate Aop code
+// but demonstrates how aspects compose with other ZibStack attributes.
+
+// Define a timing aspect:
+// [AspectHandler(typeof(TimingHandler))]
+// public class TimingAttribute : AspectAttribute { }
+//
+// public class TimingHandler : IAspectHandler
+// {
+//     public void OnBefore(AspectContext ctx) => Console.WriteLine($"Starting {ctx.MethodName}");
+//     public void OnAfter(AspectContext ctx) => Console.WriteLine($"Done in {ctx.ElapsedMilliseconds}ms");
+//     public void OnException(AspectContext ctx, Exception ex) => Console.WriteLine($"Failed: {ex.Message}");
+// }
+
+// Combine with CRUD + UI:
+[ImTiredOfCrud(DefaultSort = "Name")]
+public partial class Employee
+{
+    [UiFormIgnore]
+    [UiTableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [ZRequired] [ZMaxLength(100)]
+    [UiFormField(Label = "Name")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+
+    [ZEmail]
+    [UiFormField(Label = "Email")]
+    [UiTableColumn(Filterable = true)]
+    public string? Email { get; set; }
+
+    [ZRange(0, 500000)]
+    [UiFormField(Label = "Salary")]
+    [UiTableColumn(Sortable = true, Filterable = true, Format = "currency")]
+    public decimal Salary { get; set; }
+
+    // In your service, aspects work on methods:
+    // [Timing]
+    // [Log]
+    // [Trace]
+    // public async Task<Employee> GetEmployeeAsync(int id) { ... }
+}`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
@@ -511,13 +560,13 @@ function rF(f){if(f.hidden)return`<input type="hidden" name="${f.name}" id="fiel
   else if(f.uiHint==='slider')i=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
   else{const t=f.type==='integer'||f.type==='decimal'?'number':'text';const s=f.type==='decimal'?' step="0.01"':'';i=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`;}
   return`<div class="form-field${fl}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${i}<div class="error" id="err-${f.name}"></div></div>`;}
-async function submitForm(e){e.preventDefault();if(!formSchema?.apiUrl)return;const body={};(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')body[f.name]=el.checked;else if(f.type==='integer')body[f.name]=el.value?parseInt(el.value):0;else if(f.type==='decimal')body[f.name]=el.value?parseFloat(el.value):0;else body[f.name]=el.value||null;});
+async function submitForm(e){e.preventDefault();if(!formSchema?.apiUrl)return;if(demoMode){toast('Demo mode — CRUD is read-only','error');return;}const body={};(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')body[f.name]=el.checked;else if(f.type==='integer')body[f.name]=el.value?parseInt(el.value):0;else if(f.type==='decimal')body[f.name]=el.value?parseFloat(el.value):0;else body[f.name]=el.value||null;});
   (formSchema.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
   try{const isE=editingId!=null;const res=await fetch(isE?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl,{method:isE?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(res.ok){toast(isE?'Updated':'Created','success');resetForm();loadData();}else if(res.status===400){const err=await res.json();if(err.errors)Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;});else toast('Validation failed','error');}else toast(`Error ${res.status}`,'error');}catch(ex){toast(ex.message,'error');}}
 async function editItem(id){if(!formSchema?.apiUrl)return;const r=await fetch(`${formSchema.apiUrl}/${id}`);if(!r.ok)return;const item=await r.json();editingId=id;const ft=$('#form-title');if(ft)ft.textContent=`Edit #${id}`;const sb=$('#submit-btn');if(sb)sb.textContent='Update';(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});$('#form-panel').scrollIntoView({behavior:'smooth'});}
 function resetForm(){editingId=null;const ft=$('#form-title');if(ft)ft.textContent=`Create ${formSchema?.name||''}`;const sb=$('#submit-btn');if(sb)sb.textContent='Create';const form=$('#crud-form');if(form)form.reset();(formSchema?.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});}
-async function deleteItem(id){if(!formSchema?.apiUrl||!confirm('Delete?'))return;const r=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(r.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
+async function deleteItem(id){if(demoMode){toast('Demo mode — CRUD is read-only','error');return;}if(!formSchema?.apiUrl||!confirm('Delete?'))return;const r=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(r.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
 function toast(m,t){const e=document.createElement('div');e.className=`toast ${t}`;e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),3e3);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
