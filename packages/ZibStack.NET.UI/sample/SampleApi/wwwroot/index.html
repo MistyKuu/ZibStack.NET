@@ -3,104 +3,123 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZibStack.NET — ImTiredOfCrud Playground</title>
+<title>ZibStack.NET Playground</title>
 <style>
   :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6; --danger: #ef4444; --success: #22c55e; --code-bg: #0d1117; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-  header { padding: .5rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
-  header h1 { font-size: 1.1rem; white-space: nowrap; } header h1 em { color: var(--accent); font-style: normal; }
-  .tabs { display: flex; gap: 0; flex-wrap: wrap; }
-  .tab { padding: .4rem .7rem; font-size: .78rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+
+  header { padding: .4rem .75rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  header h1 { font-size: 1rem; white-space: nowrap; } header h1 em { color: var(--accent); font-style: normal; }
+  .sample-select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: .3rem .5rem; border-radius: .25rem; font-size: .78rem; }
+  .tabs { display: flex; gap: 0; flex-wrap: wrap; margin-left: auto; }
+  .tab { padding: .35rem .6rem; font-size: .72rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
   .tab:hover { color: var(--text); } .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab .count { background: var(--border); color: var(--text); font-size: .6rem; padding: 0 .3rem; border-radius: .15rem; margin-left: .2rem; }
-  .status-bar { margin-left: auto; font-size: .72rem; color: var(--muted); white-space: nowrap; }
+  .tab .count { background: var(--border); color: var(--text); font-size: .55rem; padding: 0 .25rem; border-radius: .15rem; margin-left: .15rem; }
+  .status-bar { font-size: .68rem; color: var(--muted); white-space: nowrap; }
   .status-bar.error { color: var(--danger); } .status-bar.success { color: var(--success); }
+
   .main { display: flex; flex: 1; overflow: hidden; }
-  .editor-pane { width: 40%; min-width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .editor-pane { width: 42%; min-width: 300px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .attr-bar { padding: .4rem .5rem; border-bottom: 1px solid var(--border); overflow-x: auto; white-space: nowrap; flex-shrink: 0; display: flex; gap: .3rem; align-items: center; }
+  .attr-bar .attr-group { display: inline-flex; gap: .2rem; align-items: center; }
+  .attr-bar .attr-label { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-right: .1rem; }
+  .attr-tag { font-size: .65rem; padding: .1rem .35rem; border-radius: .15rem; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
+  .attr-tag:hover { border-color: var(--accent); }
+  .attr-tag.core { background: #1e3a5f; color: #93c5fd; } .attr-tag.dto { background: #3b1f4b; color: #d8b4fe; }
+  .attr-tag.ui { background: #1a3c34; color: #86efac; } .attr-tag.validation { background: #422006; color: #fbbf24; }
+  .attr-tooltip { position: fixed; background: var(--surface); border: 1px solid var(--border); border-radius: .35rem; padding: .5rem .65rem; font-size: .75rem; z-index: 200; max-width: 350px; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .attr-tooltip .at-name { color: var(--accent); font-weight: 600; } .attr-tooltip .at-target { color: var(--muted); font-size: .65rem; }
+  .attr-tooltip .at-desc { margin-top: .2rem; } .attr-tooltip .at-props { margin-top: .2rem; color: var(--muted); font-size: .7rem; font-family: monospace; }
   #editor { flex: 1; }
   .content-pane { flex: 1; overflow-y: auto; }
-  .tab-content { display: none; padding: 1rem; } .tab-content.active { display: block; }
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; }
-  .panel h2 { font-size: .95rem; margin-bottom: .75rem; } .panel h3 { font-size: .8rem; color: var(--accent); margin: .75rem 0 .35rem; }
-  .filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin-bottom: .75rem; }
-  .filter-group { display: flex; flex-direction: column; gap: .15rem; }
-  .filter-group label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  .filter-group select, .filter-group input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .35rem .5rem; border-radius: .25rem; font-size: .8rem; }
-  .filter-group input { width: 120px; } .filter-group select { min-width: 60px; }
-  button { background: var(--accent); color: #fff; border: none; padding: .4rem .8rem; border-radius: .25rem; cursor: pointer; font-size: .8rem; }
+  .tab-content { display: none; padding: .75rem; } .tab-content.active { display: block; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; padding: .75rem; margin-bottom: .75rem; }
+  .panel h2 { font-size: .9rem; margin-bottom: .5rem; } .panel h3 { font-size: .8rem; color: var(--accent); margin: .5rem 0 .25rem; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: .4rem; align-items: end; margin-bottom: .5rem; }
+  .filter-group { display: flex; flex-direction: column; gap: .1rem; }
+  .filter-group label { font-size: .65rem; color: var(--muted); text-transform: uppercase; }
+  .filter-group select, .filter-group input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .3rem .4rem; border-radius: .25rem; font-size: .75rem; }
+  .filter-group input { width: 100px; } .filter-group select { min-width: 55px; }
+  button { background: var(--accent); color: #fff; border: none; padding: .35rem .7rem; border-radius: .25rem; cursor: pointer; font-size: .75rem; }
   button:hover { opacity: .9; } button.secondary { background: var(--border); } button.danger { background: var(--danger); } button.success { background: var(--success); color: #000; }
-  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-  th, td { padding: .5rem .6rem; text-align: left; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; cursor: default; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  th, td { padding: .4rem .5rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: .7rem; text-transform: uppercase; cursor: default; white-space: nowrap; }
   th.sortable { cursor: pointer; } th.sortable:hover { color: var(--accent); }
   tr:hover td { background: rgba(59,130,246,.05); }
-  .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: .75rem; font-size: .8rem; color: var(--muted); }
-  .pagination button { font-size: .75rem; padding: .3rem .6rem; }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-  .form-field { display: flex; flex-direction: column; gap: .2rem; } .form-field.full { grid-column: 1 / -1; }
-  .form-field label { font-size: .75rem; color: var(--muted); }
-  .form-field input, .form-field select, .form-field textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .4rem .5rem; border-radius: .25rem; font-size: .85rem; }
-  .form-field textarea { resize: vertical; } .form-field .error { color: var(--danger); font-size: .7rem; }
-  .form-actions { grid-column: 1 / -1; display: flex; gap: .5rem; margin-top: .5rem; }
-  .group-title { grid-column: 1 / -1; font-size: .8rem; color: var(--accent); font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: .25rem; margin-top: .25rem; }
-  .toast { position: fixed; top: 1rem; right: 1rem; padding: .5rem 1rem; border-radius: .25rem; font-size: .85rem; z-index: 100; animation: fadeOut 3s forwards; }
+  .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: .5rem; font-size: .75rem; color: var(--muted); }
+  .pagination button { font-size: .7rem; padding: .25rem .5rem; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  .form-field { display: flex; flex-direction: column; gap: .15rem; } .form-field.full { grid-column: 1 / -1; }
+  .form-field label { font-size: .7rem; color: var(--muted); }
+  .form-field input, .form-field select, .form-field textarea { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: .35rem .4rem; border-radius: .25rem; font-size: .8rem; }
+  .form-field textarea { resize: vertical; } .form-field .error { color: var(--danger); font-size: .65rem; }
+  .form-actions { grid-column: 1 / -1; display: flex; gap: .4rem; margin-top: .35rem; }
+  .group-title { grid-column: 1 / -1; font-size: .75rem; color: var(--accent); font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: .2rem; margin-top: .2rem; }
+  .toast { position: fixed; top: .75rem; right: .75rem; padding: .4rem .8rem; border-radius: .25rem; font-size: .8rem; z-index: 100; animation: fadeOut 3s forwards; }
   .toast.success { background: var(--success); color: #000; } .toast.error { background: var(--danger); color: #fff; }
   @keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
-  .actions { display: flex; gap: .25rem; } .actions button { padding: .2rem .5rem; font-size: .7rem; }
-  .empty { color: var(--muted); font-style: italic; text-align: center; padding: 2rem; }
-  pre.code { background: var(--code-bg); border: 1px solid var(--border); border-radius: .35rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 500px; white-space: pre; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; line-height: 1.4; color: #c9d1d9; }
+  .actions { display: flex; gap: .2rem; } .actions button { padding: .15rem .4rem; font-size: .65rem; }
+  .empty { color: var(--muted); font-style: italic; text-align: center; padding: 1.5rem; }
+  pre.code { background: var(--code-bg); border: 1px solid var(--border); border-radius: .3rem; padding: .6rem; font-size: .72rem; overflow: auto; max-height: 450px; white-space: pre; font-family: 'Cascadia Code','Fira Code',Consolas,monospace; line-height: 1.35; color: #c9d1d9; }
   .hl-kw { color: #ff7b72; } .hl-type { color: #79c0ff; } .hl-cmt { color: #8b949e; } .hl-attr { color: #d2a8ff; } .hl-str { color: #a5d6ff; }
-  pre.json { background: var(--code-bg); border: 1px solid var(--border); border-radius: .35rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 400px; white-space: pre-wrap; font-family: 'Cascadia Code', Consolas, monospace; color: #c9d1d9; }
-  .file-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
-  .file-header .filename { font-size: .75rem; color: var(--accent); font-family: monospace; }
-  .file-header .lines { font-size: .65rem; color: var(--muted); }
+  pre.json { background: var(--code-bg); border: 1px solid var(--border); border-radius: .3rem; padding: .6rem; font-size: .72rem; overflow: auto; max-height: 350px; white-space: pre-wrap; font-family: 'Cascadia Code',Consolas,monospace; color: #c9d1d9; }
+  .file-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .2rem; }
+  .file-header .filename { font-size: .72rem; color: var(--accent); font-family: monospace; } .file-header .lines { font-size: .6rem; color: var(--muted); }
 </style>
 </head>
 <body>
 
 <header>
-  <h1><em>[ImTiredOfCrud]</em> Playground</h1>
+  <h1><em>ZibStack.NET</em> Playground</h1>
+  <select class="sample-select" id="sample-select" onchange="loadSample(this.value)">
+    <option value="imtiredofcrud">ImTiredOfCrud — Full Stack</option>
+    <option value="crud-dtos">CRUD API + Separate DTOs</option>
+    <option value="ui-forms">UI Forms — All Hints</option>
+    <option value="ui-tables">UI Tables — ERP Features</option>
+    <option value="validation">Validation</option>
+    <option value="utility-types">Utility Types (Pick, Omit, Partial)</option>
+    <option value="relations">Relations + Entity</option>
+  </select>
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="data">Data</div>
     <div class="tab" data-tab="endpoints">Endpoints</div>
     <div class="tab" data-tab="dtos">DTOs</div>
     <div class="tab" data-tab="query">Query</div>
     <div class="tab" data-tab="database">Database</div>
-    <div class="tab" data-tab="ui">UI Descriptors</div>
-    <div class="tab" data-tab="schema">JSON Schema</div>
+    <div class="tab" data-tab="ui">UI</div>
+    <div class="tab" data-tab="schema">JSON</div>
   </div>
-  <div class="status-bar" id="status">Ready</div>
+  <div class="status-bar" id="status">Loading...</div>
 </header>
 
 <div class="main">
-  <div class="editor-pane"><div id="editor"></div></div>
+  <div class="editor-pane">
+    <div class="attr-bar" id="attr-bar">Loading attributes...</div>
+    <div id="editor"></div>
+  </div>
   <div class="content-pane">
-    <div class="tab-content active" id="tab-data">
-      <div class="panel" id="table-panel"><div class="empty">Compiling...</div></div>
-      <div class="panel" id="form-panel"><div class="empty">Compiling...</div></div>
-    </div>
+    <div class="tab-content active" id="tab-data"><div class="panel" id="table-panel"><div class="empty">Compiling...</div></div><div class="panel" id="form-panel"><div class="empty">Compiling...</div></div></div>
     <div class="tab-content" id="tab-endpoints"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-dtos"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-query"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-database"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-ui"><div class="empty">Compiling...</div></div>
-    <div class="tab-content" id="tab-schema">
-      <div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table">Compiling...</pre></div>
-      <div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form">Compiling...</pre></div>
-    </div>
+    <div class="tab-content" id="tab-schema"><div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table"></pre></div><div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form"></pre></div></div>
   </div>
 </div>
+<div class="attr-tooltip" id="tooltip" style="display:none"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script>
-const $ = (s,c=document) => c.querySelector(s);
-const $$ = (s,c=document) => [...c.querySelectorAll(s)];
+const $=(s,c=document)=>c.querySelector(s), $$=(s,c=document)=>[...c.querySelectorAll(s)];
+let tableSchema=null,formSchema=null,currentSort=null,currentSortDesc=false,currentPage=1,pageSize=10,editingId=null,activeFilters={},compileTimer,editor,allAttributes=[];
 
-let tableSchema=null, formSchema=null, currentSort=null, currentSortDesc=false;
-let currentPage=1, pageSize=10, editingId=null, activeFilters={}, compileTimer, editor;
-
-const defaultCode = `[ImTiredOfCrud(DefaultSort = "Name")]
+// ─── Samples ────────────────────────────────────────────────────────
+const samples = {
+imtiredofcrud: `[ImTiredOfCrud(DefaultSort = "Name")]
 [UiFormGroup("basic", Label = "Basic Info", Order = 1)]
 [UiFormGroup("details", Label = "Details", Order = 2)]
 public partial class Product
@@ -134,173 +153,372 @@ public partial class Product
     [Checkbox]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public bool IsActive { get; set; } = true;
-}`;
+}`,
+
+'crud-dtos': `// Separate DTOs — full control over create/update/response shapes
+
+[CrudApi(Route = "api/orders")]
+[CreateDto]
+[UpdateDto]
+[ResponseDto]
+[QueryDto(Sortable = true, DefaultSort = "OrderDate")]
+public class Order
+{
+    [DtoIgnore] public int Id { get; set; }
+
+    [Required] [MaxLength(100)]
+    public string CustomerName { get; set; } = "";
+
+    [CreateOnly]  // only in create request
+    public string OrderNumber { get; set; } = "";
+
+    [Immutable]   // visible in update but not changeable
+    public DateTime OrderDate { get; set; }
+
+    [Range(0, 1000000)]
+    public decimal TotalAmount { get; set; }
+
+    [ResponseIgnore]  // exclude from response
+    public string InternalNotes { get; set; } = "";
+
+    [ListIgnore]  // exclude from list, include in get-by-id
+    public string ShippingAddress { get; set; } = "";
+
+    [QueryIgnore]  // exclude from filtering
+    public byte[]? Signature { get; set; }
+}`,
+
+'ui-forms': `// All form UI hints — each property gets a different control
+
+[UiForm(Layout = "vertical")]
+[UiFormGroup("personal", Label = "Personal Info", Order = 1)]
+[UiFormGroup("preferences", Label = "Preferences", Order = 2)]
+[UiFormGroup("uploads", Label = "Uploads", Order = 3)]
+public partial class UserProfile
+{
+    [UiFormIgnore] public int Id { get; set; }
+
+    [Required] [MinLength(2)]
+    [UiFormField(Label = "Full Name", Placeholder = "John Doe", Group = "personal")]
+    public string Name { get; set; } = "";
+
+    [Email]
+    [UiFormField(Label = "Email", Placeholder = "john@example.com", Group = "personal")]
+    public string Email { get; set; } = "";
+
+    [PasswordInput]
+    [UiFormField(Label = "Password", Group = "personal")]
+    public string Password { get; set; } = "";
+
+    [TextArea(Rows = 4)]
+    [UiFormField(Label = "Bio", HelpText = "Tell us about yourself", Group = "personal")]
+    public string? Bio { get; set; }
+
+    [DatePicker]
+    [UiFormField(Label = "Birth Date", Group = "personal")]
+    public DateTime? BirthDate { get; set; }
+
+    [Select(typeof(Theme))]
+    [UiFormField(Label = "Theme", Group = "preferences")]
+    public Theme Theme { get; set; }
+
+    [RadioGroup(typeof(Language))]
+    [UiFormField(Label = "Language", Group = "preferences")]
+    public Language Language { get; set; }
+
+    [Slider(Min = 0, Max = 100, Step = 5)]
+    [UiFormField(Label = "Volume", Group = "preferences")]
+    public int Volume { get; set; } = 50;
+
+    [Checkbox]
+    [UiFormField(Label = "Receive Newsletter", Group = "preferences")]
+    public bool Newsletter { get; set; }
+
+    [ColorPicker]
+    [UiFormField(Label = "Accent Color", Group = "preferences")]
+    public string? AccentColor { get; set; }
+
+    [UiFormConditional("Newsletter", "true")]
+    [UiFormField(Label = "Notification Frequency", Group = "preferences")]
+    public string? NotificationFrequency { get; set; }
+
+    [FilePicker(Accept = "image/*")]
+    [UiFormField(Label = "Avatar", Group = "uploads")]
+    public string? AvatarUrl { get; set; }
+
+    [UiFormReadOnly]
+    [UiFormField(Label = "Created At", Group = "personal")]
+    public DateTime CreatedAt { get; set; }
+}
+
+public enum Theme { Light, Dark, System }
+public enum Language { English, Polish, German, French }`,
+
+'ui-tables': `// ERP-style table with actions, permissions, drill-down
+
+[UiTable(DefaultSort = "Name", DefaultPageSize = 25, SchemaUrl = "/api/tables/department")]
+[RowAction("viewDetails", Label = "Details", Icon = "eye", Endpoint = "/api/departments/{id}")]
+[RowAction("generateReport", Label = "Report", Icon = "file", Endpoint = "/api/departments/{id}/report", Method = "POST", Confirmation = "Generate report?")]
+[ToolbarAction("export", Label = "Export to Excel", Icon = "download", Endpoint = "/api/departments/export", SelectionMode = "multiple")]
+[ToolbarAction("recalculate", Label = "Recalculate Budgets", Endpoint = "/api/departments/recalculate", Method = "POST", Confirmation = "Recalculate?", Permission = "finance.write")]
+[Permission("department.read")]
+[ColumnPermission("Budget", "finance.read")]
+[DataFilter("DepartmentId")]
+[ChildTable(typeof(EmployeeView), ForeignKey = "DepartmentId", Label = "Employees")]
+public partial class DepartmentView
+{
+    [UiTableColumn(IsVisible = false)] public int Id { get; set; }
+
+    [Required]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public string Name { get; set; } = "";
+
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public string Code { get; set; } = "";
+
+    [UiTableColumn(Sortable = true, Label = "Budget", Format = "currency")]
+    [Computed]
+    [ColumnStyle(When = "value < 0", Severity = "danger")]
+    [ColumnStyle(When = "value >= 1000000", Severity = "success")]
+    public decimal Budget { get; set; }
+
+    [UiTableColumn(Sortable = true, Label = "Headcount")]
+    [Computed]
+    public int EmployeeCount { get; set; }
+
+    [UiTableColumn(Sortable = true)]
+    public DateTime CreatedAt { get; set; }
+}
+
+[UiTable(SchemaUrl = "/api/tables/employee")]
+public partial class EmployeeView
+{
+    public int Id { get; set; }
+    [UiTableColumn(Sortable = true, Filterable = true)] public string Name { get; set; } = "";
+    [UiTableColumn(Sortable = true)] public decimal Salary { get; set; }
+    public int DepartmentId { get; set; }
+}`,
+
+validation: `// All validation attributes — compile-time Validate() method
+
+[Validate]
+public partial class RegistrationRequest
+{
+    [Required]
+    [MinLength(2)]
+    [MaxLength(50)]
+    public string Username { get; set; } = "";
+
+    [Required]
+    [Email]
+    public string Email { get; set; } = "";
+
+    [Required]
+    [MinLength(8)]
+    [MaxLength(128)]
+    public string Password { get; set; } = "";
+
+    [Required]
+    [Url]
+    public string Website { get; set; } = "";
+
+    [Range(13, 120)]
+    public int Age { get; set; }
+
+    [Match(@"^\\+?\\d{7,15}$")]
+    public string? Phone { get; set; }
+
+    [NotEmpty]
+    public List<string> Roles { get; set; } = new();
+}`,
+
+'utility-types': `// TypeScript-style utility types from ZibStack.NET.Core
+
+public class Player
+{
+    public int Id { get; set; }
+    [Required] [MaxLength(50)]
+    public string Name { get; set; } = "";
+    public int Level { get; set; }
+    public string? Email { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class Address
+{
+    public string Street { get; set; } = "";
+    public string City { get; set; } = "";
+    public string ZipCode { get; set; } = "";
+}
+
+// Partial<Player> — PatchField for each prop + ApplyTo()
+[PartialFrom(typeof(Player))]
+public partial record UpdatePlayerPatch;
+
+// Pick<Player, "Name" | "Level">
+[PickFrom(typeof(Player), nameof(Player.Name), nameof(Player.Level))]
+public partial record PlayerSummary;
+
+// Omit<Player, "Id" | "CreatedAt">
+[OmitFrom(typeof(Player), nameof(Player.Id), nameof(Player.CreatedAt))]
+public partial record PlayerWithoutMeta;
+
+// Player & Address — intersection
+[IntersectFrom(typeof(Player))]
+[IntersectFrom(typeof(Address))]
+public partial record PlayerWithAddress;`,
+
+relations: `// Relations + Entity configuration
+
+[Entity(TableName = "Teams")]
+public partial class Team
+{
+    public int Id { get; set; }
+    [Required] [MaxLength(100)]
+    public string Name { get; set; } = "";
+    public string? City { get; set; }
+
+    [OneToMany(Label = "Players")]
+    public ICollection<Player> Players { get; set; } = new List<Player>();
+}
+
+[Entity(TableName = "Players")]
+public partial class Player
+{
+    public int Id { get; set; }
+    [Required] [MaxLength(50)]
+    public string Name { get; set; } = "";
+    public int Level { get; set; }
+    public int? TeamId { get; set; }
+
+    [OneToOne]
+    public Team? Team { get; set; }
+}`,
+};
+
+function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
 
 // ─── Tabs ───
-$('#tab-bar').addEventListener('click', e => {
-  const tab = e.target.closest('.tab'); if(!tab) return;
-  $$('.tab').forEach(t=>t.classList.remove('active'));
-  tab.classList.add('active');
-  $$('.tab-content').forEach(t=>t.classList.toggle('active', t.id==='tab-'+tab.dataset.tab));
+$('#tab-bar').addEventListener('click', e => { const t=e.target.closest('.tab'); if(!t) return; $$('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); $$('.tab-content').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t.dataset.tab)); });
+
+// ─── Attributes ─
+async function loadAttributes() {
+  try {
+    allAttributes = await fetch('/api/playground/attributes').then(r=>r.json());
+    const bar=$('#attr-bar'); const groups = {};
+    allAttributes.forEach(a => { (groups[a.package]||(groups[a.package]=[])).push(a); });
+    bar.innerHTML = Object.entries(groups).map(([pkg,attrs]) =>
+      `<span class="attr-label">${pkg}</span>` +
+      attrs.map(a => `<span class="attr-tag ${pkg.toLowerCase()}" data-attr="${a.name}">[${a.name}]</span>`).join('')
+    ).join('<span style="margin:0 .3rem;color:var(--border)">|</span>');
+  } catch(e) { $('#attr-bar').textContent = 'Failed to load attributes'; }
+}
+
+// Tooltip
+document.addEventListener('mouseover', e => {
+  const tag = e.target.closest('.attr-tag'); const tip=$('#tooltip');
+  if(!tag) { tip.style.display='none'; return; }
+  const name = tag.dataset.attr;
+  const a = allAttributes.find(x=>x.name===name); if(!a) return;
+  tip.innerHTML = `<span class="at-name">[${esc(a.name)}]</span> <span class="at-target">${esc(a.target)}</span><div class="at-desc">${esc(a.description)}</div>${a.props?`<div class="at-props">${esc(a.props)}</div>`:''}`;
+  const r = tag.getBoundingClientRect();
+  tip.style.display='block'; tip.style.left=r.left+'px'; tip.style.top=(r.bottom+4)+'px';
+});
+document.addEventListener('mouseout', e => { if(e.target.closest('.attr-tag')) $('#tooltip').style.display='none'; });
+
+// Click attribute → insert at cursor
+document.addEventListener('click', e => {
+  const tag = e.target.closest('.attr-tag'); if(!tag || !editor) return;
+  const name = tag.dataset.attr;
+  const a = allAttributes.find(x=>x.name===name); if(!a) return;
+  const text = a.props ? `[${name}()]` : `[${name}]`;
+  editor.trigger('keyboard','type',{text});
+  editor.focus();
 });
 
 // ─── Monaco ─
 require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
 require(['vs/editor/editor.main'], function() {
-  monaco.editor.defineTheme('zibstack', { base:'vs-dark', inherit:true, rules:[], colors:{'editor.background':'#1e293b'} });
-  editor = monaco.editor.create($('#editor'), { value:defaultCode, language:'csharp', theme:'zibstack', fontSize:13, minimap:{enabled:false}, scrollBeyondLastLine:false, automaticLayout:true, padding:{top:10} });
-  editor.onDidChangeModelContent(() => { clearTimeout(compileTimer); compileTimer=setTimeout(compile,600); });
+  monaco.editor.defineTheme('zibstack',{base:'vs-dark',inherit:true,rules:[],colors:{'editor.background':'#1e293b'}});
+  editor = monaco.editor.create($('#editor'),{value:samples.imtiredofcrud,language:'csharp',theme:'zibstack',fontSize:13,minimap:{enabled:false},scrollBeyondLastLine:false,automaticLayout:true,padding:{top:8}});
+  editor.onDidChangeModelContent(()=>{clearTimeout(compileTimer);compileTimer=setTimeout(compile,600);});
+  loadAttributes();
   compile();
 });
 
 // ─── Compile ─
 async function compile() {
-  const status=$('#status'); status.className='status-bar'; status.textContent='Compiling...';
-  const start=performance.now();
+  const status=$('#status');status.className='status-bar';status.textContent='Compiling...';const start=performance.now();
   try {
-    const res = await fetch('/api/playground', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code:editor.getValue()}) });
-    const data = await res.json();
-    const ms = Math.round(performance.now()-start);
-
-    if (data.error && !data.formSchema && !data.tableSchema) {
-      status.className='status-bar error'; status.textContent=`Error (${ms}ms): ${data.error.substring(0,120)}`;
-      return;
-    }
-
-    tableSchema = data.formSchema ? (data.tableSchema ? JSON.parse(data.tableSchema) : null) : null;
-    formSchema = data.formSchema ? JSON.parse(data.formSchema) : null;
-    if (data.tableSchema) tableSchema = JSON.parse(data.tableSchema);
-
-    if (tableSchema && !tableSchema.apiUrl) tableSchema.apiUrl='/api/products';
-    if (formSchema && !formSchema.apiUrl) formSchema.apiUrl='/api/products';
-
-    const genFiles = data.generated || [];
-    const counts = {};
-    genFiles.forEach(f => { counts[f.category] = (counts[f.category]||0)+1; });
-
-    status.className='status-bar success';
-    status.textContent=`Compiled (${ms}ms) — ${genFiles.length} files generated`;
-
-    // Update tab counts
-    updateTabCount('endpoints', counts['Endpoints']);
-    updateTabCount('dtos', counts['DTOs']);
-    updateTabCount('query', counts['Query']);
-    updateTabCount('database', counts['Database']);
-    updateTabCount('ui', counts['UI']);
-
-    // Schema tab
-    $('#schema-table').textContent = tableSchema ? JSON.stringify(tableSchema,null,2) : 'No table schema';
-    $('#schema-form').textContent = formSchema ? JSON.stringify(formSchema,null,2) : 'No form schema';
-
-    // Code tabs
-    renderCodeTab('tab-endpoints', genFiles.filter(f=>f.category==='Endpoints'), 'Endpoints');
-    renderCodeTab('tab-dtos', genFiles.filter(f=>f.category==='DTOs'), 'DTOs');
-    renderCodeTab('tab-query', genFiles.filter(f=>f.category==='Query'), 'Query DSL');
-    renderCodeTab('tab-database', genFiles.filter(f=>f.category==='Database'), 'Database (EF Core)');
-    renderCodeTab('tab-ui', genFiles.filter(f=>f.category==='UI'), 'UI Descriptors');
-
-    // Data tab
-    currentSort=tableSchema?.defaultSort?.column||null;
-    currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
-    currentPage=1; activeFilters={}; editingId=null;
-    renderTable(); renderForm(); loadData();
-  } catch(ex) { status.className='status-bar error'; status.textContent=ex.message; }
+    const res=await fetch('/api/playground',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:editor.getValue()})});
+    const data=await res.json(); const ms=Math.round(performance.now()-start);
+    if(data.error&&!data.formSchema&&!data.tableSchema){status.className='status-bar error';status.textContent=`Error (${ms}ms): ${data.error.substring(0,100)}`;return;}
+    tableSchema=data.tableSchema?JSON.parse(data.tableSchema):null; formSchema=data.formSchema?JSON.parse(data.formSchema):null;
+    if(tableSchema&&!tableSchema.apiUrl)tableSchema.apiUrl='/api/products'; if(formSchema&&!formSchema.apiUrl)formSchema.apiUrl='/api/products';
+    const gf=data.generated||[],counts={};gf.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
+    status.className='status-bar success';status.textContent=`${ms}ms | ${gf.length} files`;
+    ['endpoints','dtos','query','database','ui'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI'}[t]]));
+    $('#schema-table').textContent=tableSchema?JSON.stringify(tableSchema,null,2):'No table schema';
+    $('#schema-form').textContent=formSchema?JSON.stringify(formSchema,null,2):'No form schema';
+    renderCodeTab('tab-endpoints',gf.filter(f=>f.category==='Endpoints'),'Endpoints');
+    renderCodeTab('tab-dtos',gf.filter(f=>f.category==='DTOs'),'DTOs');
+    renderCodeTab('tab-query',gf.filter(f=>f.category==='Query'),'Query DSL');
+    renderCodeTab('tab-database',gf.filter(f=>f.category==='Database'),'Database');
+    renderCodeTab('tab-ui',gf.filter(f=>f.category==='UI'),'UI Descriptors');
+    currentSort=tableSchema?.defaultSort?.column||null;currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
+    currentPage=1;activeFilters={};editingId=null; renderTable();renderForm();loadData();
+  } catch(ex){status.className='status-bar error';status.textContent=ex.message;}
 }
-
-function updateTabCount(tabName, count) {
-  const tab = $(`.tab[data-tab="${tabName}"]`);
-  if(!tab) return;
-  let badge = tab.querySelector('.count');
-  if(count) {
-    if(!badge) { badge=document.createElement('span'); badge.className='count'; tab.appendChild(badge); }
-    badge.textContent=count;
-  } else if(badge) badge.remove();
-}
-
-function renderCodeTab(tabId, files, title) {
-  const el = $(`#${tabId}`);
-  if (!files.length) { el.innerHTML=`<div class="empty">No ${title} generated. Add [ImTiredOfCrud] or relevant attributes.</div>`; return; }
-  el.innerHTML = files.map(f => {
-    const lines = f.source.split('\n').length;
-    const cleanName = f.fileName.replace('.g.cs','').replace(/^.*?_Models_/,'').replace(/^.*?_/,'');
-    return `<div class="panel">
-      <div class="file-header"><span class="filename">${esc(cleanName)}</span><span class="lines">${lines} lines — ${esc(f.fileName)}</span></div>
-      <pre class="code">${highlightCSharp(f.source)}</pre>
-    </div>`;
-  }).join('');
-}
-
-function highlightCSharp(src) {
-  // Tokenize to avoid nested replacements
-  const tokens = []; let idx = 0;
-  function tok(cls, text) { const id = `\x00${idx++}\x00`; tokens.push({id, html: `<span class="hl-${cls}">${text}</span>`}); return id; }
-  let s = esc(src);
-  // Order matters: strings first, then comments, then attributes, then keywords
-  s = s.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, (m) => tok('str', m));
-  s = s.replace(/(\/\/.*)/g, (m) => tok('cmt', m));
-  s = s.replace(/(\[[\w.]+(?:\(.*?\))?\])/g, (m) => tok('attr', m));
-  s = s.replace(/\b(public|private|static|partial|class|record|namespace|using|return|var|new|if|else|switch|case|async|await|readonly|override|virtual|sealed|int|string|bool|decimal|double|float|long|void|null|true|false|this|typeof|nameof|is|not|in|out)\b/g, (m) => tok('kw', m));
-  s = s.replace(/\b(IQueryable|Task|List|Dictionary|HashSet|CancellationToken|IEnumerable|ValueTask|IOrderedQueryable|PatchField|DtoValidationResult|ICanCreate|ICanApply|ICanValidate)\b/g, (m) => tok('type', m));
-  // Restore tokens
-  tokens.forEach(t => { s = s.replace(t.id, t.html); });
-  return s;
-}
+function updateTabCount(n,c){const t=$(`.tab[data-tab="${n}"]`);if(!t)return;let b=t.querySelector('.count');if(c){if(!b){b=document.createElement('span');b.className='count';t.appendChild(b);}b.textContent=c;}else if(b)b.remove();}
+function renderCodeTab(id,files,title){const el=$(`#${id}`);if(!files.length){el.innerHTML=`<div class="empty">No ${title} generated</div>`;return;}
+  el.innerHTML=files.map(f=>{const l=f.source.split('\n').length;const n=f.fileName.replace('.g.cs','').replace(/^.*?_Models_/,'').replace(/^.*?_/,'');
+  return`<div class="panel"><div class="file-header"><span class="filename">${esc(n)}</span><span class="lines">${l} lines</span></div><pre class="code">${hlCs(f.source)}</pre></div>`;}).join('');}
+function hlCs(src){const tks=[];let i=0;function tk(c,t){const id=`\x00${i++}\x00`;tks.push({id,h:`<span class="hl-${c}">${t}</span>`});return id;}let s=esc(src);
+  s=s.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g,m=>tk('str',m));s=s.replace(/(\/\/.*)/g,m=>tk('cmt',m));s=s.replace(/(\[[\w.]+(?:\(.*?\))?\])/g,m=>tk('attr',m));
+  s=s.replace(/\b(public|private|static|partial|class|record|namespace|using|return|var|new|if|else|switch|case|async|await|readonly|override|virtual|sealed|int|string|bool|decimal|double|float|long|void|null|true|false|this|typeof|nameof|is|not|in|out)\b/g,m=>tk('kw',m));
+  s=s.replace(/\b(IQueryable|Task|List|Dictionary|HashSet|CancellationToken|IEnumerable|ValueTask|IOrderedQueryable|PatchField|DtoValidationResult|ICanCreate|ICanApply|ICanValidate)\b/g,m=>tk('type',m));
+  tks.forEach(t=>{s=s.replace(t.id,t.h);});return s;}
 
 // ─── Table ──
-function renderTable() {
-  if(!tableSchema){$('#table-panel').innerHTML='<div class="empty">No [UiTable] or [ImTiredOfCrud]</div>';return;}
-  const cols=tableSchema.columns.filter(c=>c.visible!==false), panel=$('#table-panel');
-  panel.innerHTML=`<h2>${esc(tableSchema.name)}</h2><div class="filters" id="filters"></div>
-    <table><thead><tr>${cols.map(c=>`<th class="${c.sortable?'sortable':''}" data-col="${c.name}">${esc(c.label||c.name)} ${c.sortable?'<span class="sort-arrow" id="sort-'+c.name+'"></span>':''}</th>`).join('')}<th>Actions</th></tr></thead><tbody id="tbody"></tbody></table>
-    <div class="pagination"><span id="page-info"></span><div><button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button> <button class="secondary" id="next-btn" onclick="nextPage()">Next</button></div></div>`;
-  $$('th.sortable',panel).forEach(th=>{th.onclick=()=>{const c=th.dataset.col;if(currentSort===c)currentSortDesc=!currentSortDesc;else{currentSort=c;currentSortDesc=false;}currentPage=1;loadData();};});
+function renderTable(){if(!tableSchema){$('#table-panel').innerHTML='<div class="empty">No table schema</div>';return;}const cols=tableSchema.columns.filter(c=>c.visible!==false),p=$('#table-panel');
+  p.innerHTML=`<h2>${esc(tableSchema.name)}</h2><div class="filters" id="filters"></div><table><thead><tr>${cols.map(c=>`<th class="${c.sortable?'sortable':''}" data-col="${c.name}">${esc(c.label||c.name)} ${c.sortable?'<span id="sort-'+c.name+'"></span>':''}</th>`).join('')}<th></th></tr></thead><tbody id="tbody"></tbody></table><div class="pagination"><span id="page-info"></span><div><button class="secondary" id="prev-btn" onclick="prevPage()">Prev</button> <button class="secondary" id="next-btn" onclick="nextPage()">Next</button></div></div>`;
+  $$('th.sortable',p).forEach(th=>{th.onclick=()=>{const c=th.dataset.col;if(currentSort===c)currentSortDesc=!currentSortDesc;else{currentSort=c;currentSortDesc=false;}currentPage=1;loadData();};});
   const ct=$('#filters');if(!ct)return;const fc=cols.filter(c=>c.filterable);
-  ct.innerHTML=fc.map(c=>`<div class="filter-group"><label>${esc(c.label||c.name)}</label><div style="display:flex;gap:.2rem"><select id="fop-${c.name}" style="width:60px">${(c.filterOperators||['=']).map(op=>`<option value="${op}" ${op==='=*'&&c.type==='string'?'selected':op==='='&&c.type!=='string'?'selected':''}>${opLabel(op)}</option>`).join('')}</select>${c.options?`<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`:c.type==='boolean'?`<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`:`<input id="fval-${c.name}" placeholder="...">`}</div></div>`).join('')+`<div class="filter-group" style="align-self:end"><button onclick="applyFilters()">Filter</button> <button class="secondary" onclick="clearFilters()">Clear</button></div>`;
-}
-function opLabel(op){return{'=':'=','!=':'!=','<':'<','>':'>','<=':'<=','>=':'>=','=*':'~','!*':'!~','^':'A..','!^':'!A..','$':'..Z','!$':'!..Z','=in=':'in','=out=':'!in'}[op]||op;}
+  ct.innerHTML=fc.map(c=>`<div class="filter-group"><label>${esc(c.label||c.name)}</label><div style="display:flex;gap:.2rem"><select id="fop-${c.name}" style="width:55px">${(c.filterOperators||['=']).map(op=>`<option value="${op}" ${op==='=*'&&c.type==='string'?'selected':op==='='&&c.type!=='string'?'selected':''}>${opLbl(op)}</option>`).join('')}</select>${c.options?`<select id="fval-${c.name}"><option value="">All</option>${c.options.map(o=>`<option>${o}</option>`).join('')}</select>`:c.type==='boolean'?`<select id="fval-${c.name}"><option value="">All</option><option value="true">Yes</option><option value="false">No</option></select>`:`<input id="fval-${c.name}" placeholder="...">`}</div></div>`).join('')+`<div class="filter-group" style="align-self:end"><button onclick="applyFilters()">Go</button> <button class="secondary" onclick="clearFilters()">Clear</button></div>`;}
+function opLbl(o){return{'=':'=','!=':'!=','<':'<','>':'>','<=':'<=','>=':'>=','=*':'~','!*':'!~','^':'A..','!^':'!A..','$':'..Z','!$':'!..Z','=in=':'in','=out=':'!in'}[o]||o;}
 function applyFilters(){activeFilters={};tableSchema.columns.filter(c=>c.filterable&&c.visible!==false).forEach(c=>{const v=$(`#fval-${c.name}`)?.value?.trim(),op=$(`#fop-${c.name}`)?.value||'=';if(v)activeFilters[c.name]={op,val:v};});currentPage=1;loadData();}
 function clearFilters(){activeFilters={};tableSchema.columns.filter(c=>c.filterable).forEach(c=>{const e=$(`#fval-${c.name}`);if(e)e.value='';});currentPage=1;loadData();}
-
-async function loadData() {
-  if(!tableSchema?.apiUrl)return;const p=new URLSearchParams();p.set('page',currentPage);p.set('pageSize',pageSize);
-  const f=Object.entries(activeFilters).map(([k,{op,val}])=>`${k.charAt(0).toUpperCase()+k.slice(1)}${op}${val}`).join(',');
-  if(f)p.set('filter',f);if(currentSort)p.set('sort',(currentSortDesc?'-':'')+currentSort.charAt(0).toUpperCase()+currentSort.slice(1));
-  try{const data=await fetch(`${tableSchema.apiUrl}?${p}`).then(r=>r.json());const cols=tableSchema.columns.filter(c=>c.visible!==false);const key=tableSchema.keyProperty||'id';const tbody=$('#tbody');if(!tbody)return;
-  tbody.innerHTML=(data.items||[]).map(item=>`<tr>${cols.map(c=>`<td>${fmtCell(item[c.name],c)}</td>`).join('')}<td class="actions"><button onclick="editItem(${item[key]})">Edit</button> <button class="danger" onclick="deleteItem(${item[key]})">Del</button></td></tr>`).join('')||'<tr><td colspan="999" style="text-align:center;color:var(--muted)">No data</td></tr>';
+async function loadData(){if(!tableSchema?.apiUrl)return;const p=new URLSearchParams();p.set('page',currentPage);p.set('pageSize',pageSize);const f=Object.entries(activeFilters).map(([k,{op,val}])=>`${k.charAt(0).toUpperCase()+k.slice(1)}${op}${val}`).join(',');if(f)p.set('filter',f);if(currentSort)p.set('sort',(currentSortDesc?'-':'')+currentSort.charAt(0).toUpperCase()+currentSort.slice(1));
+  try{const d=await fetch(`${tableSchema.apiUrl}?${p}`).then(r=>r.json());const cols=tableSchema.columns.filter(c=>c.visible!==false);const key=tableSchema.keyProperty||'id';const tb=$('#tbody');if(!tb)return;
+  tb.innerHTML=(d.items||[]).map(item=>`<tr>${cols.map(c=>`<td>${fmt(item[c.name],c)}</td>`).join('')}<td class="actions"><button onclick="editItem(${item[key]})">Edit</button> <button class="danger" onclick="deleteItem(${item[key]})">Del</button></td></tr>`).join('')||'<tr><td colspan="999" class="empty">No data</td></tr>';
   tableSchema.columns.filter(c=>c.sortable).forEach(c=>{const e=$(`#sort-${c.name}`);if(e)e.textContent=currentSort===c.name?(currentSortDesc?' ▼':' ▲'):'';});
-  const tp=Math.ceil((data.totalCount||0)/pageSize)||1;const pi=$('#page-info');if(pi)pi.textContent=`Page ${currentPage} of ${tp} (${data.totalCount||0} items)`;
-  const pb=$('#prev-btn');if(pb)pb.disabled=currentPage<=1;const nb=$('#next-btn');if(nb)nb.disabled=currentPage>=tp;}catch(e){}
-}
-function fmtCell(v,c){if(v==null)return'<span style="color:var(--muted)">—</span>';if(c.type==='boolean')return v?'✓':'✗';if(c.format==='currency')return`$${Number(v).toFixed(2)}`;return String(v);}
-function prevPage(){if(currentPage>1){currentPage--;loadData();}}
-function nextPage(){currentPage++;loadData();}
+  const tp=Math.ceil((d.totalCount||0)/pageSize)||1;const pi=$('#page-info');if(pi)pi.textContent=`${currentPage}/${tp} (${d.totalCount||0})`;
+  const pb=$('#prev-btn');if(pb)pb.disabled=currentPage<=1;const nb=$('#next-btn');if(nb)nb.disabled=currentPage>=tp;}catch(e){}}
+function fmt(v,c){if(v==null)return'<span style="color:var(--muted)">—</span>';if(c.type==='boolean')return v?'✓':'✗';if(c.format==='currency')return`$${Number(v).toFixed(2)}`;return String(v);}
+function prevPage(){if(currentPage>1){currentPage--;loadData();}}function nextPage(){currentPage++;loadData();}
 
 // ─── Form ──
-function renderForm(){
-  if(!formSchema){$('#form-panel').innerHTML='<div class="empty">No [UiForm] or [ImTiredOfCrud]</div>';return;}
-  const panel=$('#form-panel');let h=`<h2 id="form-title">Create ${esc(formSchema.name)}</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
-  const groups=(formSchema.groups||[]).sort((a,b)=>a.order-b.order),fields=formSchema.fields||[];
-  if(groups.length){groups.forEach(g=>{h+=`<div class="group-title">${esc(g.label||g.name)}</div>`;fields.filter(f=>f.group===g.name).sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);});});fields.filter(f=>!f.group).forEach(f=>{h+=renderField(f);});}
-  else fields.sort((a,b)=>a.order-b.order).forEach(f=>{h+=renderField(f);});
-  h+=`<div class="form-actions"><button type="submit" class="success" id="submit-btn">Create</button><button type="button" class="secondary" onclick="resetForm()">Cancel</button></div></form>`;panel.innerHTML=h;
-}
-function renderField(f){if(f.hidden)return`<input type="hidden" name="${f.name}" id="field-${f.name}">`;const full=f.uiHint==='textarea'?' full':'';let inp;
-  if(f.uiHint==='select'&&f.options)inp=`<select name="${f.name}" id="field-${f.name}">${f.options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('')}</select>`;
-  else if(f.uiHint==='checkbox'){inp=`<label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" name="${f.name}" id="field-${f.name}"> ${esc(f.label||f.name)}</label>`;return`<div class="form-field${full}">${inp}<div class="error" id="err-${f.name}"></div></div>`;}
-  else if(f.uiHint==='textarea')inp=`<textarea name="${f.name}" id="field-${f.name}" rows="${f.props?.rows||3}" placeholder="${esc(f.placeholder||'')}"></textarea>`;
-  else if(f.uiHint==='slider')inp=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
-  else{const t=f.type==='integer'||f.type==='decimal'?'number':'text';const s=f.type==='decimal'?' step="0.01"':'';inp=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`;}
-  return`<div class="form-field${full}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${inp}<div class="error" id="err-${f.name}"></div></div>`;
-}
+function renderForm(){if(!formSchema){$('#form-panel').innerHTML='<div class="empty">No form schema</div>';return;}const p=$('#form-panel');
+  let h=`<h2 id="form-title">Create ${esc(formSchema.name)}</h2><form id="crud-form" class="form-grid" onsubmit="submitForm(event)">`;
+  const gs=(formSchema.groups||[]).sort((a,b)=>a.order-b.order),fs=formSchema.fields||[];
+  if(gs.length){gs.forEach(g=>{h+=`<div class="group-title">${esc(g.label||g.name)}</div>`;fs.filter(f=>f.group===g.name).sort((a,b)=>a.order-b.order).forEach(f=>{h+=rF(f);});});fs.filter(f=>!f.group).forEach(f=>{h+=rF(f);});}
+  else fs.sort((a,b)=>a.order-b.order).forEach(f=>{h+=rF(f);});
+  h+=`<div class="form-actions"><button type="submit" class="success" id="submit-btn">Create</button><button type="button" class="secondary" onclick="resetForm()">Cancel</button></div></form>`;p.innerHTML=h;}
+function rF(f){if(f.hidden)return`<input type="hidden" name="${f.name}" id="field-${f.name}">`;const fl=f.uiHint==='textarea'?' full':'';let i;
+  if(f.uiHint==='select'&&f.options)i=`<select name="${f.name}" id="field-${f.name}">${f.options.map(o=>`<option value="${o.value}">${o.label}</option>`).join('')}</select>`;
+  else if(f.uiHint==='checkbox'){i=`<label style="display:flex;align-items:center;gap:.4rem"><input type="checkbox" name="${f.name}" id="field-${f.name}"> ${esc(f.label||f.name)}</label>`;return`<div class="form-field${fl}">${i}<div class="error" id="err-${f.name}"></div></div>`;}
+  else if(f.uiHint==='textarea')i=`<textarea name="${f.name}" id="field-${f.name}" rows="${f.props?.rows||3}" placeholder="${esc(f.placeholder||'')}"></textarea>`;
+  else if(f.uiHint==='slider')i=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
+  else{const t=f.type==='integer'||f.type==='decimal'?'number':'text';const s=f.type==='decimal'?' step="0.01"':'';i=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`;}
+  return`<div class="form-field${fl}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${i}<div class="error" id="err-${f.name}"></div></div>`;}
 async function submitForm(e){e.preventDefault();if(!formSchema?.apiUrl)return;const body={};(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')body[f.name]=el.checked;else if(f.type==='integer')body[f.name]=el.value?parseInt(el.value):0;else if(f.type==='decimal')body[f.name]=el.value?parseFloat(el.value):0;else body[f.name]=el.value||null;});
   (formSchema.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
-  try{const isEdit=editingId!=null;const res=await fetch(isEdit?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl,{method:isEdit?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(res.ok){toast(isEdit?'Updated!':'Created!','success');resetForm();loadData();}else if(res.status===400){const err=await res.json();if(err.errors)Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;});else toast('Validation failed','error');}else toast(`Error: ${res.status}`,'error');}catch(ex){toast(ex.message,'error');}
-}
-async function editItem(id){if(!formSchema?.apiUrl)return;const res=await fetch(`${formSchema.apiUrl}/${id}`);if(!res.ok)return;const item=await res.json();editingId=id;const ft=$('#form-title');if(ft)ft.textContent=`Edit ${formSchema.name} #${id}`;const sb=$('#submit-btn');if(sb)sb.textContent='Update';(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});$('#form-panel').scrollIntoView({behavior:'smooth'});}
+  try{const isE=editingId!=null;const res=await fetch(isE?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl,{method:isE?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(res.ok){toast(isE?'Updated':'Created','success');resetForm();loadData();}else if(res.status===400){const err=await res.json();if(err.errors)Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;});else toast('Validation failed','error');}else toast(`Error ${res.status}`,'error');}catch(ex){toast(ex.message,'error');}}
+async function editItem(id){if(!formSchema?.apiUrl)return;const r=await fetch(`${formSchema.apiUrl}/${id}`);if(!r.ok)return;const item=await r.json();editingId=id;const ft=$('#form-title');if(ft)ft.textContent=`Edit #${id}`;const sb=$('#submit-btn');if(sb)sb.textContent='Update';(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});$('#form-panel').scrollIntoView({behavior:'smooth'});}
 function resetForm(){editingId=null;const ft=$('#form-title');if(ft)ft.textContent=`Create ${formSchema?.name||''}`;const sb=$('#submit-btn');if(sb)sb.textContent='Create';const form=$('#crud-form');if(form)form.reset();(formSchema?.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});}
-async function deleteItem(id){if(!formSchema?.apiUrl||!confirm('Delete?'))return;const res=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(res.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
-function toast(msg,type){const e=document.createElement('div');e.className=`toast ${type}`;e.textContent=msg;document.body.appendChild(e);setTimeout(()=>e.remove(),3200);}
+async function deleteItem(id){if(!formSchema?.apiUrl||!confirm('Delete?'))return;const r=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(r.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
+function toast(m,t){const e=document.createElement('div');e.className=`toast ${t}`;e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),3e3);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
 </body>
