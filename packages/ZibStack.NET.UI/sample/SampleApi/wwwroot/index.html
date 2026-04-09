@@ -163,7 +163,7 @@ public partial class Product
 [UpdateDto]
 [ResponseDto]
 [QueryDto(Sortable = true, DefaultSort = "OrderDate")]
-public class Order
+public partial class Order
 {
     [DtoIgnore] public int Id { get; set; }
 
