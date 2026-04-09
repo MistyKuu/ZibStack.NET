@@ -816,6 +816,9 @@ public partial class DtoGenerator
             }
         }
 
+        // ProjectFields + ApplyIncludes (only when Query DSL is available)
+        if (info.HasQueryDsl)
+        {
             // ─── ProjectFields: compile-time field projection ────────────
             sb.AppendLine();
             sb.AppendLine($"    /// <summary>Projects entity fields to a dictionary based on selected field names. No reflection.</summary>");
