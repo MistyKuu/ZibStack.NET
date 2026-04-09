@@ -2,7 +2,9 @@
 
 A collection of .NET source generators and utilities for common application concerns — logging, DTOs, and more.
 
-**[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)**
+**[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)** | **[Live Playground](https://zibstack-net.onrender.com/index.html)**
+
+> **Try the Playground** — edit C# models with `[ImTiredOfCrud]` and see generated endpoints, DTOs, query DSL, form/table schemas update in real-time. Hosted on Render free tier so initial load may be slow — for best experience clone the repo and run locally: `cd packages/ZibStack.NET.UI/sample/SampleApi && dotnet run`
 
 ## Packages
 
