@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 
 namespace ZibStack.NET.Dto;
@@ -47,6 +48,12 @@ public partial class DtoGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {info.Namespace ?? "ZibStack.NET.Dto.Generated"};");
         sb.AppendLine();
+        var dtoList = new List<string>();
+        if (info.CreateRequestName != null) dtoList.Add($"<see cref=\"{info.CreateRequestName}\"/>");
+        if (info.UpdateRequestName != null) dtoList.Add($"<see cref=\"{info.UpdateRequestName}\"/>");
+        if (info.ResponseName != null) dtoList.Add($"<see cref=\"{info.ResponseName}\"/>");
+        if (info.QueryName != null) dtoList.Add($"<see cref=\"{info.QueryName}\"/>");
+        sb.AppendLine($"/// <summary>Auto-generated CRUD endpoints for <see cref=\"{entity}\"/>. Route: {info.Route}. DTOs: {string.Join(", ", dtoList)}</summary>");
         sb.AppendLine($"public static class {entity}Endpoints");
         sb.AppendLine("{");
         sb.AppendLine($"    public static RouteGroupBuilder Map{entity}Endpoints(this IEndpointRouteBuilder app, string? prefix = null, Action<RouteGroupBuilder>? configure = null)");
