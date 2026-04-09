@@ -119,7 +119,6 @@
 <script>
 const $=(s,c=document)=>c.querySelector(s), $$=(s,c=document)=>[...c.querySelectorAll(s)];
 let tableSchema=null,formSchema=null,currentSort=null,currentSortDesc=false,currentPage=1,pageSize=10,editingId=null,activeFilters={},compileTimer,editor,allAttributes=[],lastGenerated=null;
-const demoMode = new URLSearchParams(location.search).has('demo');
 
 // ─── Samples ────────────────────────────────────────────────────────
 const samples = {
@@ -720,13 +719,13 @@ function rF(f){if(f.hidden)return`<input type="hidden" name="${f.name}" id="fiel
   else if(f.uiHint==='slider')i=`<input type="range" name="${f.name}" id="field-${f.name}" min="${f.props?.min??0}" max="${f.props?.max??100}" step="${f.props?.step??1}">`;
   else{const t=f.type==='integer'||f.type==='decimal'?'number':'text';const s=f.type==='decimal'?' step="0.01"':'';i=`<input type="${t}" name="${f.name}" id="field-${f.name}" placeholder="${esc(f.placeholder||'')}"${s} ${f.validation?.minLength?`minlength="${f.validation.minLength}"`:''} ${f.validation?.maxLength?`maxlength="${f.validation.maxLength}"`:''} ${f.validation?.min!=null?`min="${f.validation.min}"`:''} ${f.validation?.max!=null?`max="${f.validation.max}"`:''} ${f.required?'required':''}>`;}
   return`<div class="form-field${fl}"><label for="field-${f.name}">${esc(f.label||f.name)}${f.required?' *':''}</label>${i}<div class="error" id="err-${f.name}"></div></div>`;}
-async function submitForm(e){e.preventDefault();if(!formSchema?.apiUrl)return;if(demoMode){toast('Demo mode — CRUD is read-only','error');return;}const body={};(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')body[f.name]=el.checked;else if(f.type==='integer')body[f.name]=el.value?parseInt(el.value):0;else if(f.type==='decimal')body[f.name]=el.value?parseFloat(el.value):0;else body[f.name]=el.value||null;});
+async function submitForm(e){e.preventDefault();if(!formSchema?.apiUrl)return;const body={};(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')body[f.name]=el.checked;else if(f.type==='integer')body[f.name]=el.value?parseInt(el.value):0;else if(f.type==='decimal')body[f.name]=el.value?parseFloat(el.value):0;else body[f.name]=el.value||null;});
   (formSchema.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});
   try{const isE=editingId!=null;const res=await fetch(isE?`${formSchema.apiUrl}/${editingId}`:formSchema.apiUrl,{method:isE?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(res.ok){toast(isE?'Updated':'Created','success');resetForm();loadData();}else if(res.status===400){const err=await res.json();if(err.errors)Object.entries(err.errors).forEach(([k,m])=>{const e=$(`#err-${k.charAt(0).toLowerCase()+k.slice(1)}`);if(e)e.textContent=Array.isArray(m)?m.join(', '):m;});else toast('Validation failed','error');}else toast(`Error ${res.status}`,'error');}catch(ex){toast(ex.message,'error');}}
 async function editItem(id){if(!formSchema?.apiUrl)return;const r=await fetch(`${formSchema.apiUrl}/${id}`);if(!r.ok)return;const item=await r.json();editingId=id;const ft=$('#form-title');if(ft)ft.textContent=`Edit #${id}`;const sb=$('#submit-btn');if(sb)sb.textContent='Update';(formSchema.fields||[]).forEach(f=>{const el=$(`#field-${f.name}`);if(!el)return;if(f.uiHint==='checkbox')el.checked=!!item[f.name];else el.value=item[f.name]??'';});$('#form-panel').scrollIntoView({behavior:'smooth'});}
 function resetForm(){editingId=null;const ft=$('#form-title');if(ft)ft.textContent=`Create ${formSchema?.name||''}`;const sb=$('#submit-btn');if(sb)sb.textContent='Create';const form=$('#crud-form');if(form)form.reset();(formSchema?.fields||[]).forEach(f=>{const e=$(`#err-${f.name}`);if(e)e.textContent='';});}
-async function deleteItem(id){if(demoMode){toast('Demo mode — CRUD is read-only','error');return;}if(!formSchema?.apiUrl||!confirm('Delete?'))return;const r=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(r.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
+async function deleteItem(id){if(!formSchema?.apiUrl||!confirm('Delete?'))return;const r=await fetch(`${formSchema.apiUrl}/${id}`,{method:'DELETE'});if(r.ok){toast('Deleted','success');loadData();}else toast('Failed','error');}
 function toast(m,t){const e=document.createElement('div');e.className=`toast ${t}`;e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),3e3);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
