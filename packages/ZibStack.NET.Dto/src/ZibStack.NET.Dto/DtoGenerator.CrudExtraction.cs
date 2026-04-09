@@ -404,8 +404,11 @@ public partial class DtoGenerator
                             if (subType.TypeKind == TypeKind.Class && subType.SpecialType == SpecialType.None && subType.ToDisplayString() != "string") continue;
                             if (subType.TypeKind == TypeKind.Interface || subType.TypeKind == TypeKind.Array) continue;
 
+                            // tags.name = Any (default), tags.any.name = Any (explicit), tags.all.name = All
                             collectionPaths.Add(new QueryCollectionPath(
                                 $"{prop.Name.ToLowerInvariant()}.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), subIsValueType));
+                            collectionPaths.Add(new QueryCollectionPath(
+                                $"{prop.Name.ToLowerInvariant()}.any.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), subIsValueType));
                             collectionPaths.Add(new QueryCollectionPath(
                                 $"{prop.Name.ToLowerInvariant()}.all.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), subIsValueType));
                         }

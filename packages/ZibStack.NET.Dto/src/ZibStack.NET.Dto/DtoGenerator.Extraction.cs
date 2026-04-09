@@ -522,6 +522,8 @@ public partial class DtoGenerator
                         collectionPaths.Add(new QueryCollectionPath(
                             $"{prop.Name.ToLowerInvariant()}.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), stv));
                         collectionPaths.Add(new QueryCollectionPath(
+                            $"{prop.Name.ToLowerInvariant()}.any.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), stv));
+                        collectionPaths.Add(new QueryCollectionPath(
                             $"{prop.Name.ToLowerInvariant()}.all.{subProp.Name.ToLowerInvariant()}", prop.Name, elementType.ToDisplayString(), subProp.Name, subProp.Type.ToDisplayString(), stv));
                     }
                 }
