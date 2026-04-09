@@ -206,12 +206,14 @@ public static class PlaygroundEndpoint
 
         var diagnostics = finalCompilation.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
-            .Where(d => !d.Id.StartsWith("CS0012"))
+            .Where(d => !d.Id.StartsWith("CS0012") && !d.Id.StartsWith("CS0009"))
             .Select(d => d.GetMessage())
             .Take(10)
             .ToList();
 
-        if (diagnostics.Count > 0 && result.FormSchema == null && result.TableSchema == null)
+        // Only report errors if no schemas were generated at all
+        // (generated code may have errors from missing ASP.NET/EF refs — that's OK for schema preview)
+        if (diagnostics.Count > 0 && result.FormSchema == null && result.TableSchema == null && result.Generated.Count == 0)
             result.Error = string.Join("\n", diagnostics);
 
         return result;
@@ -238,7 +240,26 @@ public static class PlaygroundEndpoint
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) AddAssembly(asm);
         AddAssembly(typeof(object).Assembly);
         AddAssembly(typeof(Enumerable).Assembly);
+        AddAssembly(typeof(Queryable).Assembly);
+        AddAssembly(typeof(IQueryable).Assembly);
         AddAssembly(typeof(System.ComponentModel.DataAnnotations.RequiredAttribute).Assembly);
+
+        // Ensure all core runtime assemblies are included
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll"))
+        {
+            if (assemblies.Contains(dll)) continue;
+            try
+            {
+                // Skip native DLLs by trying to open as managed
+                using var fs = File.OpenRead(dll);
+                using var peReader = new System.Reflection.PortableExecutable.PEReader(fs);
+                if (!peReader.HasMetadata) continue;
+                refs.Add(MetadataReference.CreateFromFile(dll));
+                assemblies.Add(dll);
+            }
+            catch { }
+        }
         return refs.ToArray();
     }
 
