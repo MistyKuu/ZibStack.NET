@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/node_modules/
+docs/node_modules/
+docs/dist/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+.git/

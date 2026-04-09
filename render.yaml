@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: zibstack-playground
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
