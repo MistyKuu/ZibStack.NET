@@ -108,11 +108,23 @@ public partial class DtoGenerator
                 sb.AppendLine($"        group.MapGet(\"\", {asyncKeyword}([Microsoft.AspNetCore.Http.AsParameters] {fqQuery} query,");
                 sb.AppendLine($"            {storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
-                sb.AppendLine("            var q = query.Apply(store.Query());");
+                sb.AppendLine("            var q = store.Query();");
                 if (info.HasQueryDsl)
                 {
-                    sb.AppendLine($"            q = {fqQuery}.ApplyDslFilter(q, filter);");
-                    sb.AppendLine($"            q = {fqQuery}.ApplyDslSort(q, sort);");
+                    // DSL takes priority when filter/sort strings are provided, otherwise use typed params
+                    sb.AppendLine("            if (filter is not null || sort is not null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine($"                q = {fqQuery}.ApplyDslFilter(q, filter);");
+                    sb.AppendLine($"                q = {fqQuery}.ApplyDslSort(q, sort);");
+                    sb.AppendLine("            }");
+                    sb.AppendLine("            else");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                q = query.Apply(q);");
+                    sb.AppendLine("            }");
+                }
+                else
+                {
+                    sb.AppendLine("            q = query.Apply(q);");
                 }
             }
             else
