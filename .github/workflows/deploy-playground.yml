@@ -1,0 +1,30 @@
+name: Deploy Playground
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packages/ZibStack.NET.UI/sample/SampleApi/**'
+      - 'packages/ZibStack.NET.Dto/src/**'
+      - 'packages/ZibStack.NET.UI/src/**'
+      - 'packages/ZibStack.NET.Core/src/**'
+      - 'packages/ZibStack.NET.Validation/src/**'
+      - 'packages/ZibStack.NET.Query/src/**'
+      - 'Dockerfile'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Render
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+            curl -s "$RENDER_DEPLOY_HOOK"
+            echo "Deploy triggered"
+          else
+            echo "RENDER_DEPLOY_HOOK secret not set — skipping"
+          fi
