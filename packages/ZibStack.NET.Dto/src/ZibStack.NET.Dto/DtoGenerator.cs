@@ -409,6 +409,9 @@ public partial class DtoGenerator : IIncrementalGenerator
                 var source = GenerateControllerSource(info);
                 spc.AddSource($"{info.FullyQualifiedName}.Controller.g.cs", source);
             }
+
+            // Emit code map partial class with summary linking to all generated types
+            spc.AddSource($"{info.FullyQualifiedName}.CodeMap.g.cs", GenerateCodeMap(info));
         });
 
         // [ImTiredOfCrud] (from ZibStack.NET.UI) → CRUD endpoints
@@ -434,6 +437,7 @@ public partial class DtoGenerator : IIncrementalGenerator
                 spc.AddSource($"{info.FullyQualifiedName}.Endpoints.Model.g.cs", GenerateMinimalApiSource(info));
             if (info.Style == StyleController || info.Style == StyleBoth)
                 spc.AddSource($"{info.FullyQualifiedName}.Controller.Model.g.cs", GenerateControllerSource(info));
+            spc.AddSource($"{info.FullyQualifiedName}.CodeMap.Model.g.cs", GenerateCodeMap(info));
         });
     }
 

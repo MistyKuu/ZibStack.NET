@@ -2,6 +2,12 @@
 
 A collection of .NET source generators and utilities for common application concerns — logging, DTOs, and more.
 
+
+Why?
+Logs - In enterprise systems it's important to have logs everywhere. It is a bit annoying to wrap every single mkethod in try catch just for logs. [Log] attributes adds logs to every public method in the class.
+Again logs - LogInformation and other Log methods from ILogger are annoying because for structured logging to work you need to do _logger.LogInformation("Hey {user}", userObject) instead of just _logger.LogInformation($"Hey {user}"). YOu cant use interpolated strings. Ex m
+
+
 **[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)** | **[Live Playground](https://zibstack-net.onrender.com/index.html)**
 
 > **Try the Playground** — edit C# models with `[ImTiredOfCrud]` and see generated endpoints, DTOs, query DSL, form/table schemas update in real-time. Hosted on Render free tier so initial load may be slow — for best experience clone the repo and run locally: `cd packages/ZibStack.NET.UI/sample/SampleApi && dotnet run`
