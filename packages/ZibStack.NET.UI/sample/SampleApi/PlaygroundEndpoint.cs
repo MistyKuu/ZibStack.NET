@@ -243,6 +243,7 @@ public static class PlaygroundEndpoint
         AddAssembly(typeof(Queryable).Assembly);
         AddAssembly(typeof(IQueryable).Assembly);
         AddAssembly(typeof(System.ComponentModel.DataAnnotations.RequiredAttribute).Assembly);
+        AddAssembly(typeof(ZibStack.NET.Query.FilterParser).Assembly);
 
         // Ensure all core runtime assemblies are included
         var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
