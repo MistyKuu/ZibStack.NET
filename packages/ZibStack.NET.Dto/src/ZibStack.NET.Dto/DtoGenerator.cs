@@ -22,6 +22,7 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string FlattenAttributeFqn = "ZibStack.NET.Dto.FlattenAttribute";
     private const string RenamePropertyAttributeFqn = "ZibStack.NET.Dto.RenamePropertyAttribute";
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
+    private const string ZQueryAttributeFqn = "ZibStack.NET.Dto.ZQueryAttribute";
     private const string ResponseDtoAttributeFqn = "ZibStack.NET.Dto.ResponseDtoAttribute";
     private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
     private const string QueryIgnoreAttributeFqn = "ZibStack.NET.Dto.QueryIgnoreAttribute";
@@ -256,6 +257,24 @@ public partial class DtoGenerator : IIncrementalGenerator
             info.HasEfCore = hasEf;
             var source = GenerateQueryDtoSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Query.g.cs", source);
+        });
+
+        // Find [ZQuery] classes (standalone alias for [QueryDto])
+        var zQueryDeclarations = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                ZQueryAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetQueryDtoInfo(ctx, ZQueryAttributeFqn))
+            .Where(static info => info is not null)
+            .Select(static (info, _) => info!);
+
+        context.RegisterSourceOutput(zQueryDeclarations.Combine(hasQueryDsl).Combine(hasEfCore), static (spc, pair) =>
+        {
+            var ((info, hasDsl), hasEf) = pair;
+            info.HasQueryDsl = hasDsl;
+            info.HasEfCore = hasEf;
+            var source = GenerateQueryDtoSource(info);
+            spc.AddSource($"{info.FullyQualifiedName}.ZQuery.g.cs", source);
         });
 
         // [CrudApi] auto-implies missing DTO attributes — generate DTOs for classes

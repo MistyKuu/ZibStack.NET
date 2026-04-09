@@ -388,17 +388,20 @@ public partial class DtoGenerator
         return info;
     } catch { return null; } }
 
-    private static QueryDtoInfo? GetQueryDtoInfo(GeneratorAttributeSyntaxContext context)
+    private static QueryDtoInfo? GetQueryDtoInfo(GeneratorAttributeSyntaxContext context, string? attrFqn = null)
     { try {
         var symbol = (INamedTypeSymbol)context.TargetSymbol;
+        var fqn = attrFqn ?? QueryDtoAttributeFqn;
 
         var attr = symbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == QueryDtoAttributeFqn);
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == fqn);
 
         if (attr is null) return null;
 
         var nameArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
-        var sortable = attr.NamedArguments.FirstOrDefault(a => a.Key == "Sortable").Value.Value is true;
+        // [ZQuery] defaults Sortable=true, [QueryDto] defaults false
+        var sortableRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "Sortable").Value.Value;
+        var sortable = sortableRaw is true || (sortableRaw is null && fqn == ZQueryAttributeFqn);
         var defaultSort = attr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSort").Value.Value as string;
         var defaultSortDirectionRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSortDirection").Value.Value;
         var defaultSortDirection = defaultSortDirectionRaw is int d ? d : 0;

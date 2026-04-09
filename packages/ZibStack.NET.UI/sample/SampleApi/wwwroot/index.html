@@ -82,6 +82,7 @@
     <option value="validation">Validation</option>
     <option value="utility-types">Utility Types (Pick, Omit, Partial)</option>
     <option value="relations">Relations + Entity</option>
+    <option value="zquery">ZQuery — Standalone DSL</option>
   </select>
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="data">Data</div>
@@ -395,6 +396,39 @@ public partial class Player
     [OneToOne]
     public Team? Team { get; set; }
 }`,
+
+zquery: `// [ZQuery] — standalone query DSL without CRUD or UI
+// Generates: typed filter/sort + DSL filter/sort/select
+// Use on any model — no endpoints, no DTOs, just query capabilities.
+
+[ZQuery(DefaultSort = "Name")]
+public partial class Product
+{
+    public int Id { get; set; }
+
+    [ZRequired] [ZMaxLength(200)]
+    public string Name { get; set; } = "";
+
+    public string? Category { get; set; }
+    public decimal Price { get; set; }
+    public int Stock { get; set; }
+    public bool IsActive { get; set; }
+}
+
+// Usage in your code:
+// var query = dbContext.Products.AsQueryable();
+//
+// // Typed approach:
+// var q = new ProductQuery { Name = "laptop", SortBy = "Price", SortDirection = SortDirection.Desc };
+// query = q.Apply(query);
+//
+// // DSL approach (from query string):
+// query = ProductQuery.ApplyDslFilter(query, "Price>100,Category=*electronics/i");
+// query = ProductQuery.ApplyDslSort(query, "-Price,Name");
+//
+// // Select specific fields:
+// var fields = SelectParser.Parse("Name,Price");
+// var projected = items.Select(e => ProductQuery.ProjectFields(e, fields));`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }

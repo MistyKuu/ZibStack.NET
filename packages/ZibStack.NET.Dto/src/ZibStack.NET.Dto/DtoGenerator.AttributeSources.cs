@@ -168,7 +168,7 @@ namespace ZibStack.NET.Dto
 #nullable enable
 namespace ZibStack.NET.Dto
 {
-    /// <summary>Generates a query/filter DTO with all properties nullable + ApplyFilter(IQueryable).</summary>
+    /// <summary>Generates a query/filter DTO with all properties nullable + ApplyFilter(IQueryable). When ZibStack.NET.Query is referenced, also generates ApplyDslFilter, ApplyDslSort, ProjectFields. Alias: [ZQuery].</summary>
     [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
     internal sealed class QueryDtoAttribute : System.Attribute
     {
@@ -178,6 +178,16 @@ namespace ZibStack.NET.Dto
         /// <summary>Default sort property name (used when SortBy is null).</summary>
         public string? DefaultSort { get; set; }
         /// <summary>Default sort direction when SortDirection is null. Defaults to Asc.</summary>
+        public ZibStack.NET.Dto.SortDirection DefaultSortDirection { get; set; }
+    }
+
+    /// <summary>Standalone query DSL: generates a query record with typed filter/sort + DSL filter/sort/select/includes. Same as [QueryDto] — use whichever name you prefer.</summary>
+    [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
+    internal sealed class ZQueryAttribute : System.Attribute
+    {
+        public string? Name { get; set; }
+        public bool Sortable { get; set; } = true;
+        public string? DefaultSort { get; set; }
         public ZibStack.NET.Dto.SortDirection DefaultSortDirection { get; set; }
     }
 }
