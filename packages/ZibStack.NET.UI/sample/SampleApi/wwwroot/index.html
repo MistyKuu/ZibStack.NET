@@ -91,6 +91,7 @@
     <div class="tab" data-tab="query">Query</div>
     <div class="tab" data-tab="database">Database</div>
     <div class="tab" data-tab="ui">UI</div>
+    <div class="tab" data-tab="examples">Examples</div>
     <div class="tab" data-tab="schema">JSON</div>
   </div>
   <div class="status-bar" id="status">Loading...</div>
@@ -108,6 +109,7 @@
     <div class="tab-content" id="tab-query"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-database"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-ui"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-examples"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-schema"><div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table"></pre></div><div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form"></pre></div></div>
   </div>
 </div>
@@ -515,6 +517,7 @@ async function compile() {
     renderCodeTab('tab-query',gf.filter(f=>f.category==='Query'),'Query DSL');
     renderCodeTab('tab-database',gf.filter(f=>f.category==='Database'),'Database');
     renderCodeTab('tab-ui',gf.filter(f=>f.category==='UI'),'UI Descriptors');
+    renderExamples();
     currentSort=tableSchema?.defaultSort?.column||null;currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
     currentPage=1;activeFilters={};editingId=null; renderTable();renderForm();loadData();
   } catch(ex){status.className='status-bar error';status.textContent=ex.message;}
@@ -528,6 +531,115 @@ function hlCs(src){const tks=[];let i=0;function tk(c,t){const id=`\x00${i++}\x0
   s=s.replace(/\b(public|private|static|partial|class|record|namespace|using|return|var|new|if|else|switch|case|async|await|readonly|override|virtual|sealed|int|string|bool|decimal|double|float|long|void|null|true|false|this|typeof|nameof|is|not|in|out)\b/g,m=>tk('kw',m));
   s=s.replace(/\b(IQueryable|Task|List|Dictionary|HashSet|CancellationToken|IEnumerable|ValueTask|IOrderedQueryable|PatchField|DtoValidationResult|ICanCreate|ICanApply|ICanValidate)\b/g,m=>tk('type',m));
   tks.forEach(t=>{s=s.replace(t.id,t.h);});return s;}
+
+function renderExamples() {
+  const el=$('#tab-examples');
+  if (!tableSchema && !formSchema) { el.innerHTML='<div class="empty">No schemas generated — add [ImTiredOfCrud], [CrudApi], [ZQuery], [UiForm], or [UiTable]</div>'; return; }
+  let h = '';
+  const api = tableSchema?.apiUrl || formSchema?.apiUrl || '/api/{entity}';
+  const key = tableSchema?.keyProperty || formSchema?.keyProperty || 'id';
+  const cols = (tableSchema?.columns || []).filter(c => c.visible !== false);
+  const filterCols = cols.filter(c => c.filterable);
+  const sortCols = cols.filter(c => c.sortable);
+
+  // ─── CRUD Examples ───
+  if (tableSchema?.apiUrl) {
+    h += `<div class="panel"><h2>CRUD Endpoints</h2>`;
+    h += ex('List all', 'GET', `${api}`);
+    h += ex('Get by ID', 'GET', `${api}/1`);
+    h += ex('Create', 'POST', `${api}`, `{ ${cols.slice(0,3).map(c=>'"'+c.name+'": ...').join(', ')} }`);
+    h += ex('Update', 'PATCH', `${api}/1`, `{ "${cols[1]?.name||'name'}": "new value" }`);
+    h += ex('Delete', 'DELETE', `${api}/1`);
+    h += `</div>`;
+  }
+
+  // ─── Filter Examples ───
+  if (filterCols.length) {
+    h += `<div class="panel"><h2>Filter Examples</h2>`;
+    h += `<p style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem">Syntax: <code>?filter=Field{op}Value</code> — combine with <code>,</code> (AND) or <code>|</code> (OR)</p>`;
+
+    filterCols.forEach(c => {
+      const ops = c.filterOperators || ['='];
+      if (c.type === 'string') {
+        h += ex('Equals', 'GET', `${api}?filter=${C(c.name)}=SomeValue`);
+        if (ops.includes('=*')) h += ex('Contains', 'GET', `${api}?filter=${C(c.name)}=*keyword`);
+        if (ops.includes('^')) h += ex('Starts with', 'GET', `${api}?filter=${C(c.name)}^prefix`);
+        if (ops.includes('=*')) h += ex('Case insensitive', 'GET', `${api}?filter=${C(c.name)}=*keyword/i`);
+        if (ops.includes('=in=')) h += ex('IN list', 'GET', `${api}?filter=${C(c.name)}=in=Value1;Value2;Value3`);
+      } else if (c.type === 'integer' || c.type === 'decimal') {
+        h += ex('Greater than', 'GET', `${api}?filter=${C(c.name)}>100`);
+        h += ex('Range (AND)', 'GET', `${api}?filter=${C(c.name)}>=10,${C(c.name)}<=500`);
+        if (ops.includes('=in=')) h += ex('IN values', 'GET', `${api}?filter=${C(c.name)}=in=10;20;30`);
+      } else if (c.type === 'boolean') {
+        h += ex('Boolean', 'GET', `${api}?filter=${C(c.name)}=true`);
+      } else if (c.type === 'enum' && c.options) {
+        h += ex('Enum equals', 'GET', `${api}?filter=${C(c.name)}=${c.options[0]}`);
+        if (ops.includes('=in=')) h += ex('Enum IN', 'GET', `${api}?filter=${C(c.name)}=in=${c.options.slice(0,2).join(';')}`);
+      }
+    });
+    h += `</div>`;
+  }
+
+  // ─── OR + Grouping ───
+  if (filterCols.length >= 2) {
+    const a = filterCols[0], b = filterCols[1];
+    h += `<div class="panel"><h2>OR, Grouping, Combined</h2>`;
+    h += ex('OR', 'GET', `${api}?filter=${C(a.name)}${a.type==='string'?'=*A':'>=50'}|${C(b.name)}${b.type==='string'?'=*B':'<=10'}`);
+    h += ex('Grouping', 'GET', `${api}?filter=(${C(a.name)}${a.type==='string'?'=*A':'>=50'}|${C(a.name)}${a.type==='string'?'=*B':'<=10'}),${C(b.name)}${b.type==='string'?'!=X':'>=1'}`);
+    if (sortCols.length) h += ex('Filter + Sort + Pagination', 'GET', `${api}?filter=${C(filterCols[0].name)}${filterCols[0].type==='string'?'=*test':'>10'}&sort=-${C(sortCols[0].name)}&page=1&pageSize=10`);
+    h += `</div>`;
+  }
+
+  // ─── Sort Examples ───
+  if (sortCols.length) {
+    h += `<div class="panel"><h2>Sort Examples</h2>`;
+    h += ex('Ascending', 'GET', `${api}?sort=${C(sortCols[0].name)}`);
+    h += ex('Descending', 'GET', `${api}?sort=-${C(sortCols[0].name)}`);
+    if (sortCols.length >= 2) h += ex('Multi-field', 'GET', `${api}?sort=-${C(sortCols[0].name)},${C(sortCols[1].name)}`);
+    h += `</div>`;
+  }
+
+  // ─── Select Examples ───
+  if (cols.length >= 2) {
+    h += `<div class="panel"><h2>Select (Field Projection)</h2>`;
+    h += ex('Select fields', 'GET', `${api}?select=${cols.slice(0,3).map(c=>C(c.name)).join(',')}`);
+    if (filterCols.length && sortCols.length) h += ex('Select + Filter + Sort', 'GET', `${api}?select=${cols.slice(0,2).map(c=>C(c.name)).join(',')}&filter=${C(filterCols[0].name)}${filterCols[0].type==='string'?'=*a':'>0'}&sort=-${C(sortCols[0].name)}`);
+    h += `</div>`;
+  }
+
+  // ─── Form Examples ───
+  if (formSchema?.apiUrl) {
+    const fields = formSchema.fields || [];
+    h += `<div class="panel"><h2>Form Submit</h2>`;
+    const createBody = {};
+    fields.filter(f=>!f.hidden).slice(0,5).forEach(f => {
+      if (f.type==='integer') createBody[f.name]=0;
+      else if (f.type==='decimal') createBody[f.name]=0.0;
+      else if (f.type==='boolean') createBody[f.name]=false;
+      else if (f.type==='enum'&&f.options) createBody[f.name]=f.options[0].value;
+      else createBody[f.name]='...';
+    });
+    h += ex('Create', 'POST', formSchema.apiUrl, JSON.stringify(createBody, null, 2));
+    h += ex('Update (partial)', 'PATCH', `${formSchema.apiUrl}/1`, `{ "${fields[0]?.name||'name'}": "updated" }`);
+    h += `</div>`;
+  }
+
+  el.innerHTML = h || '<div class="empty">No examples available</div>';
+}
+
+function ex(label, method, url, body) {
+  const mc = {GET:'var(--accent)',POST:'var(--success)',PATCH:'#f59e0b',DELETE:'var(--danger)'}[method]||'var(--muted)';
+  return `<div style="margin-bottom:.6rem">
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem">${esc(label)}</div>
+    <div style="display:flex;align-items:start;gap:.4rem">
+      <span style="color:${mc};font-weight:600;font-size:.75rem;min-width:3rem">${method}</span>
+      <code style="font-size:.75rem;color:var(--text);word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent);toast('Copied!','success')">${esc(url)}</code>
+    </div>
+    ${body ? `<pre class="code" style="margin-top:.25rem;max-height:80px;font-size:.7rem">${esc(body)}</pre>` : ''}
+  </div>`;
+}
+
+function C(name) { return name.charAt(0).toUpperCase() + name.slice(1); }
 
 // ─── Table ──
 function renderTable(){if(!tableSchema){$('#table-panel').innerHTML='<div class="empty">No table schema</div>';return;}const cols=tableSchema.columns.filter(c=>c.visible!==false),p=$('#table-panel');
