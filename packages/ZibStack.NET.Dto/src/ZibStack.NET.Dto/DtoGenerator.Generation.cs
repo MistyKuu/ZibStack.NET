@@ -710,12 +710,33 @@ public partial class DtoGenerator
 
             // Convenience: ApplyFilterAndSort
             sb.AppendLine();
-            sb.AppendLine($"    public IQueryable<{info.ClassName}> Apply(IQueryable<{info.ClassName}> query)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        query = ApplyFilter(query);");
-            sb.AppendLine("        query = ApplySort(query);");
-            sb.AppendLine("        return query;");
-            sb.AppendLine("    }");
+            if (info.HasQueryDsl)
+            {
+                sb.AppendLine($"    /// <summary>Applies typed params or DSL filter/sort. DSL takes priority when provided.</summary>");
+                sb.AppendLine($"    public IQueryable<{info.ClassName}> Apply(IQueryable<{info.ClassName}> query, string? filter = null, string? sort = null)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        if (filter is not null || sort is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            query = ApplyDslFilter(query, filter);");
+                sb.AppendLine($"            query = ApplyDslSort(query, sort);");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine("            query = ApplyFilter(query);");
+                sb.AppendLine("            query = ApplySort(query);");
+                sb.AppendLine("        }");
+                sb.AppendLine("        return query;");
+                sb.AppendLine("    }");
+            }
+            else
+            {
+                sb.AppendLine($"    public IQueryable<{info.ClassName}> Apply(IQueryable<{info.ClassName}> query)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        query = ApplyFilter(query);");
+                sb.AppendLine("        query = ApplySort(query);");
+                sb.AppendLine("        return query;");
+                sb.AppendLine("    }");
+            }
         }
 
         // DSL filter/sort methods (when ZibStack.NET.Query is referenced)

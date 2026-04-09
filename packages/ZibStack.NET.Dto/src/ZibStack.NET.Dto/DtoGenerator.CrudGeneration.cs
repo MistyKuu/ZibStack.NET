@@ -110,22 +110,9 @@ public partial class DtoGenerator
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
                 if (info.HasQueryDsl)
-                {
-                    // DSL takes priority when filter/sort strings are provided, otherwise use typed params
-                    sb.AppendLine("            if (filter is not null || sort is not null)");
-                    sb.AppendLine("            {");
-                    sb.AppendLine($"                q = {fqQuery}.ApplyDslFilter(q, filter);");
-                    sb.AppendLine($"                q = {fqQuery}.ApplyDslSort(q, sort);");
-                    sb.AppendLine("            }");
-                    sb.AppendLine("            else");
-                    sb.AppendLine("            {");
-                    sb.AppendLine("                q = query.Apply(q);");
-                    sb.AppendLine("            }");
-                }
+                    sb.AppendLine("            q = query.Apply(q, filter, sort);");
                 else
-                {
                     sb.AppendLine("            q = query.Apply(q);");
-                }
             }
             else
             {
