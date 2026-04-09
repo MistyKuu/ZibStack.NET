@@ -399,7 +399,14 @@ public partial class Player
 
 zquery: `// [ZQuery] — standalone query DSL without CRUD or UI
 // Generates: typed filter/sort + DSL filter/sort/select
-// Use on any model — no endpoints, no DTOs, just query capabilities.
+// Supports nested relations via dot notation (Team.Name, Team.City)
+
+public partial class Category
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Region { get; set; }
+}
 
 [ZQuery(DefaultSort = "Name")]
 public partial class Product
@@ -409,26 +416,33 @@ public partial class Product
     [ZRequired] [ZMaxLength(200)]
     public string Name { get; set; } = "";
 
-    public string? Category { get; set; }
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public bool IsActive { get; set; }
+
+    // Relation — enables dot notation: Category.Name, Category.Region
+    public int? CategoryId { get; set; }
+    [OneToOne]
+    public Category? Category { get; set; }
 }
 
-// Usage in your code:
-// var query = dbContext.Products.AsQueryable();
+// Generated ProductQuery supports:
 //
-// // Typed approach:
-// var q = new ProductQuery { Name = "laptop", SortBy = "Price", SortDirection = SortDirection.Desc };
-// query = q.Apply(query);
+// Flat fields:
+//   q.ApplyFilter(query, "Price>100,Name=*laptop/i")
+//   q.ApplySort(query, "-Price,Name")
 //
-// // DSL approach (from query string):
-// query = ProductQuery.ApplyDslFilter(query, "Price>100,Category=*electronics/i");
-// query = ProductQuery.ApplyDslSort(query, "-Price,Name");
+// Nested via dot notation (auto JOIN in EF Core):
+//   q.ApplyFilter(query, "Category.Name=Electronics")
+//   q.ApplyFilter(query, "Category.Region=*europe/i")
+//   q.ApplySort(query, "Category.Name")
 //
-// // Select specific fields:
-// var fields = SelectParser.Parse("Name,Price");
-// var projected = items.Select(e => ProductQuery.ProjectFields(e, fields));`,
+// Combined:
+//   q.Apply(query, "Price>50,Category.Name=Electronics", "-Price")
+//
+// Select with nested:
+//   ProductQuery.ProjectFields(entity, {"name", "price", "category.name"})
+//   → { "name": "Laptop", "price": 1299, "category": { "name": "Electronics" } }`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
