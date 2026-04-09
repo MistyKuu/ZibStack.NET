@@ -7,6 +7,7 @@ namespace SampleApi;
 
 public static class PlaygroundEndpoint
 {
+    private static readonly Lazy<GeneratorDriver> CombinedDriver = new(LoadCombinedDriver);
     private static readonly Lazy<(GeneratorDriver UiDriver, GeneratorDriver DtoDriver, GeneratorDriver CoreDriver, GeneratorDriver ValidationDriver)> Drivers = new(LoadGenerators);
     private static readonly Lazy<MetadataReference[]> References = new(LoadReferences);
 
@@ -140,23 +141,14 @@ public static class PlaygroundEndpoint
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithNullableContextOptions(NullableContextOptions.Enable));
 
-        var (uiDriver, dtoDriver, coreDriver, validationDriver) = Drivers.Value;
         var result = new PlaygroundResult();
 
-        // Validation first — emits attribute definitions that other generators reference
-        var validationResult = validationDriver.RunGeneratorsAndUpdateCompilation(compilation, out var updatedCompilation, out _);
-        compilation = updatedCompilation as CSharpCompilation ?? (CSharpCompilation)updatedCompilation;
-
-        var coreResult = coreDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
-        compilation = updatedCompilation as CSharpCompilation ?? (CSharpCompilation)updatedCompilation;
-
-        var uiResult = uiDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
-        compilation = updatedCompilation as CSharpCompilation ?? (CSharpCompilation)updatedCompilation;
-
-        var dtoResult = dtoDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
+        // Run ALL generators together so PostInit attributes are visible across generators
+        var driver = CombinedDriver.Value;
+        var driverResult = driver.RunGeneratorsAndUpdateCompilation(compilation, out var finalCompilation, out _);
 
         // Categorize all generated sources
-        foreach (var genResult in new[] { uiResult, coreResult, dtoResult, validationResult })
+        foreach (var genResult in new[] { driverResult })
         {
             foreach (var result2 in genResult.GetRunResult().Results)
             foreach (var gen in result2.GeneratedSources)
@@ -212,7 +204,7 @@ public static class PlaygroundEndpoint
             }
         }
 
-        var diagnostics = compilation.GetDiagnostics()
+        var diagnostics = finalCompilation.GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .Where(d => !d.Id.StartsWith("CS0012"))
             .Select(d => d.GetMessage())
@@ -248,6 +240,14 @@ public static class PlaygroundEndpoint
         AddAssembly(typeof(Enumerable).Assembly);
         AddAssembly(typeof(System.ComponentModel.DataAnnotations.RequiredAttribute).Assembly);
         return refs.ToArray();
+    }
+
+    private static GeneratorDriver LoadCombinedDriver()
+    {
+        var allGens = new List<ISourceGenerator>();
+        foreach (var name in new[] { "ZibStack.NET.Validation", "ZibStack.NET.Core", "ZibStack.NET.UI", "ZibStack.NET.Dto" })
+            allGens.AddRange(LoadGenerator(name));
+        return CSharpGeneratorDriver.Create(allGens.ToArray());
     }
 
     private static (GeneratorDriver, GeneratorDriver, GeneratorDriver, GeneratorDriver) LoadGenerators()
