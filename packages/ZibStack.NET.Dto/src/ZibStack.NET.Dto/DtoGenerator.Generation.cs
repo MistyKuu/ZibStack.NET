@@ -592,14 +592,14 @@ public partial class DtoGenerator
 
             if (!prop.IsNestedResponse)
             {
-                sb.AppendLine($"            {prop.PropertyName} = entity.{prop.PropertyName},");
+                sb.AppendLine($"            {prop.PropertyName} = entity.{prop.SourcePropertyName},");
                 continue;
             }
 
             if (prop.IsNullable)
-                sb.AppendLine($"            {prop.PropertyName} = entity.{prop.PropertyName} is not null ? {prop.NestedResponseName}.FromEntity(entity.{prop.PropertyName}) : null,");
+                sb.AppendLine($"            {prop.PropertyName} = entity.{prop.SourcePropertyName} is not null ? {prop.NestedResponseName}.FromEntity(entity.{prop.SourcePropertyName}) : null,");
             else
-                sb.AppendLine($"            {prop.PropertyName} = {prop.NestedResponseName}.FromEntity(entity.{prop.PropertyName}),");
+                sb.AppendLine($"            {prop.PropertyName} = {prop.NestedResponseName}.FromEntity(entity.{prop.SourcePropertyName}),");
         }
         sb.AppendLine("        };");
         sb.AppendLine("    }");
@@ -619,7 +619,7 @@ public partial class DtoGenerator
             }
 
             if (!prop.IsNestedResponse)
-                sb.AppendLine($"            {prop.PropertyName} = x.{prop.PropertyName},");
+                sb.AppendLine($"            {prop.PropertyName} = x.{prop.SourcePropertyName},");
         }
         sb.AppendLine("        });");
         sb.AppendLine("    }");

@@ -5,6 +5,8 @@ namespace ZibStack.NET.Dto;
 internal sealed class ResponsePropertyInfo
 {
     public string PropertyName { get; }
+    /// <summary>Original entity property name (differs from PropertyName when [RenameProperty] is used).</summary>
+    public string SourcePropertyName { get; }
     public string JsonName { get; }
     public string DisplayTypeName { get; }
     public List<string> ValidationAttributes { get; }
@@ -16,9 +18,10 @@ internal sealed class ResponsePropertyInfo
     public string? FlattenProjection { get; }
     public bool IsFlattened => FlattenSource is not null;
 
-    public ResponsePropertyInfo(string propertyName, string jsonName, string displayTypeName, List<string>? validationAttributes = null, bool isNestedResponse = false, bool isNullable = false, string? sourceTypeName = null, string? nestedResponseName = null, string? flattenSource = null, string? flattenProjection = null)
+    public ResponsePropertyInfo(string propertyName, string jsonName, string displayTypeName, List<string>? validationAttributes = null, bool isNestedResponse = false, bool isNullable = false, string? sourceTypeName = null, string? nestedResponseName = null, string? flattenSource = null, string? flattenProjection = null, string? sourcePropertyName = null)
     {
         PropertyName = propertyName;
+        SourcePropertyName = sourcePropertyName ?? propertyName;
         JsonName = jsonName;
         DisplayTypeName = displayTypeName;
         ValidationAttributes = validationAttributes ?? new List<string>();

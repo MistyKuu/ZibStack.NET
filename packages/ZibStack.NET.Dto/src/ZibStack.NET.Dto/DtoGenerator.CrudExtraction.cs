@@ -216,6 +216,19 @@ public partial class DtoGenerator
 
         if (needsResponse)
         {
+            // Collect [RenameProperty] mappings: OriginalName → NewName
+            var renames = new Dictionary<string, string>();
+            foreach (var a in allAttrs)
+            {
+                if (a.AttributeClass?.ToDisplayString() == RenamePropertyAttributeFqn
+                    && a.ConstructorArguments.Length >= 2
+                    && a.ConstructorArguments[0].Value is string origName
+                    && a.ConstructorArguments[1].Value is string newName)
+                {
+                    renames[origName] = newName;
+                }
+            }
+
             var properties = new List<ResponsePropertyInfo>();
             foreach (var prop in GetAllProperties(symbol))
             {
@@ -260,7 +273,9 @@ public partial class DtoGenerator
 
                 if (!hasNestedResponseDto)
                 {
-                    properties.Add(new ResponsePropertyInfo(prop.Name, jsonName, propType2.ToDisplayString(), validationAttrs));
+                    var dtoName = renames.TryGetValue(prop.Name, out var renamed) ? renamed : prop.Name;
+                    var dtoJsonName = renames.ContainsKey(prop.Name) ? ToCamelCase(dtoName) : jsonName;
+                    properties.Add(new ResponsePropertyInfo(dtoName, dtoJsonName, propType2.ToDisplayString(), validationAttrs, sourcePropertyName: prop.Name));
                 }
                 else
                 {
