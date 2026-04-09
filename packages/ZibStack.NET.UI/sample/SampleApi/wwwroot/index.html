@@ -50,6 +50,7 @@
   .actions { display: flex; gap: .25rem; } .actions button { padding: .2rem .5rem; font-size: .7rem; }
   .empty { color: var(--muted); font-style: italic; text-align: center; padding: 2rem; }
   pre.code { background: var(--code-bg); border: 1px solid var(--border); border-radius: .35rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 500px; white-space: pre; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; line-height: 1.4; color: #c9d1d9; }
+  .hl-kw { color: #ff7b72; } .hl-type { color: #79c0ff; } .hl-cmt { color: #8b949e; } .hl-attr { color: #d2a8ff; } .hl-str { color: #a5d6ff; }
   pre.json { background: var(--code-bg); border: 1px solid var(--border); border-radius: .35rem; padding: .75rem; font-size: .75rem; overflow: auto; max-height: 400px; white-space: pre-wrap; font-family: 'Cascadia Code', Consolas, monospace; color: #c9d1d9; }
   .file-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .25rem; }
   .file-header .filename { font-size: .75rem; color: var(--accent); font-family: monospace; }
@@ -230,12 +231,19 @@ function renderCodeTab(tabId, files, title) {
 }
 
 function highlightCSharp(src) {
-  return esc(src)
-    .replace(/\b(public|private|static|partial|class|record|namespace|using|return|var|new|if|else|switch|case|async|await|readonly|override|virtual|sealed|int|string|bool|decimal|void|null|true|false|this|typeof|nameof|is|not)\b/g, '<span style="color:#ff7b72">$1</span>')
-    .replace(/\b(IQueryable|Task|List|Dictionary|HashSet|CancellationToken|IEnumerable|ValueTask|IOrderedQueryable)\b/g, '<span style="color:#79c0ff">$1</span>')
-    .replace(/(\/\/.*)/g, '<span style="color:#8b949e">$1</span>')
-    .replace(/(\[[\w.]+(?:\(.*?\))?\])/g, '<span style="color:#d2a8ff">$1</span>')
-    .replace(/("(?:[^"\\]|\\.)*")/g, '<span style="color:#a5d6ff">$1</span>');
+  // Tokenize to avoid nested replacements
+  const tokens = []; let idx = 0;
+  function tok(cls, text) { const id = `\x00${idx++}\x00`; tokens.push({id, html: `<span class="hl-${cls}">${text}</span>`}); return id; }
+  let s = esc(src);
+  // Order matters: strings first, then comments, then attributes, then keywords
+  s = s.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g, (m) => tok('str', m));
+  s = s.replace(/(\/\/.*)/g, (m) => tok('cmt', m));
+  s = s.replace(/(\[[\w.]+(?:\(.*?\))?\])/g, (m) => tok('attr', m));
+  s = s.replace(/\b(public|private|static|partial|class|record|namespace|using|return|var|new|if|else|switch|case|async|await|readonly|override|virtual|sealed|int|string|bool|decimal|double|float|long|void|null|true|false|this|typeof|nameof|is|not|in|out)\b/g, (m) => tok('kw', m));
+  s = s.replace(/\b(IQueryable|Task|List|Dictionary|HashSet|CancellationToken|IEnumerable|ValueTask|IOrderedQueryable|PatchField|DtoValidationResult|ICanCreate|ICanApply|ICanValidate)\b/g, (m) => tok('type', m));
+  // Restore tokens
+  tokens.forEach(t => { s = s.replace(t.id, t.html); });
+  return s;
 }
 
 // ─── Table ──
