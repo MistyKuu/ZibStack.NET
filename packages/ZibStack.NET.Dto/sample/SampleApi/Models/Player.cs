@@ -12,7 +12,7 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [UiFormGroup("basic", Label = "Basic Info", Order = 1)]
 [UiFormGroup("contact", Label = "Contact", Order = 2)]
 [ColumnPermission("Salary", "finance.read")]
-[Validate]
+[ZValidate]
 public partial class Player
 {
     [DtoIgnore]
@@ -20,17 +20,17 @@ public partial class Player
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required] [MinLength(2)] [MaxLength(50)]
+    [ZRequired] [ZMinLength(2)] [ZMaxLength(50)]
     [UiFormField(Label = "Name", Placeholder = "Enter player name...", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
-    [Range(1, 100)]
+    [ZRange(1, 100)]
     [UiFormField(Label = "Level", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public int Level { get; set; }
 
-    [Email]
+    [ZEmail]
     [UiFormField(Label = "Email", Placeholder = "player@example.com", Group = "contact")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public string? Email { get; set; }
@@ -47,7 +47,7 @@ public partial class Player
 
     [CreateOnly]
     [ResponseIgnore]
-    [MinLength(8)]
+    [ZMinLength(8)]
     [UiFormField(Label = "Password", Group = "contact")]
     [PasswordInput]
     public required string Password { get; set; }

@@ -700,7 +700,7 @@ Per-operation policies override the default `AuthorizePolicy` for specific opera
 | `[ListIgnore]` | Hidden from GET list, visible in GET by ID (e.g. large fields) |
 | `[Flatten]` | Nested object properties flattened into response |
 | `required` | Validated as mandatory in POST, optional in PATCH |
-| `[MinLength]`, `[MaxLength]`, `[Range]`, `[EmailAddress]` | Propagated to generated validation |
+| `[ZMinLength]`, `[ZMaxLength]`, `[ZRange]`, `[EmailAddress]` | Propagated to generated validation |
 
 **Custom DTO names:**
 
@@ -970,14 +970,14 @@ Attributes from `System.ComponentModel.DataAnnotations` are automatically copied
 ```csharp
 public class User
 {
-    [MaxLength(100)]
+    [ZMaxLength(100)]
     [EmailAddress]
     public required string Email { get; set; }
 
-    [Range(1, 999)]
+    [ZRange(1, 999)]
     public int Quantity { get; set; }
 }
-// Generated CreateUserRequest.Email has [MaxLength(100)] and [EmailAddress]
+// Generated CreateUserRequest.Email has [ZMaxLength(100)] and [EmailAddress]
 ```
 
 ### `[Immutable]` properties

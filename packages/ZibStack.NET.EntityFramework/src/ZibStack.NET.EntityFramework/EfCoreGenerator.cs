@@ -396,10 +396,10 @@ namespace ZibStack.NET.EntityFramework
             {
                 var name = attr.AttributeClass?.ToDisplayString();
                 if (name == "System.ComponentModel.DataAnnotations.RequiredAttribute" ||
-                    name == "ZibStack.NET.Validation.RequiredAttribute")
+                    name == "ZibStack.NET.Validation.ZRequiredAttribute")
                     isRequired = true;
                 else if ((name == "System.ComponentModel.DataAnnotations.MaxLengthAttribute" ||
-                          name == "ZibStack.NET.Validation.MaxLengthAttribute")
+                          name == "ZibStack.NET.Validation.ZMaxLengthAttribute")
                          && attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int ml)
                     maxLength = ml;
                 else if ((name == "System.ComponentModel.DataAnnotations.StringLengthAttribute")

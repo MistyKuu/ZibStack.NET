@@ -20,12 +20,12 @@ public partial class PlayerView
     [TableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required] [MinLength(2)]
+    [ZRequired] [ZMinLength(2)]
     [FormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
     [TableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
-    [Range(1, 100)]
+    [ZRange(1, 100)]
     [FormField(Label = "Level", Group = "basic")]
     [TableColumn(Sortable = true)]
     public int Level { get; set; }

@@ -18,22 +18,22 @@ dotnet add package ZibStack.NET.Validation
 ```csharp
 using ZibStack.NET.Validation;
 
-[Validate]
+[ZValidate]
 public partial class CreateUserRequest
 {
-    [Required]
-    [MinLength(2)]
-    [MaxLength(50)]
+    [ZRequired]
+    [ZMinLength(2)]
+    [ZMaxLength(50)]
     public string Name { get; set; } = "";
 
-    [Required]
-    [Email]
+    [ZRequired]
+    [ZEmail]
     public string Email { get; set; } = "";
 
-    [Range(18, 120)]
+    [ZRange(18, 120)]
     public int Age { get; set; }
 
-    [Url]
+    [ZUrl]
     public string? Website { get; set; }
 }
 ```
@@ -58,26 +58,26 @@ if (!result.IsValid)
 
 | Attribute | Target | Description |
 |-----------|--------|-------------|
-| `[Validate]` | Class/Record | Marks the type for validation generation (must be `partial`) |
-| `[Required]` | Property | Must not be null (or empty/whitespace for strings) |
-| `[MinLength(n)]` | Property | String/collection must have at least `n` characters/items |
-| `[MaxLength(n)]` | Property | String/collection must have at most `n` characters/items |
-| `[Range(min, max)]` | Property | Numeric value must be within range (inclusive) |
-| `[Email]` | Property | Must be a valid email address |
-| `[Url]` | Property | Must be a valid absolute URL |
-| `[Match(pattern)]` | Property | Must match the regex pattern |
-| `[NotEmpty]` | Property | Collection must have items; string must not be whitespace |
+| `[ZValidate]` | Class/Record | Marks the type for validation generation (must be `partial`) |
+| `[ZRequired]` | Property | Must not be null (or empty/whitespace for strings) |
+| `[ZMinLength(n)]` | Property | String/collection must have at least `n` characters/items |
+| `[ZMaxLength(n)]` | Property | String/collection must have at most `n` characters/items |
+| `[ZRange(min, max)]` | Property | Numeric value must be within range (inclusive) |
+| `[ZEmail]` | Property | Must be a valid email address |
+| `[ZUrl]` | Property | Must be a valid absolute URL |
+| `[ZMatch(pattern)]` | Property | Must match the regex pattern |
+| `[ZNotEmpty]` | Property | Collection must have items; string must not be whitespace |
 
 All attributes support a `Message` property for custom error messages:
 
 ```csharp
 [Required(Message = "Please provide your name")]
-[Match(@"^\d{3}-\d{4}$", Message = "Phone must be in format XXX-XXXX")]
+[ZMatch(@"^\d{3}-\d{4}$", Message = "Phone must be in format XXX-XXXX")]
 ```
 
 ## IValidatable Interface
 
-All `[Validate]` types implement `IValidatable`:
+All `[ZValidate]` types implement `IValidatable`:
 
 ```csharp
 public interface IValidatable
@@ -111,13 +111,13 @@ public sealed class ValidationResult
 Works with records too:
 
 ```csharp
-[Validate]
+[ZValidate]
 public partial record ProductRequest
 {
-    [Required]
+    [ZRequired]
     public string Sku { get; init; } = "";
 
-    [Range(0, 999999)]
+    [ZRange(0, 999999)]
     public decimal Price { get; init; }
 }
 ```

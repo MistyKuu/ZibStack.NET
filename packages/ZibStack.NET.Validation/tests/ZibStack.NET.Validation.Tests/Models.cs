@@ -2,49 +2,49 @@ using ZibStack.NET.Validation;
 
 namespace ZibStack.NET.Validation.Tests;
 
-[Validate]
+[ZValidate]
 public partial class CreateUserRequest
 {
-    [Required]
-    [MinLength(2)]
-    [MaxLength(50)]
+    [ZRequired]
+    [ZMinLength(2)]
+    [ZMaxLength(50)]
     public string Name { get; set; } = "";
 
-    [Required]
-    [Email]
+    [ZRequired]
+    [ZEmail]
     public string Email { get; set; } = "";
 
-    [Range(18, 120)]
+    [ZRange(18, 120)]
     public int Age { get; set; }
 
-    [Url]
+    [ZUrl]
     public string? Website { get; set; }
 
-    [Match(@"^\+?\d{7,15}$", Message = "Invalid phone number format.")]
+    [ZMatch(@"^\+?\d{7,15}$", Message = "Invalid phone number format.")]
     public string? Phone { get; set; }
 }
 
-[Validate]
+[ZValidate]
 public partial class TeamRequest
 {
-    [Required]
-    [MinLength(1)]
-    [MaxLength(100)]
+    [ZRequired]
+    [ZMinLength(1)]
+    [ZMaxLength(100)]
     public string TeamName { get; set; } = "";
 
-    [NotEmpty]
+    [ZNotEmpty]
     public List<string> Members { get; set; } = new();
 }
 
-[Validate]
+[ZValidate]
 public partial record ProductRecord
 {
-    [Required]
+    [ZRequired]
     public string Sku { get; init; } = "";
 
-    [Range(0, 999999)]
+    [ZRange(0, 999999)]
     public decimal Price { get; init; }
 
-    [MaxLength(500)]
+    [ZMaxLength(500)]
     public string? Description { get; init; }
 }

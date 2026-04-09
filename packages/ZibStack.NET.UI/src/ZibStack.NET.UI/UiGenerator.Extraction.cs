@@ -446,13 +446,13 @@ public partial class UiGenerator
 
             switch (fqn)
             {
-                case "ZibStack.NET.Validation.RequiredAttribute":
+                case "ZibStack.NET.Validation.ZRequiredAttribute":
                 case "System.ComponentModel.DataAnnotations.RequiredAttribute":
                     field.IsRequired = true;
                     field.ValidationRules.Add(new ValidationRuleInfo("required"));
                     break;
 
-                case "ZibStack.NET.Validation.MinLengthAttribute":
+                case "ZibStack.NET.Validation.ZMinLengthAttribute":
                 case "System.ComponentModel.DataAnnotations.MinLengthAttribute":
                     if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int minLen)
                     {
@@ -461,7 +461,7 @@ public partial class UiGenerator
                     }
                     break;
 
-                case "ZibStack.NET.Validation.MaxLengthAttribute":
+                case "ZibStack.NET.Validation.ZMaxLengthAttribute":
                 case "System.ComponentModel.DataAnnotations.MaxLengthAttribute":
                     if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int maxLen)
                     {
@@ -470,7 +470,7 @@ public partial class UiGenerator
                     }
                     break;
 
-                case "ZibStack.NET.Validation.RangeAttribute":
+                case "ZibStack.NET.Validation.ZRangeAttribute":
                 case "System.ComponentModel.DataAnnotations.RangeAttribute":
                     if (attr.ConstructorArguments.Length >= 2)
                     {
@@ -483,15 +483,15 @@ public partial class UiGenerator
                     }
                     break;
 
-                case "ZibStack.NET.Validation.EmailAttribute":
+                case "ZibStack.NET.Validation.ZEmailAttribute":
                     field.ValidationRules.Add(new ValidationRuleInfo("email"));
                     break;
 
-                case "ZibStack.NET.Validation.UrlAttribute":
+                case "ZibStack.NET.Validation.ZUrlAttribute":
                     field.ValidationRules.Add(new ValidationRuleInfo("url"));
                     break;
 
-                case "ZibStack.NET.Validation.MatchAttribute":
+                case "ZibStack.NET.Validation.ZMatchAttribute":
                     if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string pattern)
                     {
                         var rule = new ValidationRuleInfo("pattern") { Pattern = pattern };
@@ -499,7 +499,7 @@ public partial class UiGenerator
                     }
                     break;
 
-                case "ZibStack.NET.Validation.NotEmptyAttribute":
+                case "ZibStack.NET.Validation.ZNotEmptyAttribute":
                     field.ValidationRules.Add(new ValidationRuleInfo("notEmpty"));
                     break;
 

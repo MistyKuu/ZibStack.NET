@@ -885,13 +885,13 @@ public partial class DtoGenerator
         { "System.ComponentModel.DataAnnotations.RegularExpressionAttribute", ValidationRuleKind.Regex },
         { "System.ComponentModel.DataAnnotations.PhoneAttribute", ValidationRuleKind.Phone },
         // ZibStack.NET.Validation
-        { "ZibStack.NET.Validation.MinLengthAttribute", ValidationRuleKind.MinLength },
-        { "ZibStack.NET.Validation.MaxLengthAttribute", ValidationRuleKind.MaxLength },
-        { "ZibStack.NET.Validation.RangeAttribute", ValidationRuleKind.Range },
-        { "ZibStack.NET.Validation.EmailAttribute", ValidationRuleKind.Email },
-        { "ZibStack.NET.Validation.UrlAttribute", ValidationRuleKind.Url },
-        { "ZibStack.NET.Validation.MatchAttribute", ValidationRuleKind.Regex },
-        { "ZibStack.NET.Validation.NotEmptyAttribute", ValidationRuleKind.NotEmpty },
+        { "ZibStack.NET.Validation.ZMinLengthAttribute", ValidationRuleKind.MinLength },
+        { "ZibStack.NET.Validation.ZMaxLengthAttribute", ValidationRuleKind.MaxLength },
+        { "ZibStack.NET.Validation.ZRangeAttribute", ValidationRuleKind.Range },
+        { "ZibStack.NET.Validation.ZEmailAttribute", ValidationRuleKind.Email },
+        { "ZibStack.NET.Validation.ZUrlAttribute", ValidationRuleKind.Url },
+        { "ZibStack.NET.Validation.ZMatchAttribute", ValidationRuleKind.Regex },
+        { "ZibStack.NET.Validation.ZNotEmptyAttribute", ValidationRuleKind.NotEmpty },
     };
 
     private static (List<string> Attributes, List<ValidationRule> Rules) GetValidationAttributes(IPropertySymbol prop)

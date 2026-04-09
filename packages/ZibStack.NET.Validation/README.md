@@ -11,18 +11,18 @@ dotnet add package ZibStack.NET.Validation
 ## Quick Start
 
 ```csharp
-[Validate]
+[ZValidate]
 public partial class CreateUserRequest
 {
-    [Required]
-    [MinLength(2)]
+    [ZRequired]
+    [ZMinLength(2)]
     public string Name { get; set; } = "";
 
-    [Required]
-    [Email]
+    [ZRequired]
+    [ZEmail]
     public string Email { get; set; } = "";
 
-    [Range(18, 120)]
+    [ZRange(18, 120)]
     public int Age { get; set; }
 }
 

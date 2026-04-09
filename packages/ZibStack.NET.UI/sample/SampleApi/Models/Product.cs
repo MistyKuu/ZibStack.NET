@@ -20,7 +20,7 @@ public enum ProductCategory
 //   DTOs:      CreateProductRequest, UpdateProductRequest, ProductResponse, ProductQuery
 //   Form:      GET /api/forms/product   → JSON schema with apiUrl, keyProperty, validation, groups
 //   Table:     GET /api/tables/product  → JSON schema with apiUrl, keyProperty, filterOperators per column
-//   Validation: compile-time Validate() from [Required], [Range], etc.
+//   Validation: compile-time Validate() from [ZRequired], [Range], etc.
 //   Query DSL: ?filter=Price>100,Category=Electronics&sort=-Price&select=Name,Price
 //
 // A frontend reads the table/form schemas and gets everything it needs to render
@@ -35,12 +35,12 @@ public partial class Product
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required] [MaxLength(200)]
+    [ZRequired] [ZMaxLength(200)]
     [UiFormField(Label = "Product Name", Placeholder = "Enter product name...", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
 
-    [MaxLength(1000)]
+    [ZMaxLength(1000)]
     [UiFormField(Label = "Description", Group = "basic")]
     [TextArea(Rows = 3)]
     [UiTableColumn(Filterable = true)]
@@ -51,12 +51,12 @@ public partial class Product
     [UiTableColumn(Sortable = true, Filterable = true)]
     public ProductCategory Category { get; set; }
 
-    [Range(0, 999999)]
+    [ZRange(0, 999999)]
     [UiFormField(Label = "Price", Group = "pricing")]
     [UiTableColumn(Sortable = true, Filterable = true, Format = "currency")]
     public decimal Price { get; set; }
 
-    [Range(0, 10000)]
+    [ZRange(0, 10000)]
     [UiFormField(Label = "Stock", Group = "pricing")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public int Stock { get; set; }

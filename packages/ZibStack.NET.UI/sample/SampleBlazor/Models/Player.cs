@@ -21,14 +21,14 @@ public partial class Player
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required]
-    [MinLength(2)]
-    [MaxLength(50)]
+    [ZRequired]
+    [ZMinLength(2)]
+    [ZMaxLength(50)]
     [UiFormField(Label = "Player Name", Placeholder = "Enter name...", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
-    [Range(1, 100)]
+    [ZRange(1, 100)]
     [Slider(Min = 1, Max = 100)]
     [UiFormField(Group = "basic")]
     [UiTableColumn(Sortable = true)]
@@ -39,14 +39,14 @@ public partial class Player
     [UiTableColumn(Sortable = true, Filterable = true)]
     public PlayerRole Role { get; set; }
 
-    [MaxLength(500)]
+    [ZMaxLength(500)]
     [TextArea(Rows = 3)]
     [UiFormField(Group = "contact", HelpText = "Tell us about yourself")]
     [UiTableIgnore]
     public string? Biography { get; set; }
 
-    [Required]
-    [MinLength(6)]
+    [ZRequired]
+    [ZMinLength(6)]
     [CreateOnly]
     [PasswordInput]
     [UiTableIgnore]
@@ -63,7 +63,7 @@ public partial class Player
     [UiTableColumn(Sortable = true, Format = "yyyy-MM-dd")]
     public DateTime CreatedAt { get; set; }
 
-    [Email]
+    [ZEmail]
     [UiFormField(Group = "contact", Label = "Email Address")]
     [UiTableColumn(Filterable = true)]
     public string? Email { get; set; }

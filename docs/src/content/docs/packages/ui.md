@@ -85,12 +85,12 @@ public partial class VoivodeshipView
     public int Id { get; set; }
 
     // Validation: cross-package with ZibStack.NET.Validation / DataAnnotations
-    [Required] [MinLength(2)] [MaxLength(100)]
+    [ZRequired] [ZMinLength(2)] [ZMaxLength(100)]
     [UiFormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
-    [Required] [Match(@"^[A-Z]{2}$")]
+    [ZRequired] [ZMatch(@"^[A-Z]{2}$")]
     [UiFormField(Label = "Code", HelpText = "Two-letter code (e.g. NY, CA)", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Code { get; set; }
@@ -100,12 +100,12 @@ public partial class VoivodeshipView
     [UiTableColumn(Sortable = true, Filterable = true)]
     public Region Region { get; set; }
 
-    [Required] [Email]
+    [ZRequired] [ZEmail]
     [UiFormField(Label = "Contact Email", Placeholder = "office@example.com", Group = "contact")]
     [UiTableIgnore]
     public required string ContactEmail { get; set; }
 
-    [Url]
+    [ZUrl]
     [UiFormField(Label = "Website", Group = "contact")]
     [UiTableIgnore]
     public string? Website { get; set; }
@@ -123,7 +123,7 @@ public partial class VoivodeshipView
     [Computed]
     public int CountyCount { get; set; }
 
-    [Range(1900, 2100)]
+    [ZRange(1900, 2100)]
     [UiFormField(Label = "Established Year", Group = "basic")]
     [UiTableColumn(Sortable = true)]
     public int EstablishedYear { get; set; }
@@ -522,15 +522,15 @@ public class County
 [UiFormGroup("basic", Label = "Basic Info")]
 public partial class CreateVoivodeshipRequest
 {
-    [Required] [MinLength(2)] [MaxLength(100)]
+    [ZRequired] [ZMinLength(2)] [ZMaxLength(100)]
     [UiFormField(Label = "Name", Placeholder = "e.g. California")]
     public required string Name { get; set; }
 
-    [Required] [Match(@"^[A-Z]{2}$")]
+    [ZRequired] [ZMatch(@"^[A-Z]{2}$")]
     [UiFormField(Label = "Code", Placeholder = "e.g. CA", HelpText = "Two-letter code")]
     public required string Code { get; set; }
 
-    [Range(0, 100_000_000)]
+    [ZRange(0, 100_000_000)]
     [UiFormField(Label = "Population")]
     public int Population { get; set; }
 }
@@ -890,16 +890,16 @@ When referenced, validation attributes are automatically included in form field 
 
 | Attribute | JSON output |
 |-----------|-------------|
-| `[Required]` | `"validation": { "required": true }` |
-| `[MinLength(n)]` | `"validation": { "minLength": n }` |
-| `[MaxLength(n)]` | `"validation": { "maxLength": n }` |
-| `[Range(min, max)]` | `"validation": { "min": min, "max": max }` |
-| `[Email]` | `"validation": { "email": true }` |
-| `[Url]` | `"validation": { "url": true }` |
-| `[Match("regex")]` | `"validation": { "pattern": "regex" }` |
-| `[NotEmpty]` | `"validation": { "notEmpty": true }` |
+| `[ZRequired]` | `"validation": { "required": true }` |
+| `[ZMinLength(n)]` | `"validation": { "minLength": n }` |
+| `[ZMaxLength(n)]` | `"validation": { "maxLength": n }` |
+| `[ZRange(min, max)]` | `"validation": { "min": min, "max": max }` |
+| `[ZEmail]` | `"validation": { "email": true }` |
+| `[ZUrl]` | `"validation": { "url": true }` |
+| `[ZMatch("regex")]` | `"validation": { "pattern": "regex" }` |
+| `[ZNotEmpty]` | `"validation": { "notEmpty": true }` |
 
-Also recognizes `System.ComponentModel.DataAnnotations` equivalents (`[Required]`, `[MinLength]`, `[MaxLength]`, `[Range]`, `[StringLength]`).
+Also recognizes `System.ComponentModel.DataAnnotations` equivalents (`[ZRequired]`, `[ZMinLength]`, `[ZMaxLength]`, `[ZRange]`, `[StringLength]`).
 
 ### ZibStack.NET.Dto
 

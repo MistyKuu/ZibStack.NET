@@ -8,7 +8,7 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [CrudApi]
 [UiForm]
 [UiTable(DefaultSort = "Name")]
-[Validate]
+[ZValidate]
 public partial class Team
 {
     [DtoIgnore]
@@ -16,18 +16,18 @@ public partial class Team
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required] [MaxLength(100)]
+    [ZRequired] [ZMaxLength(100)]
     [UiFormField(Label = "Team Name")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
-    [MaxLength(500)]
+    [ZMaxLength(500)]
     [UiFormField(Label = "Description")]
     [TextArea(Rows = 3)]
     [UiTableColumn(Filterable = false)]
     public string? Description { get; set; }
 
-    [Range(1, 100)]
+    [ZRange(1, 100)]
     [UiFormField(Label = "Max Members")]
     [UiTableColumn(Sortable = true)]
     public int MaxMembers { get; set; }

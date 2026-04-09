@@ -16,7 +16,7 @@ A collection of .NET source generators and utilities for common application conc
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.EntityFramework**](packages/ZibStack.NET.EntityFramework/) | `dotnet add package ZibStack.NET.EntityFramework` | EF Core integration for Dto CRUD API. Auto-generates stores + DI registration from `DbContext`. |
 | [**ZibStack.NET.Dapper**](packages/ZibStack.NET.Dapper/) | `dotnet add package ZibStack.NET.Dapper` | Dapper integration for Dto CRUD API. `DapperCrudStore` base class with auto-generated SQL. |
-| [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[Required]`, `[Email]`, `[Range]`, `[Match]`). |
+| [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[ZRequired]`, `[ZEmail]`, `[ZRange]`, `[ZMatch]`). |
 | [**ZibStack.NET.UI**](packages/ZibStack.NET.UI/) | `dotnet add package ZibStack.NET.UI` | Source generator for UI form/table metadata. Annotate models, get compile-time form descriptors and table column definitions. |
 
 ## Quick Examples
@@ -168,13 +168,13 @@ var result = GetOrder(42)
 ### ZibStack.NET.Validation
 
 ```csharp
-[Validate]
+[ZValidate]
 public partial class CreateUserRequest
 {
-    [Required] [MinLength(2)] public string Name { get; set; } = "";
-    [Required] [Email]        public string Email { get; set; } = "";
-    [Range(18, 120)]          public int Age { get; set; }
-    [Match(@"^\+?\d{7,15}$")] public string? Phone { get; set; }
+    [ZRequired] [ZMinLength(2)] public string Name { get; set; } = "";
+    [ZRequired] [ZEmail]        public string Email { get; set; } = "";
+    [ZRange(18, 120)]          public int Age { get; set; }
+    [ZMatch(@"^\+?\d{7,15}$")] public string? Phone { get; set; }
 }
 
 // Generated Validate() method:
@@ -195,7 +195,7 @@ public partial class PlayerView
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required] [MinLength(2)]
+    [ZRequired] [ZMinLength(2)]
     [UiFormField(Label = "Name", Placeholder = "Enter name...", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }

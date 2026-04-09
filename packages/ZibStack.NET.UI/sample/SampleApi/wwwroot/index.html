@@ -128,23 +128,23 @@ public partial class Product
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
-    [Required] [MaxLength(200)]
+    [ZRequired] [ZMaxLength(200)]
     [UiFormField(Label = "Product Name", Placeholder = "Enter name...", Group = "basic")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
 
-    [MaxLength(500)]
+    [ZMaxLength(500)]
     [UiFormField(Label = "Description", Group = "basic")]
     [TextArea(Rows = 3)]
     [UiTableColumn(Filterable = true)]
     public string? Description { get; set; }
 
-    [Range(0, 999999)]
+    [ZRange(0, 999999)]
     [UiFormField(Label = "Price", Group = "details")]
     [UiTableColumn(Sortable = true, Filterable = true, Format = "currency")]
     public decimal Price { get; set; }
 
-    [Range(0, 10000)]
+    [ZRange(0, 10000)]
     [UiFormField(Label = "Stock", Group = "details")]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public int Stock { get; set; }
@@ -166,7 +166,7 @@ public class Order
 {
     [DtoIgnore] public int Id { get; set; }
 
-    [Required] [MaxLength(100)]
+    [ZRequired] [ZMaxLength(100)]
     public string CustomerName { get; set; } = "";
 
     [CreateOnly]  // only in create request
@@ -175,7 +175,7 @@ public class Order
     [Immutable]   // visible in update but not changeable
     public DateTime OrderDate { get; set; }
 
-    [Range(0, 1000000)]
+    [ZRange(0, 1000000)]
     public decimal TotalAmount { get; set; }
 
     [ResponseIgnore]  // exclude from response
@@ -198,11 +198,11 @@ public partial class UserProfile
 {
     [UiFormIgnore] public int Id { get; set; }
 
-    [Required] [MinLength(2)]
+    [ZRequired] [ZMinLength(2)]
     [UiFormField(Label = "Full Name", Placeholder = "John Doe", Group = "personal")]
     public string Name { get; set; } = "";
 
-    [Email]
+    [ZEmail]
     [UiFormField(Label = "Email", Placeholder = "john@example.com", Group = "personal")]
     public string Email { get; set; } = "";
 
@@ -269,7 +269,7 @@ public partial class DepartmentView
 {
     [UiTableColumn(IsVisible = false)] public int Id { get; set; }
 
-    [Required]
+    [ZRequired]
     [UiTableColumn(Sortable = true, Filterable = true)]
     public string Name { get; set; } = "";
 
@@ -301,34 +301,34 @@ public partial class EmployeeView
 
 validation: `// All validation attributes — compile-time Validate() method
 
-[Validate]
+[ZValidate]
 public partial class RegistrationRequest
 {
-    [Required]
-    [MinLength(2)]
-    [MaxLength(50)]
+    [ZRequired]
+    [ZMinLength(2)]
+    [ZMaxLength(50)]
     public string Username { get; set; } = "";
 
-    [Required]
-    [Email]
+    [ZRequired]
+    [ZEmail]
     public string Email { get; set; } = "";
 
-    [Required]
-    [MinLength(8)]
-    [MaxLength(128)]
+    [ZRequired]
+    [ZMinLength(8)]
+    [ZMaxLength(128)]
     public string Password { get; set; } = "";
 
-    [Required]
-    [Url]
+    [ZRequired]
+    [ZUrl]
     public string Website { get; set; } = "";
 
-    [Range(13, 120)]
+    [ZRange(13, 120)]
     public int Age { get; set; }
 
-    [Match(@"^\\+?\\d{7,15}$")]
+    [ZMatch(@"^\\+?\\d{7,15}$")]
     public string? Phone { get; set; }
 
-    [NotEmpty]
+    [ZNotEmpty]
     public List<string> Roles { get; set; } = new();
 }`,
 
@@ -337,7 +337,7 @@ public partial class RegistrationRequest
 public class Player
 {
     public int Id { get; set; }
-    [Required] [MaxLength(50)]
+    [ZRequired] [ZMaxLength(50)]
     public string Name { get; set; } = "";
     public int Level { get; set; }
     public string? Email { get; set; }
@@ -374,7 +374,7 @@ relations: `// Relations + Entity configuration
 public partial class Team
 {
     public int Id { get; set; }
-    [Required] [MaxLength(100)]
+    [ZRequired] [ZMaxLength(100)]
     public string Name { get; set; } = "";
     public string? City { get; set; }
 
@@ -386,7 +386,7 @@ public partial class Team
 public partial class Player
 {
     public int Id { get; set; }
-    [Required] [MaxLength(50)]
+    [ZRequired] [ZMaxLength(50)]
     public string Name { get; set; } = "";
     public int Level { get; set; }
     public int? TeamId { get; set; }
