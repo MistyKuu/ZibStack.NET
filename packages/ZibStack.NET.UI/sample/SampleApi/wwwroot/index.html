@@ -82,7 +82,6 @@
     <option value="validation">Validation</option>
     <option value="utility-types">Utility Types (Pick, Omit, Partial)</option>
     <option value="relations">Relations + Entity</option>
-    <option value="aop">AOP Aspects</option>
   </select>
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="data">Data</div>
@@ -395,53 +394,6 @@ public partial class Player
 
     [OneToOne]
     public Team? Team { get; set; }
-}`,
-
-aop: `// AOP — custom aspects via interceptors (ZibStack.NET.Aop)
-// Note: Aop uses C# interceptors, not source-generated attributes.
-// These attributes are defined in ZibStack.NET.Aop, not generated here.
-// This sample shows the pattern — the playground won't generate Aop code
-// but demonstrates how aspects compose with other ZibStack attributes.
-
-// Define a timing aspect:
-// [AspectHandler(typeof(TimingHandler))]
-// public class TimingAttribute : AspectAttribute { }
-//
-// public class TimingHandler : IAspectHandler
-// {
-//     public void OnBefore(AspectContext ctx) => Console.WriteLine($"Starting {ctx.MethodName}");
-//     public void OnAfter(AspectContext ctx) => Console.WriteLine($"Done in {ctx.ElapsedMilliseconds}ms");
-//     public void OnException(AspectContext ctx, Exception ex) => Console.WriteLine($"Failed: {ex.Message}");
-// }
-
-// Combine with CRUD + UI:
-[ImTiredOfCrud(DefaultSort = "Name")]
-public partial class Employee
-{
-    [UiFormIgnore]
-    [UiTableColumn(IsVisible = false)]
-    public int Id { get; set; }
-
-    [ZRequired] [ZMaxLength(100)]
-    [UiFormField(Label = "Name")]
-    [UiTableColumn(Sortable = true, Filterable = true)]
-    public string Name { get; set; } = "";
-
-    [ZEmail]
-    [UiFormField(Label = "Email")]
-    [UiTableColumn(Filterable = true)]
-    public string? Email { get; set; }
-
-    [ZRange(0, 500000)]
-    [UiFormField(Label = "Salary")]
-    [UiTableColumn(Sortable = true, Filterable = true, Format = "currency")]
-    public decimal Salary { get; set; }
-
-    // In your service, aspects work on methods:
-    // [Timing]
-    // [Log]
-    // [Trace]
-    // public async Task<Employee> GetEmployeeAsync(int id) { ... }
 }`,
 };
 

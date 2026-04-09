@@ -143,16 +143,17 @@ public static class PlaygroundEndpoint
         var (uiDriver, dtoDriver, coreDriver, validationDriver) = Drivers.Value;
         var result = new PlaygroundResult();
 
-        var uiResult = uiDriver.RunGeneratorsAndUpdateCompilation(compilation, out var updatedCompilation, out _);
+        // Validation first — emits attribute definitions that other generators reference
+        var validationResult = validationDriver.RunGeneratorsAndUpdateCompilation(compilation, out var updatedCompilation, out _);
         compilation = updatedCompilation as CSharpCompilation ?? (CSharpCompilation)updatedCompilation;
 
         var coreResult = coreDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
         compilation = updatedCompilation as CSharpCompilation ?? (CSharpCompilation)updatedCompilation;
 
-        var dtoResult = dtoDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
+        var uiResult = uiDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
         compilation = updatedCompilation as CSharpCompilation ?? (CSharpCompilation)updatedCompilation;
 
-        var validationResult = validationDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
+        var dtoResult = dtoDriver.RunGeneratorsAndUpdateCompilation(compilation, out updatedCompilation, out _);
 
         // Categorize all generated sources
         foreach (var genResult in new[] { uiResult, coreResult, dtoResult, validationResult })
