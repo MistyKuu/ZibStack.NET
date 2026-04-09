@@ -141,7 +141,11 @@ GET /api/players?filter=Team.Name=Lakers                    // relation → auto
 GET /api/players?filter=(Level>50|Level<10),Team.City=LA    // OR + grouping
 GET /api/players?filter=Name=in=Jan;Anna;Kasia              // IN list
 GET /api/players?filter=Email=*@test.pl/i&sort=Team.Name    // case insensitive + relation sort
+GET /api/teams?filter=Players.Name=*ski                     // OneToMany → filter by child properties
+GET /api/players?filter=Level>25&count=true                 // count only → { "count": 42 }
+GET /api/players?select=Name,Level,Team.Name                // field selection
 
+// [ZQuery] — standalone query DSL attribute (same as [QueryDto] with Sortable=true default)
 // Operators: = != > >= < <= =* !* ^ !^ $ !$ =in= =out=
 // Logic: , (AND) | (OR) () (grouping) /i (case insensitive)
 ```

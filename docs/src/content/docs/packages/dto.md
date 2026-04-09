@@ -207,6 +207,7 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[ResponseDto]` | Class | Generates read-only Response DTO with `FromEntity()` + `ProjectFrom()` |
 | `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
 | `[QueryDto(Sortable = true)]` | Class | Adds `SortBy`, `SortDirection`, `ApplySort()`, `Apply()` to query DTO |
+| `[ZQuery]` | Class | Standalone query DSL. Same as `[QueryDto]` with `Sortable=true` default. | `Name?`, `DefaultSort?`, `DefaultSortDirection?` |
 | `[CrudApi]` | Class | Generates full CRUD API endpoints + auto-implies missing DTOs |
 | `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` |
 | `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` |
@@ -217,13 +218,27 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | Attribute | Description |
 |-----------|-------------|
 | `[DtoIgnore]` | Excludes from generated DTOs |
-| `[DtoName("json_name")]` | Overrides the JSON property name |
+| `[DtoName("json_name")]` | Overrides the JSON property name (works on all DTOs including Response) |
 | `[CreateOnly]` | Only included in Create (or `ValidateForCreate`/`ToEntity` in Combined) |
 | `[UpdateOnly]` | Only included in Update (or `ValidateForUpdate`/`ApplyTo` in Combined) |
 | `[Immutable]` | Visible in Update DTO but skipped in `ApplyTo()` |
 | `[Flatten]` | Expands nested object properties into parent DTO (Response only) |
 | `[ResponseIgnore]` | Excludes from Response DTO only |
 | `[ListIgnore]` | Excludes from list Response (GET list), visible in detail Response (GET by ID) |
+
+**`[DtoName]` on Response DTO:**
+
+```csharp
+[CrudApi]
+public partial class Order
+{
+    [DtoName("Customer")]
+    public string CustomerName { get; set; }  // → "Customer" in response
+
+    [DtoName("Total")]
+    public decimal TotalAmount { get; set; }  // → "Total" in response
+}
+```
 
 **Generated types:**
 
@@ -407,6 +422,30 @@ public IActionResult List([FromQuery] ProductQuery query)
 ```
 
 `SortBy` is case-insensitive and matches property names. Unknown values are ignored (no sort applied). `DefaultSort` and `DefaultSortDirection` set fallback behavior when `SortBy`/`SortDirection` are not provided.
+
+### Count, select, and OneToMany filtering
+
+When `ZibStack.NET.Query` is referenced, the generated CRUD list endpoints support additional query parameters:
+
+**Count only** — return just the total count without fetching items:
+
+```
+GET /api/players?filter=Level>25&count=true → { "count": 42 }
+```
+
+**Field selection** — return only specific fields (including nested relations):
+
+```
+GET /api/players?select=Name,Level,Team.Name
+```
+
+**OneToMany filtering** — filter parent entities by child collection properties:
+
+```
+GET /api/teams?filter=Players.Name=*ski                  // any player name contains "ski"
+GET /api/teams?filter=Players.All.Level>50               // all players have Level > 50
+GET /api/teams?filter=Players.Count>5                    // team has more than 5 players
+```
 
 ## Paginated response (`PaginatedResponse<T>`)
 

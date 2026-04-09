@@ -304,6 +304,37 @@ app.MapGet("/api/tables/voivodeship", () =>
 ```
 </details>
 
+### API Metadata in JSON Schemas
+
+When `[ImTiredOfCrud]` or `[CrudApi]` is present, the generated JSON schemas include API metadata:
+
+**Table schema:**
+```json
+{
+  "apiUrl": "/api/products",
+  "keyProperty": "id",
+  "columns": [
+    {
+      "name": "name",
+      "type": "string",
+      "filterable": true,
+      "filterOperators": ["=", "!=", "=*", "!*", "^", "!^", "$", "!$", "=in=", "=out="]
+    }
+  ]
+}
+```
+
+**Form schema:**
+```json
+{
+  "apiUrl": "/api/products",
+  "keyProperty": "id"
+}
+```
+
+`apiUrl` — CRUD endpoint URL. `keyProperty` — ID field for GET/PATCH/DELETE by id.
+`filterOperators` — per-column operators based on type (string: 10 ops, numeric: 8, enum: 4, boolean: 2).
+
 ## Relationships (`[OneToMany]` / `[OneToOne]`)
 
 Define relationships on navigation properties — a single declaration drives both table drill-down and form sub-forms:

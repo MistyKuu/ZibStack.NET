@@ -19,6 +19,13 @@ public class TestPlayer
 
 public enum PlayerRole { Player, Moderator, Admin }
 
+public class TestTeam
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public List<TestPlayer> Players { get; set; } = new();
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────
 
 public class FilterApplierTests
@@ -268,6 +275,72 @@ public class FilterApplierTests
         var expr = FilterParser.ParseExpression("Level=in=42;20|Role=Admin");
         var result = FilterApplier.ApplyTree(Players, expr, BuildPredicate).ToList();
         Assert.Equal(3, result.Count); // Jan(42), Piotr(20), Anna(Admin)
+    }
+
+    // ─── Collection predicates ────────────────────────────────────────
+
+    private static List<TestTeam> Teams => new()
+    {
+        new() { Id = 1, Name = "Lakers", Players = new()
+        {
+            new() { Id = 1, Name = "Jan Kowalski", Level = 42, TeamId = 1 },
+            new() { Id = 3, Name = "Piotr Ski", Level = 20, TeamId = 1 },
+        }},
+        new() { Id = 2, Name = "Celtics", Players = new()
+        {
+            new() { Id = 2, Name = "Anna Nowak", Level = 75, TeamId = 2 },
+        }},
+        new() { Id = 3, Name = "Empty", Players = new() },
+    };
+
+    [Fact]
+    public void BuildCollectionAnyPredicate_MatchesAny()
+    {
+        var clause = new FilterClause("Name", FilterOperator.Contains, "ski");
+        var pred = FilterApplier.BuildCollectionAnyPredicate<TestTeam, TestPlayer, string>(
+            x => x.Players, p => p.Name, clause);
+        Assert.NotNull(pred);
+        var result = Teams.Where(pred!.Compile()).ToList();
+        Assert.Single(result);
+        Assert.Equal("Lakers", result[0].Name);
+    }
+
+    [Fact]
+    public void BuildCollectionAllPredicate_MatchesAll()
+    {
+        var clause = new FilterClause("Level", FilterOperator.GreaterThan, "30");
+        var pred = FilterApplier.BuildCollectionAllPredicate<TestTeam, TestPlayer, int>(
+            x => x.Players, p => p.Level, clause);
+        Assert.NotNull(pred);
+        // Empty team matches vacuously (All on empty = true), Celtics matches (75>30),
+        // Lakers fails (Piotr has Level 20)
+        var result = Teams.Where(pred!.Compile()).ToList();
+        Assert.Equal(2, result.Count);
+        Assert.DoesNotContain(result, t => t.Name == "Lakers");
+    }
+
+    [Fact]
+    public void BuildCollectionCountPredicate_GreaterThan()
+    {
+        var clause = new FilterClause("Count", FilterOperator.GreaterThan, "1");
+        var pred = FilterApplier.BuildCollectionCountPredicate<TestTeam, TestPlayer>(
+            x => x.Players, clause);
+        Assert.NotNull(pred);
+        var result = Teams.Where(pred!.Compile()).ToList();
+        Assert.Single(result);
+        Assert.Equal("Lakers", result[0].Name);
+    }
+
+    [Fact]
+    public void BuildCollectionCountPredicate_Equals_Zero()
+    {
+        var clause = new FilterClause("Count", FilterOperator.Equals, "0");
+        var pred = FilterApplier.BuildCollectionCountPredicate<TestTeam, TestPlayer>(
+            x => x.Players, clause);
+        Assert.NotNull(pred);
+        var result = Teams.Where(pred!.Compile()).ToList();
+        Assert.Single(result);
+        Assert.Equal("Empty", result[0].Name);
     }
 
     // ─── Helper ─────────────────────────────────────────────────────

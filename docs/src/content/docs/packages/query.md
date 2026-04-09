@@ -82,6 +82,21 @@ GET /api/players?sort=-Level,Name      # multi-field
 GET /api/players?sort=Team.Name        # sort by relation
 ```
 
+## Collection Filtering (OneToMany)
+
+Filter by child collection properties using Any, All, or Count:
+
+```
+GET /api/teams?filter=Players.Name=*ski              # Any player name contains "ski" (default)
+GET /api/teams?filter=Players.Any.Name=*ski           # Same — explicit Any
+GET /api/teams?filter=Players.All.Level>50            # ALL players have Level > 50
+GET /api/teams?filter=Players.Count>5                 # Team has more than 5 players
+GET /api/teams?filter=Players.Count=0                 # Teams with no players
+```
+
+Syntax: `Collection.Property` (implicit Any), `Collection.Any.Property`, `Collection.All.Property`, `Collection.Count`.
+EF Core translates to EXISTS/NOT EXISTS/COUNT subqueries.
+
 ## Relation Filtering (Dot Notation)
 
 When your model has navigation properties with `[OneToOne]` (from `ZibStack.NET.Core`), the generator automatically adds dot-notation paths to the filter allowlist:
@@ -104,6 +119,27 @@ GET /api/players?sort=-Team.Name                   →  JOIN + ORDER BY
 
 EF Core translates `x => x.Team.Name` into a SQL JOIN automatically.
 
+## Field Projection (select=)
+
+Return only specific fields to reduce payload:
+
+```
+GET /api/players?select=Name,Level                        # flat fields only
+GET /api/players?select=Name,Level,Team.Name              # include relation fields
+GET /api/players?select=Name,Level,Team.Name,Team.City    # multiple relation fields
+```
+
+Response: `{ "name": "Jan", "level": 42, "team": { "name": "Lakers", "city": "LA" } }`
+
+## Standalone Count
+
+Get count without fetching data:
+
+```
+GET /api/players?filter=Level>25&count=true    # → { "count": 42 }
+GET /api/players?count=true                     # → { "count": 150 }
+```
+
 ## How Source Generation Helps
 
 The Dto generator produces a **compile-time field allowlist** per entity:
@@ -125,6 +161,29 @@ This means:
 - **Type safety** — each field has its correct C# type at compile time
 - **AOT compatible** — no `Type.GetProperty()` or expression compilation at runtime
 
+## [ZQuery] Attribute
+
+Standalone query DSL without CRUD endpoints — use on any model:
+
+```csharp
+[ZQuery(DefaultSort = "Name")]
+public partial class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public decimal Price { get; set; }
+    
+    [OneToOne]
+    public Category? Category { get; set; }
+    
+    [OneToMany]
+    public ICollection<Tag> Tags { get; set; }
+}
+```
+
+Generates `ProductQuery` with `ApplyFilter(query, filter?)`, `ApplySort(query, sort?)`, `Apply(query, filter?, sort?)`, `ProjectFields()`.
+`[ZQuery]` defaults `Sortable = true`. Alias for `[QueryDto]`.
+
 ## Standalone Usage
 
 You can use the parser and applier directly without the Dto source generator:
@@ -132,20 +191,15 @@ You can use the parser and applier directly without the Dto source generator:
 ```csharp
 using ZibStack.NET.Query;
 
-// Parse filter string → expression tree
-var expr = FilterParser.ParseExpression("Level>25,Name=*ski");
+var q = new ProductQuery();
+var query = dbContext.Products.AsQueryable();
 
-// Apply to any IQueryable<T> with a field resolver
-var filtered = FilterApplier.ApplyTree(dbContext.Players, expr, clause =>
-    clause.Field.ToLowerInvariant() switch
-    {
-        "level" => FilterApplier.BuildPredicate<Player, int>(x => x.Level, clause),
-        "name"  => FilterApplier.BuildPredicate<Player, string>(x => x.Name, clause),
-        _ => null,
-    });
+// DSL approach:
+query = q.Apply(query, "Price>100,Category.Name=Electronics", "-Price");
 
-// Parse sort string
-var sortClauses = SortParser.Parse("-Level,Name");
+// Typed approach (when no DSL string):
+var q2 = new ProductQuery { Name = "laptop", SortBy = "Price" };
+query = q2.Apply(query);
 ```
 
 ## Supported Types
