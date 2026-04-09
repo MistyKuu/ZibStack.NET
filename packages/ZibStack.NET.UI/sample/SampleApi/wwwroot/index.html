@@ -91,6 +91,8 @@
     <div class="tab" data-tab="query">Query</div>
     <div class="tab" data-tab="database">Database</div>
     <div class="tab" data-tab="ui">UI</div>
+    <div class="tab" data-tab="utility">Utility</div>
+    <div class="tab" data-tab="validation">Validation</div>
     <div class="tab" data-tab="examples">Examples</div>
     <div class="tab" data-tab="schema">JSON</div>
   </div>
@@ -109,6 +111,8 @@
     <div class="tab-content" id="tab-query"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-database"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-ui"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-utility"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-validation"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-examples"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-schema"><div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table"></pre></div><div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form"></pre></div></div>
   </div>
@@ -529,7 +533,7 @@ async function compile() {
     if(tableSchema&&!tableSchema.apiUrl)tableSchema.apiUrl='/api/products'; if(formSchema&&!formSchema.apiUrl)formSchema.apiUrl='/api/products';
     const gf=data.generated||[];lastGenerated=gf;const counts={};gf.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
     status.className='status-bar success';status.textContent=`${ms}ms | ${gf.length} files`;
-    ['endpoints','dtos','query','database','ui'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI'}[t]]));
+    ['endpoints','dtos','query','database','ui','utility','validation'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI',utility:'Utility Types',validation:'Validation'}[t]]));
     $('#schema-table').textContent=tableSchema?JSON.stringify(tableSchema,null,2):'No table schema';
     $('#schema-form').textContent=formSchema?JSON.stringify(formSchema,null,2):'No form schema';
     renderCodeTab('tab-endpoints',gf.filter(f=>f.category==='Endpoints'),'Endpoints');
@@ -537,6 +541,8 @@ async function compile() {
     renderCodeTab('tab-query',gf.filter(f=>f.category==='Query'),'Query DSL');
     renderCodeTab('tab-database',gf.filter(f=>f.category==='Database'),'Database');
     renderCodeTab('tab-ui',gf.filter(f=>f.category==='UI'),'UI Descriptors');
+    renderCodeTab('tab-utility',gf.filter(f=>f.category==='Utility Types'),'Utility Types');
+    renderCodeTab('tab-validation',gf.filter(f=>f.category==='Validation'),'Validation');
     renderExamples();
     currentSort=tableSchema?.defaultSort?.column||null;currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
     currentPage=1;activeFilters={};editingId=null; renderTable();renderForm();loadData();
