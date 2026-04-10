@@ -70,6 +70,12 @@ public static class AopParser
         if (method.IsStatic)
             return null;
 
+        // Only ordinary methods — skip constructors, finalizers, property/event accessors,
+        // operators, conversions, etc. Their CLR names contain characters that aren't valid
+        // in C# identifiers (e.g. '.ctor'), and aspects on them rarely make sense anyway.
+        if (method.MethodKind != MethodKind.Ordinary)
+            return null;
+
         var aspects = new List<AspectInfo>();
         var seenAspectTypes = new HashSet<string>();
 
