@@ -1,5 +1,10 @@
 using ZibStack.NET.Dto;
 
+// SDTO012 warns when [CrudApi] types have no matching DbSet<T>. These test fixtures
+// exist only to verify the generator's output via reflection — they never get an
+// ICrudStore at runtime and never run in an ASP.NET host, so the warning is noise here.
+#pragma warning disable SDTO012
+
 namespace ZibStack.NET.Dto.Tests;
 
 [CrudApi(Route = "api/items", KeyProperty = "Id", Operations = CrudOperations.Read)]

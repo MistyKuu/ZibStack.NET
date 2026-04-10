@@ -64,6 +64,114 @@ public partial class DtoGenerator
             "SDTO011", "CrudApi key property not found",
             "Type '{0}' has [CrudApi(KeyProperty = \"{1}\")] but no such property exists",
             "ZibStack.NET.Dto", DiagnosticSeverity.Error, true);
+
+        public static readonly DiagnosticDescriptor CrudApiMissingStore = new(
+            "SDTO012", "CrudApi type has no ICrudStore registered",
+            "Type '{0}' has [CrudApi] but no DbSet<{0}> was found in any [GenerateCrudStores] DbContext. " +
+            "Generated endpoints require 'ICrudStore<{0}, {1}>' from DI — add 'public DbSet<{0}> {0}s {{ get; set; }}' " +
+            "to your DbContext, or register the store manually with 'services.AddScoped<ICrudStore<{0}, {1}>, YourStore>();'. " +
+            "Without this, the first request that hits a generated endpoint throws a runtime body-inference error from ASP.NET routing.",
+            "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
+    }
+
+    /// <summary>Lightweight, equatable target for the SDTO012 diagnostic — pulled out of the regular pipeline so the diagnostic can be combined with the global DbSet collection.</summary>
+    private sealed class CrudApiDiagTarget : System.IEquatable<CrudApiDiagTarget>
+    {
+        public string ClassName { get; }
+        public string FullyQualifiedName { get; }
+        public string KeyTypeName { get; }
+        public DiagLocation? Location { get; }
+
+        public CrudApiDiagTarget(string className, string fullyQualifiedName, string keyTypeName, DiagLocation? location)
+        {
+            ClassName = className;
+            FullyQualifiedName = fullyQualifiedName;
+            KeyTypeName = keyTypeName;
+            Location = location;
+        }
+
+        public bool Equals(CrudApiDiagTarget? other) =>
+            other is not null && FullyQualifiedName == other.FullyQualifiedName && KeyTypeName == other.KeyTypeName;
+        public override bool Equals(object? obj) => Equals(obj as CrudApiDiagTarget);
+        public override int GetHashCode() => unchecked(FullyQualifiedName.GetHashCode() * 397 ^ KeyTypeName.GetHashCode());
+    }
+
+    /// <summary>Equatable, value-based snapshot of a Roslyn Location so the incremental pipeline can cache it.</summary>
+    private sealed class DiagLocation : System.IEquatable<DiagLocation>
+    {
+        public string FilePath { get; }
+        public Microsoft.CodeAnalysis.Text.TextSpan TextSpan { get; }
+        public Microsoft.CodeAnalysis.Text.LinePositionSpan LineSpan { get; }
+
+        public DiagLocation(string filePath, Microsoft.CodeAnalysis.Text.TextSpan span, Microsoft.CodeAnalysis.Text.LinePositionSpan lineSpan)
+        {
+            FilePath = filePath;
+            TextSpan = span;
+            LineSpan = lineSpan;
+        }
+
+        public Location ToLocation() => Microsoft.CodeAnalysis.Location.Create(FilePath, TextSpan, LineSpan);
+
+        public static DiagLocation? From(Location? loc)
+        {
+            if (loc is null || loc.SourceTree is null) return null;
+            return new DiagLocation(loc.SourceTree.FilePath, loc.SourceSpan, loc.GetLineSpan().Span);
+        }
+
+        public bool Equals(DiagLocation? other) =>
+            other is not null && FilePath == other.FilePath && TextSpan == other.TextSpan;
+        public override bool Equals(object? obj) => Equals(obj as DiagLocation);
+        public override int GetHashCode() => unchecked((FilePath?.GetHashCode() ?? 0) * 397 ^ TextSpan.GetHashCode());
+    }
+
+    /// <summary>Extract a CrudApiDiagTarget from a [CrudApi]-annotated type for the SDTO012 diagnostic pipeline.</summary>
+    private static CrudApiDiagTarget? GetCrudApiDiagTarget(GeneratorAttributeSyntaxContext context)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol symbol) return null;
+
+        // Determine key type the same way the rest of the generator does:
+        // [CrudApi(KeyProperty="X")] override, else "Id", else "{ClassName}Id".
+        var crudAttr = symbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
+        var keyName = crudAttr?.NamedArguments.FirstOrDefault(a => a.Key == "KeyProperty").Value.Value as string ?? "Id";
+        var keyProp = GetAllProperties(symbol).FirstOrDefault(p => p.Name == keyName)
+                    ?? GetAllProperties(symbol).FirstOrDefault(p => p.Name == "Id")
+                    ?? GetAllProperties(symbol).FirstOrDefault(p => p.Name == symbol.Name + "Id");
+        if (keyProp is null) return null; // SDTO011 covers this case
+
+        return new CrudApiDiagTarget(
+            symbol.Name,
+            symbol.ToDisplayString(),
+            keyProp.Type.ToDisplayString(),
+            DiagLocation.From(symbol.Locations.FirstOrDefault()));
+    }
+
+    /// <summary>Pulls all entity types exposed via DbSet&lt;T&gt; in any DbContext-derived class. Used by the SDTO012 diagnostic to detect [CrudApi] types that aren't backed by a generated EF store.</summary>
+    private static System.Collections.Immutable.ImmutableArray<string> GetDbSetEntityTypes(GeneratorSyntaxContext context)
+    {
+        if (context.Node is not ClassDeclarationSyntax cds) return System.Collections.Immutable.ImmutableArray<string>.Empty;
+        if (context.SemanticModel.GetDeclaredSymbol(cds) is not INamedTypeSymbol symbol) return System.Collections.Immutable.ImmutableArray<string>.Empty;
+
+        // Walk base types looking for Microsoft.EntityFrameworkCore.DbContext
+        bool isDbContext = false;
+        var baseType = symbol.BaseType;
+        while (baseType is not null)
+        {
+            if (baseType.ToDisplayString() == "Microsoft.EntityFrameworkCore.DbContext") { isDbContext = true; break; }
+            baseType = baseType.BaseType;
+        }
+        if (!isDbContext) return System.Collections.Immutable.ImmutableArray<string>.Empty;
+
+        var builder = System.Collections.Immutable.ImmutableArray.CreateBuilder<string>();
+        foreach (var member in symbol.GetMembers())
+        {
+            if (member is not IPropertySymbol prop) continue;
+            if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+            if (prop.Type is not INamedTypeSymbol propType || !propType.IsGenericType) continue;
+            if (propType.ConstructedFrom.ToDisplayString() != "Microsoft.EntityFrameworkCore.DbSet<TEntity>") continue;
+            if (propType.TypeArguments[0] is INamedTypeSymbol entity)
+                builder.Add(entity.ToDisplayString());
+        }
+        return builder.ToImmutable();
     }
 
     private static void RunDiagnostics(SourceProductionContext spc, INamedTypeSymbol symbol, TypeDeclarationSyntax syntax)

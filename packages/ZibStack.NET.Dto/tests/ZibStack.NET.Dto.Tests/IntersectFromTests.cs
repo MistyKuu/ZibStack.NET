@@ -45,8 +45,12 @@ public class IntersectFromTests
     }
 
     [Fact]
-    public void IntersectFrom_ApplyTo_Category()
+    public void IntersectFrom_ApplyTo_Category_OverwritesAllFields()
     {
+        // [IntersectFrom] is a structural composition, not a partial update.
+        // ApplyTo unconditionally writes every property of the source — to keep
+        // existing target values you must hydrate the intersect from the target
+        // first (or use FromEntity).
         var category = new Category
         {
             Id = 1,
@@ -55,12 +59,16 @@ public class IntersectFromTests
             SortOrder = 1
         };
 
-        var intersect = new CategoryWithAudit { Name = "New", SortOrder = 5 };
+        var intersect = CategoryWithAudit.FromEntity(category) with
+        {
+            Name = "New",
+            SortOrder = 5,
+        };
         intersect.ApplyTo(category);
 
         Assert.Equal("New", category.Name);
         Assert.Equal(5, category.SortOrder);
-        Assert.Equal("Old desc", category.Description);  // unchanged
+        Assert.Equal("Old desc", category.Description); // preserved via FromEntity hydration
     }
 
     [Fact]
@@ -81,10 +89,22 @@ public class IntersectFromTests
     }
 
     [Fact]
+    public void IntersectFrom_FromEntity_PerSource()
+    {
+        // FromEntity is generated once per source type and copies that source's properties.
+        var category = new Category { Id = 1, Name = "Cat", Description = "Desc", SortOrder = 7 };
+        var fromCat = CategoryWithAudit.FromEntity(category);
+        Assert.Equal(1, fromCat.Id);
+        Assert.Equal("Cat", fromCat.Name);
+        Assert.Equal("Desc", fromCat.Description);
+        Assert.Equal(7, fromCat.SortOrder);
+    }
+
+    [Fact]
     public void IntersectFrom_DeduplicatesProperties()
     {
         // If both types had a property with the same name,
-        // only one PatchField should be generated (first wins)
+        // only one property should be generated (first source wins)
         var type = typeof(CategoryWithAudit);
         var props = type.GetProperties().Where(p => p.Name == "Name").ToArray();
         Assert.Single(props);

@@ -147,6 +147,12 @@ public partial class CoreGenerator
         }
 
         // ApplyTo per source: writes back the matching properties.
+        // NOTE: This unconditionally overwrites every field on the target — there is no
+        // PatchField/HasValue gate, because Intersect is a structural composition, not a
+        // partial update. If you need "only set what was provided", use [PartialFrom]
+        // (or an Update DTO from [CrudApi]). The danger here is that calling ApplyTo on
+        // an Intersect built from one source will clobber the target's other-source fields
+        // with their default values.
         foreach (var target in info.TargetTypes)
         {
             sb.AppendLine();

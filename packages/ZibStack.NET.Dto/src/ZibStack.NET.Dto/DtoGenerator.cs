@@ -134,6 +134,101 @@ public partial class DtoGenerator : IIncrementalGenerator
             RunDiagnostics(spc, pair.Item1!, pair.Item2!);
         });
 
+        // SDTO012: [CrudApi] type with no matching DbSet<T> in any DbContext.
+        // Without a registered ICrudStore<T,TKey>, generated endpoints fail at startup
+        // with an obscure ASP.NET body-inference error. Catch it at compile time.
+        var crudApiDiagTargets = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                CrudApiAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) => GetCrudApiDiagTarget(ctx))
+            .Where(static t => t is not null)
+            .Select(static (t, _) => t!);
+
+        // Also pick up [ImTiredOfCrud] (from ZibStack.NET.UI) which generates the
+        // same endpoints and has the same store dependency.
+        var modelCrudApiDiagTargets = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                UiImTiredOfCrudAttributeFqn,
+                predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, _) =>
+                {
+                    var hasCrud = ((INamedTypeSymbol)ctx.TargetSymbol).GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == CrudApiAttributeFqn);
+                    return hasCrud ? null : GetCrudApiDiagTarget(ctx);
+                })
+            .Where(static t => t is not null)
+            .Select(static (t, _) => t!);
+
+        var allCrudApiDiagTargets = crudApiDiagTargets.Collect()
+            .Combine(modelCrudApiDiagTargets.Collect())
+            .Select(static (pair, _) => pair.Left.AddRange(pair.Right));
+
+        // Walk the whole compilation for DbContext-derived classes with DbSet<T> properties.
+        // CompilationProvider re-runs on every compilation snapshot, so this picks up
+        // brand-new DbSet declarations the user just added without stale cache.
+        var dbSetEntityTypes = context.CompilationProvider.Select(static (compilation, ct) =>
+        {
+            var set = new HashSet<string>();
+            var dbContextSymbol = compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext");
+            if (dbContextSymbol is null) return set;
+
+            void Visit(INamespaceSymbol ns)
+            {
+                foreach (var type in ns.GetTypeMembers())
+                    VisitType(type);
+                foreach (var nested in ns.GetNamespaceMembers())
+                    Visit(nested);
+            }
+
+            void VisitType(INamedTypeSymbol type)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Walk base chain — does it derive from DbContext?
+                bool isDbContext = false;
+                var bt = type.BaseType;
+                while (bt is not null)
+                {
+                    if (SymbolEqualityComparer.Default.Equals(bt, dbContextSymbol)) { isDbContext = true; break; }
+                    bt = bt.BaseType;
+                }
+
+                if (isDbContext)
+                {
+                    foreach (var member in type.GetMembers())
+                    {
+                        if (member is not IPropertySymbol prop) continue;
+                        if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+                        if (prop.Type is not INamedTypeSymbol propType || !propType.IsGenericType) continue;
+                        if (propType.ConstructedFrom.ToDisplayString() != "Microsoft.EntityFrameworkCore.DbSet<TEntity>") continue;
+                        if (propType.TypeArguments[0] is INamedTypeSymbol entity)
+                            set.Add(entity.ToDisplayString());
+                    }
+                }
+
+                foreach (var nested in type.GetTypeMembers())
+                    VisitType(nested);
+            }
+
+            Visit(compilation.Assembly.GlobalNamespace);
+            return set;
+        });
+
+        context.RegisterSourceOutput(allCrudApiDiagTargets.Combine(dbSetEntityTypes), static (spc, pair) =>
+        {
+            var (targets, dbSetTypes) = pair;
+            foreach (var target in targets)
+            {
+                if (dbSetTypes.Contains(target.FullyQualifiedName)) continue;
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    Diagnostics.CrudApiMissingStore,
+                    target.Location?.ToLocation() ?? Location.None,
+                    target.ClassName,
+                    target.KeyTypeName));
+            }
+        });
+
         // Find [CreateDto] classes
         var createDtoClasses = context.SyntaxProvider
             .ForAttributeWithMetadataName(

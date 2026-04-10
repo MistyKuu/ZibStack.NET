@@ -23,22 +23,25 @@ public class PickFromTests
     }
 
     [Fact]
-    public void PickFrom_HasApplyTo()
+    public void PickFrom_HasFromEntity()
     {
-        var method = typeof(ProductSummary).GetMethod("ApplyTo");
+        // Pick is a pure projection — emits a static FromEntity(source) factory,
+        // not ApplyTo. ApplyTo would imply partial-update semantics, which is the
+        // job of [PartialFrom].
+        var method = typeof(ProductSummary).GetMethod("FromEntity", new[] { typeof(Product) });
         Assert.NotNull(method);
+        Assert.True(method!.IsStatic);
     }
 
     [Fact]
-    public void PickFrom_ApplyTo_OnlySetsPickedFields()
+    public void PickFrom_FromEntity_CopiesPickedFields()
     {
-        var product = new Product { Name = "Old", Price = 5m, Stock = 10, Sku = "S" };
-        var summary = new ProductSummary { Name = "New", Price = 15m };
-        summary.ApplyTo(product);
+        var product = new Product { Name = "Widget", Price = 15m, Stock = 10, Sku = "S" };
+        var summary = ProductSummary.FromEntity(product);
 
-        Assert.Equal("New", product.Name);
-        Assert.Equal(15m, product.Price);
-        Assert.Equal(10, product.Stock);  // unchanged
+        Assert.Equal("Widget", summary.Name);
+        Assert.Equal(15m, summary.Price);
+        // Other fields are not on the projection — Stock/Sku not present.
     }
 }
 
