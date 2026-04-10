@@ -8,26 +8,15 @@
     <NoWarn>RS2008</NoWarn>
     <IsRoslynComponent>true</IsRoslynComponent>
 
-    <PackageId>ZibStack.NET.Log.Analyzers</PackageId>
-    <Description>Roslyn analyzer that flags legacy logger.LogXxx("template", args) calls and suggests the structured logger.LogXxx($"...") interpolated form.</Description>
-    <Authors>$(Authors)</Authors>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
-    <PackageTags>analyzer;logging;roslyn;csharp</PackageTags>
-
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- This analyzer is bundled into the main ZibStack.NET.Log NuGet package
+         (see ZibStack.NET.Log.csproj). It is not packed or published separately. -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.12.0" PrivateAssets="all" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
 </Project>

@@ -32,6 +32,13 @@
          package need the runtime types (LogAttribute, LoggerStructuredExtensions,
          handler structs). Without this NuGet would not pull it in automatically. -->
     <ProjectReference Include="..\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" />
+
+    <!-- Build the analyzer alongside this generator so its DLL exists at pack time.
+         Bundled into the same NuGet package below; not referenced as an assembly. -->
+    <ProjectReference Include="..\ZibStack.NET.Log.Analyzers\ZibStack.NET.Log.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Include Aop generator source files directly (generators must be single-assembly) -->
@@ -46,6 +53,10 @@
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Bundle the analyzer DLL so installing ZibStack.NET.Log automatically
+         enables the ZLOG002 diagnostic. No separate package install required. -->
+    <None Include="..\ZibStack.NET.Log.Analyzers\bin\$(Configuration)\netstandard2.0\ZibStack.NET.Log.Analyzers.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="$(MSBuildProjectDirectory)\..\..\README.md" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')" />
   </ItemGroup>
 

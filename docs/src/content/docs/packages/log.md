@@ -142,7 +142,7 @@ For zero-allocation logging in hot paths, prefer the `[Log]` attribute (~39 ns, 
 
 ### Analyzer: detect legacy log calls
 
-Install [`ZibStack.NET.Log.Analyzers`](https://www.nuget.org/packages/ZibStack.NET.Log.Analyzers) to get a `ZLOG002` warning whenever your code uses the legacy `_logger.LogXxx("template {Param}", value)` form. The analyzer flags only `Microsoft.Extensions.Logging.ILogger` extension calls with a string literal + at least one trailing argument, so plain messages and already-interpolated calls are left alone.
+The `ZLOG002` analyzer ships inside the main `ZibStack.NET.Log` package — no extra install needed. It warns whenever your code uses the legacy `_logger.LogXxx("template {Param}", value)` form. Only `Microsoft.Extensions.Logging.ILogger` extension calls with a string literal + at least one trailing argument are flagged, so plain messages and already-interpolated calls are left alone.
 
 ```csharp
 _logger.LogInformation("User {Name}", name);
