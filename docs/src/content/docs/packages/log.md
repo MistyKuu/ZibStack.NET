@@ -92,20 +92,20 @@ Overhead of calling `int Add(int a, int b) => a + b;` with logging, BenchmarkDot
 | Method | Mean | Allocated |
 |---|---:|---:|
 | No logging (baseline) | 0.0 ns | 0 B |
-| Manual `LoggerMessage.Define` (level OFF) | 32.2 ns | 0 B |
-| Manual `LoggerMessage.Define` | 36.8 ns | 0 B |
-| **ZibStack.Log `[Log]` no stopwatch** | **37.2 ns** | **64 B** |
-| **ZibStack.Log `[Log]`** | **40.4 ns** | **64 B** |
-| **ZibStack.Log `[Log]` (level OFF)** | **40.5 ns** | **64 B** |
-| `[Log]` return object (no `[Sensitive]`) | 43.6 ns | 96 B |
-| Manual `ILogger.Log()` (level OFF) | 62.1 ns | 176 B |
-| Manual `ILogger.Log()` | 80.5 ns | 176 B |
-| `[Log]` return object (with `[Sensitive]`) | 98.0 ns | 624 B |
+| Manual `LoggerMessage.Define` (level OFF) | 32.3 ns | 0 B |
+| Manual `LoggerMessage.Define` | 34.7 ns | 0 B |
+| **ZibStack.Log `[Log]` no stopwatch** | **34.9 ns** | **64 B** |
+| **ZibStack.Log `[Log]` (level OFF)** | **38.3 ns** | **64 B** |
+| **ZibStack.Log `[Log]`** | **38.8 ns** | **64 B** |
+| `[Log]` return object (no `[Sensitive]`) | 40.4 ns | 96 B |
+| Manual `ILogger.Log()` (level OFF) | 62.9 ns | 176 B |
+| Manual `ILogger.Log()` | 68.6 ns | 176 B |
+| `[Log]` return object (with `[Sensitive]`) | 96.8 ns | 624 B |
 
-- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~40 ns vs ~37 ns)
-- **2x faster** than `_logger.LogInformation()` (40 ns vs 81 ns)
+- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~39 ns vs ~35 ns)
+- **~2x faster** than `_logger.LogInformation()` (39 ns vs 69 ns)
 - **2.8x less memory** than `_logger.LogInformation()` (64 B vs 176 B)
-- When log level OFF: ~40 ns (just DI resolve + `IsEnabled` check)
+- When log level OFF: ~38 ns (just DI resolve + `IsEnabled` check)
 
 ### Property-level sanitization overhead
 
@@ -113,25 +113,44 @@ When return type has `[Sensitive]`/`[NoLog]` properties (Dictionary + JSON seria
 
 | Method | Mean | Allocated |
 |---|---:|---:|
-| `[Log]` return object (no `[Sensitive]`) | 43.6 ns | 96 B |
-| `[Log]` return object (with `[Sensitive]`) | 98.0 ns | 624 B |
+| `[Log]` return object (no `[Sensitive]`) | 40.4 ns | 96 B |
+| `[Log]` return object (with `[Sensitive]`) | 96.8 ns | 624 B |
 
-+54 ns and +528 B per call for sanitization. Use `[Sensitive]` on properties only where needed.
++56 ns and +528 B per call for sanitization. Use `[Sensitive]` on properties only where needed.
 
 ### Interpolated string logging
 
-`LogInformation($"...")` vs standard `LogInformation("template", args)` — measured against a real consuming sink that reads every property (so JIT can't elide allocations):
+`LogInformation($"...")` vs standard `LogInformation("template", args)` — measured against a real **Serilog** sink (`Serilog.Sinks.InMemory`) so the numbers reflect production cost, not JIT escape-analysis tricks.
 
 | Method | Mean | Allocated |
 |---|---:|---:|
 | **`LogInformation($"...")` (level OFF)** | **0.4 ns** | **0 B** |
-| `LogInformation("template", args)` (level OFF) | 15.7 ns | 104 B |
-| `LogInformation("template", args)` (standard) | 49.7 ns | 104 B |
-| **`LogInformation($"...")` structured** | **58.8 ns** | **112 B** |
+| `LogInformation("template", args)` (level OFF) | 15.8 ns | 104 B |
+| `LogInformation("template", args)` (standard, no sink) | 18.6 ns | 104 B |
+| `LogInformation($"...")` (no sink) | 1.3 ns | 0 B |
+| `REAL: LogInformation("template", args)` (Serilog) | 924 ns | 752 B |
+| `REAL: LogInformation($"...")` structured (Serilog) | 989 ns | 784 B |
 
-**~40x faster when the level is disabled** — the source-generated interceptor checks `IsEnabled` before evaluating the interpolated string, so disabled log calls cost virtually nothing. When enabled, performance is comparable to the standard Microsoft API (handler stores args in typed slots, interceptor dispatches via cached `LoggerMessage.Define<T>` delegates).
+**Two key results:**
 
-How it works: the source generator scans every `logger.LogXxx($"...")` call site, parses the interpolated string at compile time, and emits a `[InterceptsLocation]` interceptor that creates a cached `LoggerMessage.Define<T1, T2, T3>` delegate with the literal template string. No template parsing at runtime, no `StringBuilder`, no boxing in your code.
+1. **~40x faster when the level is disabled.** The source-generated interceptor checks `IsEnabled` before evaluating the interpolated string, so disabled log calls cost ~0.4 ns vs ~16 ns for the standard API. Hot loops with debug logging behind a level check pay almost nothing.
+2. **Comparable production cost when enabled.** With a real Serilog sink, our interpolated form costs ~989 ns vs ~924 ns for the Microsoft form — a **+7% overhead** for the natural `$"..."` syntax. The bulk of the time (~870 ns) is spent inside Serilog's `LogEvent` construction, not in our code, so the handler/interceptor overhead is negligible.
+
+For zero-allocation logging in hot paths, prefer the `[Log]` attribute (~39 ns, 64 B) — it generates a cached `LoggerMessage.Define<T>` delegate per method and bypasses the interpolated string handler entirely.
+
+**How it works:** the source generator scans every `logger.LogXxx($"...")` call site, parses the interpolated string at compile time, and emits a `[InterceptsLocation]` interceptor that creates a cached `LoggerMessage.Define<T1, T2, T3>` delegate with the literal template string. No template parsing at runtime, no `StringBuilder`, no boxing in your code.
+
+### Analyzer: detect legacy log calls
+
+Install [`ZibStack.NET.Log.Analyzers`](https://www.nuget.org/packages/ZibStack.NET.Log.Analyzers) to get a `ZLOG002` warning whenever your code uses the legacy `_logger.LogXxx("template {Param}", value)` form. The analyzer flags only `Microsoft.Extensions.Logging.ILogger` extension calls with a string literal + at least one trailing argument, so plain messages and already-interpolated calls are left alone.
+
+```csharp
+_logger.LogInformation("User {Name}", name);
+//      ^^^^^^^^^^^^^^
+// ⚠ ZLOG002: Replace 'LogInformation("template", args)' with 'LogInformation($"template")'
+//   — the ZibStack.NET.Log generator emits a typed LoggerMessage.Define interceptor
+//     (same alloc, ~40x faster when level is disabled)
+```
 
 ## Features
 

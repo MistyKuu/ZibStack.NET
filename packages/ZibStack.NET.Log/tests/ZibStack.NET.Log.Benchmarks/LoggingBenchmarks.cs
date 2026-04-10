@@ -5,6 +5,8 @@ using BenchmarkDotNet.Order;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
+using Serilog.Sinks.InMemory;
 
 namespace ZibStack.NET.Log.Benchmarks;
 
@@ -51,11 +53,18 @@ public class LoggingBenchmarks
         _interpolated = new InterpolatedLogService(factory.CreateLogger<InterpolatedLogService>());
         _interpolatedNull = new InterpolatedLogService(NullLogger<InterpolatedLogService>.Instance);
 
-        // Real-world: consuming sink that reads every property → forces actual allocations
-        var realFactory = LoggerFactory.Create(b => b
+        // Real-world: Serilog with in-memory sink. Serilog enumerates the
+        // FormattedLogValues state and materializes properties — exactly what
+        // a production sink (Seq/Console/File) would do, so JIT can't elide
+        // the boxing of typed args.
+        var serilogLogger = new global::Serilog.LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.InMemory()
+            .CreateLogger();
+        var serilogFactory = LoggerFactory.Create(b => b
             .SetMinimumLevel(LogLevel.Information)
-            .AddProvider(new ConsumingLoggerProvider()));
-        _interpolatedReal = new InterpolatedLogService(realFactory.CreateLogger<InterpolatedLogService>());
+            .AddSerilog(serilogLogger));
+        _interpolatedReal = new InterpolatedLogService(serilogFactory.CreateLogger<InterpolatedLogService>());
 
         // With NullLogger (IsEnabled returns false — measures overhead when logging is off)
         _smartLogNull = new ZibLogService();

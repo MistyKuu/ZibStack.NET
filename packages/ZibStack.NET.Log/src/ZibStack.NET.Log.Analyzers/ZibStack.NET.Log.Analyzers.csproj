@@ -9,7 +9,7 @@
     <IsRoslynComponent>true</IsRoslynComponent>
 
     <PackageId>ZibStack.NET.Log.Analyzers</PackageId>
-    <Description>Roslyn analyzer that detects logger.LogXxx($"...") calls and suggests using LogXxxEx() for structured logging.</Description>
+    <Description>Roslyn analyzer that flags legacy logger.LogXxx("template", args) calls and suggests the structured logger.LogXxx($"...") interpolated form.</Description>
     <Authors>$(Authors)</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>

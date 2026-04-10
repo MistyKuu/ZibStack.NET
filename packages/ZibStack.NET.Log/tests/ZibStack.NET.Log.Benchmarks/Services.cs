@@ -132,41 +132,6 @@ public class InterpolatedLogService
 
 }
 
-// ─── Consuming logger provider ───
-// Reads every property/arg of every log entry. Forces JIT to actually
-// allocate object[] / box values — no escape analysis tricks.
-// This is the "real world" baseline a Serilog/Console/etc. sink would create.
-public sealed class ConsumingLoggerProvider : ILoggerProvider
-{
-    public static long Sink; // volatile-ish accumulator so JIT can't elide reads
-
-    public ILogger CreateLogger(string categoryName) => new ConsumingLogger();
-    public void Dispose() { }
-
-    private sealed class ConsumingLogger : ILogger
-    {
-        public bool IsEnabled(LogLevel logLevel) => true;
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            // Touch every property — forces boxing to materialize and prevents JIT from eliding.
-            if (state is IReadOnlyList<KeyValuePair<string, object?>> values)
-            {
-                for (int i = 0; i < values.Count; i++)
-                {
-                    var v = values[i].Value;
-                    if (v is not null) Sink += v.GetHashCode();
-                }
-            }
-            else if (state is not null)
-            {
-                Sink += state.GetHashCode();
-            }
-        }
-    }
-}
-
 // ─── Bare service (no logging at all) ───
 public class NoLogService
 {
