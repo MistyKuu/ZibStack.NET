@@ -28,7 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" PrivateAssets="compile" />
+    <!-- Abstractions is a real transitive dependency: consumers of the analyzer
+         package need the runtime types (LogAttribute, LoggerStructuredExtensions,
+         handler structs). Without this NuGet would not pull it in automatically. -->
+    <ProjectReference Include="..\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" />
   </ItemGroup>
 
   <!-- Include Aop generator source files directly (generators must be single-assembly) -->

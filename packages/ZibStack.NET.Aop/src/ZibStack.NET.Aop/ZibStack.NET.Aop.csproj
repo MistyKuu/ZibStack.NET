@@ -27,7 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" PrivateAssets="compile" />
+    <!-- Abstractions is a real transitive dependency: consumers of the analyzer
+         package need the runtime types (AspectAttribute, IAspectHandler, etc.).
+         Without this NuGet would not pull it in automatically. -->
+    <ProjectReference Include="..\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
