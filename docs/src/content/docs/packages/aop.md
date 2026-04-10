@@ -25,22 +25,31 @@ Enable interceptors in your `.csproj`:
 
 ## Setup (DI)
 
-All aspect handlers are resolved from DI. Wire up once at startup:
+All aspect handlers are resolved from DI. There are **two things** you must do at startup:
+
+1. **Register every handler type** in the DI container (`AddTransient` / `AddScoped` / `AddSingleton`).
+2. **Bridge the container** to `AspectServiceProvider.ServiceProvider` after `Build()`.
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-// Register handlers + their dependencies
+// 1. Register every aspect handler you reference via [AspectHandler(typeof(...))].
+//    This includes built-in handlers like TimingHandler and any of your own.
 builder.Services.AddTransient<TimingHandler>();
 builder.Services.AddSingleton<ITimingRecorder, MyMetricsRecorder>();
 
 var app = builder.Build();
 
-// Enable DI for all aspects (required):
+// 2. Bridge DI into the aspect runtime — required, do it once.
 AspectServiceProvider.ServiceProvider = app.Services;
 ```
 
-Now any method with aspects will resolve its handler from DI.
+Both steps are mandatory:
+
+- **Forget step 2** → first call into any aspect-decorated method throws `InvalidOperationException: ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set...` with the exact line of code to add.
+- **Forget step 1** (handler missing from DI) → throws `InvalidOperationException: Aspect handler 'YourHandler' is not registered in DI. Add 'builder.Services.AddTransient<YourHandler>();' at startup.`
+
+You'll see the same error for every handler attribute you stack on a method, so register all of them up-front.
 
 ### Dependency injection in handlers
 
