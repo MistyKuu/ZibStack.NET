@@ -6,7 +6,7 @@ A collection of .NET source generators and utilities for common application conc
 
 **Logging is tedious.** In enterprise systems you need logs everywhere. Wrapping every method in try-catch just for entry/exit logging is boilerplate hell. `[Log]` on a class adds structured logging to every public method — automatic entry, exit, exception, and timing. One attribute, done.
 
-**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. Our `LogInformationEx` methods fix this: `_logger.LogInformationEx($"User {user} bought {product}")` gives you interpolated strings AND structured logging. Zero allocation.
+**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. With `using ZibStack.NET.Log;`, standard `LogInformation($"User {user}")` just works — C# automatically picks the structured handler overload for `$"..."` arguments. Zero code changes.
 
 **TypeScript has it, C# doesn't.** `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, intersection types — if you write frontend code, you miss these in C#. Now you can: `[PartialFrom(typeof(Player))]` generates `PatchField<T>` properties with `ApplyTo()` for patching. `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]` — all source-generated, strongly-typed.
 
@@ -21,7 +21,7 @@ A collection of .NET source generators and utilities for common application conc
 
 | Package | NuGet | Description |
 |---|---|---|
-| [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides interpolated string logging (`LogInformationEx($"...")`). |
+| [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides structured interpolated string logging — `LogInformation($"...")` just works. |
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
 | [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`). |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField support and full CRUD API generation. |
@@ -47,8 +47,9 @@ public Order PlaceOrder(int customerId, [Sensitive] string creditCard) { ... }
 [Log]
 public class OrderService { ... }
 
-// Interpolated string logging:
-logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
+// Interpolated string logging — just add: using ZibStack.NET.Log;
+logger.LogInformation($"User {userId} bought {product} for {total:C}");
+// Template: "User {userId} bought {product} for {total:C}" — structured automatically
 
 // Optional: override assembly-level defaults (default: Information level, Destructure mode)
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]

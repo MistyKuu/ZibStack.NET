@@ -5,7 +5,7 @@ description: Lightweight, compile-time logging for .NET 8+ using C# interceptors
 
 [![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Log.svg)](https://www.nuget.org/packages/ZibStack.NET.Log) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Log)
 
-Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[Log]` to any method and ZibStack.NET.Log generates zero-allocation logging wrappers automatically — no reflection, no IL weaving, no runtime proxies. Also provides **interpolated string logging** (`LogInformationEx($"...")`) with structured logging support.
+Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[Log]` to any method and ZibStack.NET.Log generates zero-allocation logging wrappers automatically — no reflection, no IL weaving, no runtime proxies. Also provides **interpolated string logging** — just write `_logger.LogInformation($"User {user}")` and get structured logging automatically (with `using ZibStack.NET.Log;`).
 
 > **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Log/sample/SampleApi)
 
@@ -71,11 +71,18 @@ fail: OrderService[3] OrderService.PlaceOrder failed after 12ms
 
 ### Interpolated string logging
 
-Use `$"..."` with structured logging — no more `"template {Param}", value` boilerplate:
+Use `$"..."` with structured logging — no more `"template {Param}", value` boilerplate.
+Standard `LogXxx` calls with `$"..."` get structured logging automatically — C# 10+ prefers the handler overload for interpolated strings (the `using ZibStack.NET.Log` is added globally by the generator):
 
 ```csharp
-_logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
+// Standard ILogger — C# automatically picks the structured overload for $"..."
+_logger.LogInformation($"User {userId} bought {product} for {total:C}");
+// Template: "User {userId} bought {product} for {total:C}"
 // Structured properties: userId=42, product="Widget", total=29.97
+
+// Non-interpolated calls still use Microsoft's methods as before:
+_logger.LogInformation("Processing complete");
+_logger.LogInformation("User {Name}", userName);
 ```
 
 ## Benchmarks
@@ -84,21 +91,21 @@ Overhead of calling `int Add(int a, int b) => a + b;` with logging, BenchmarkDot
 
 | Method | Mean | Allocated |
 |---|---:|---:|
-| No logging (baseline) | 0.2 ns | 0 B |
-| Manual `LoggerMessage.Define` (level OFF) | 34.3 ns | 0 B |
-| Manual `LoggerMessage.Define` | 39.2 ns | 0 B |
-| **ZibStack.Log `[Log]` no stopwatch** | **42.9 ns** | **64 B** |
-| **ZibStack.Log `[Log]` (level OFF)** | **45.3 ns** | **64 B** |
-| **ZibStack.Log `[Log]`** | **46.1 ns** | **64 B** |
-| `[Log]` return object (no `[Sensitive]`) | 49.1 ns | 96 B |
-| Manual `ILogger.Log()` (level OFF) | 73.2 ns | 176 B |
-| Manual `ILogger.Log()` | 94.1 ns | 176 B |
-| `[Log]` return object (with `[Sensitive]`) | 116.1 ns | 624 B |
+| No logging (baseline) | 0.0 ns | 0 B |
+| Manual `LoggerMessage.Define` (level OFF) | 32.2 ns | 0 B |
+| Manual `LoggerMessage.Define` | 36.8 ns | 0 B |
+| **ZibStack.Log `[Log]` no stopwatch** | **37.2 ns** | **64 B** |
+| **ZibStack.Log `[Log]`** | **40.4 ns** | **64 B** |
+| **ZibStack.Log `[Log]` (level OFF)** | **40.5 ns** | **64 B** |
+| `[Log]` return object (no `[Sensitive]`) | 43.6 ns | 96 B |
+| Manual `ILogger.Log()` (level OFF) | 62.1 ns | 176 B |
+| Manual `ILogger.Log()` | 80.5 ns | 176 B |
+| `[Log]` return object (with `[Sensitive]`) | 98.0 ns | 624 B |
 
-- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~46 ns vs ~39 ns)
-- **2x faster** than `_logger.LogInformation()` (46 ns vs 94 ns)
+- **ZibStack.Log ≈ hand-written `LoggerMessage.Define`** — same tier (~40 ns vs ~37 ns)
+- **2x faster** than `_logger.LogInformation()` (40 ns vs 81 ns)
 - **2.8x less memory** than `_logger.LogInformation()` (64 B vs 176 B)
-- When log level OFF: ~45 ns (just DI resolve + `IsEnabled` check)
+- When log level OFF: ~40 ns (just DI resolve + `IsEnabled` check)
 
 ### Property-level sanitization overhead
 
@@ -106,10 +113,23 @@ When return type has `[Sensitive]`/`[NoLog]` properties (Dictionary + JSON seria
 
 | Method | Mean | Allocated |
 |---|---:|---:|
-| `[Log]` return object (no `[Sensitive]`) | 49.1 ns | 96 B |
-| `[Log]` return object (with `[Sensitive]`) | 116.1 ns | 624 B |
+| `[Log]` return object (no `[Sensitive]`) | 43.6 ns | 96 B |
+| `[Log]` return object (with `[Sensitive]`) | 98.0 ns | 624 B |
 
-+67 ns and +528 B per call for sanitization. Use `[Sensitive]` on properties only where needed.
++54 ns and +528 B per call for sanitization. Use `[Sensitive]` on properties only where needed.
+
+### Interpolated string logging
+
+`LogInformation($"...")` vs standard `LogInformation("template", args)`:
+
+| Method | Mean | Allocated |
+|---|---:|---:|
+| **`LogInformation($"...")` (level OFF)** | **1.4 ns** | **0 B** |
+| **`LogInformation($"...")` structured** | **3.7 ns** | **0 B** |
+| `LogInformation("template", args)` (level OFF) | 16.0 ns | 104 B |
+| `LogInformation("template", args)` | 26.1 ns | 104 B |
+
+**7x faster** and **zero allocation** compared to standard `LogInformation("template", args)` — thanks to per-level `shouldAppend` (zero cost when disabled), `ArrayPool<char>` (no StringBuilder), and template caching (no string allocation on repeated calls).
 
 ## Features
 
@@ -242,25 +262,66 @@ public Order GetOrder(int id) { ... }
 
 ### Interpolated String Logging
 
-Use `$"..."` interpolated strings with structured logging — no more `"template {Param}", value` boilerplate. Variable names are automatically captured as property names via `CallerArgumentExpression`:
+Use `$"..."` interpolated strings with structured logging — no more `"template {Param}", value` boilerplate. Variable names are automatically captured as property names via `CallerArgumentExpression`.
+
+**Standard `LogXxx` methods (recommended)** — just add `using ZibStack.NET.Log;`. C# 10+ automatically prefers the handler overload for `$"..."` arguments:
 
 ```csharp
 var userId = 42;
 var product = "Widget";
 var total = 29.97m;
 
-_logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
+// Standard ILogger calls — structured logging works automatically:
+_logger.LogInformation($"User {userId} bought {product} for {total:C}");
 // Template: "User {userId} bought {product} for {total:C}"
 // Structured properties: userId=42, product="Widget", total=29.97
 
-_logger.LogWarningEx($"Low stock for {product}");
-_logger.LogErrorEx(ex, $"Failed to process order for {userId}");
-_logger.LogDebugEx($"Cache hit ratio: {ratio:P2}");
+_logger.LogWarning($"Low stock for {product}");
+_logger.LogError(ex, $"Failed to process order for {userId}");
+_logger.LogDebug($"Cache hit ratio: {ratio:P2}");
+
+// Non-interpolated calls still use Microsoft's methods as before:
+_logger.LogInformation("Processing complete");
+_logger.LogInformation("User {Name}", userName);
 ```
 
-Available methods: `LogTraceEx`, `LogDebugEx`, `LogInformationEx`, `LogWarningEx`, `LogErrorEx`, `LogCriticalEx`. Error/Critical variants also accept an `Exception` parameter.
+Available methods: `LogTrace`, `LogDebug`, `LogInformation`, `LogWarning`, `LogError`, `LogCritical`. All accept an optional `Exception` parameter.
 
 > Expressions like `user.Name` are sanitized to valid property names: `userName`.
+
+### Structured Exceptions
+
+`ZibException` preserves structured logging data from interpolated strings. When caught and logged, the template and individual properties are available for structured logging sinks:
+
+```csharp
+// Throw with interpolated string — template + properties captured automatically:
+throw new ZibException($"Order {orderId} not found for user {userId}");
+// Message: "Order 123 not found for user 42"
+// Template: "Order {orderId} not found for user {userId}"
+// Properties: { orderId: 123, userId: 42 }
+
+// When catching — log with structured data preserved:
+catch (ZibException ex)
+{
+    ex.LogTo(logger, LogLevel.Error);
+    // Structured log: "Order {orderId} not found for user {userId}" with orderId=123, userId=42
+}
+
+// Or use the generic extension for any exception (falls back to standard for non-ZibException):
+catch (Exception ex)
+{
+    logger.LogException(ex, LogLevel.Error);
+}
+```
+
+Typed variant with domain-specific error codes:
+
+```csharp
+public enum OrderError { NotFound, OutOfStock, InvalidQuantity }
+
+throw new ZibException<OrderError>(OrderError.NotFound, $"Order {orderId} not found");
+// ex.Code == OrderError.NotFound
+```
 
 ### Async Support
 
@@ -355,16 +416,19 @@ Set defaults for all `[Log]` methods in the assembly. Per-method properties over
 
 ### Interpolated string logging
 
+With `using ZibStack.NET.Log;`, standard `LogXxx` methods accept `$"..."` with structured logging:
+
 | Method | Description |
 |---|---|
-| `_logger.LogTraceEx($"...")` | Trace level with structured properties |
-| `_logger.LogDebugEx($"...")` | Debug level |
-| `_logger.LogInformationEx($"...")` | Information level |
-| `_logger.LogWarningEx($"...")` | Warning level |
-| `_logger.LogErrorEx($"...")` | Error level |
-| `_logger.LogErrorEx(ex, $"...")` | Error level with exception |
-| `_logger.LogCriticalEx($"...")` | Critical level |
-| `_logger.LogCriticalEx(ex, $"...")` | Critical level with exception |
+| `_logger.LogTrace($"...")` | Trace level with structured properties |
+| `_logger.LogDebug($"...")` | Debug level |
+| `_logger.LogInformation($"...")` | Information level |
+| `_logger.LogWarning($"...")` | Warning level |
+| `_logger.LogError($"...")` | Error level |
+| `_logger.LogError(ex, $"...")` | Error level with exception |
+| `_logger.LogCritical($"...")` | Critical level |
+| `_logger.LogCritical(ex, $"...")` | Critical level with exception |
+
 
 ## Requirements
 

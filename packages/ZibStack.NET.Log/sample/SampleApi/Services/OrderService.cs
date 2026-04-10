@@ -36,8 +36,13 @@ public class OrderService
     {
         _logger = logger;
         _logger.LogInformation("Starting Order Service {asd}", "asd");
+
+        // Structured logging with standard LogXxx — just add: using ZibStack.NET.Log;
+        // C# automatically picks the handler overload for $"..." arguments.
+        var version = "1.0";
+        _logger.LogInformation($"Order Service v{version} initialized");
+        // ↑ template: "Order Service v{version} initialized", args: ["1.0"]
     }
-    
 
     [Log]
     public Order PlaceOrder(int customerId, string product, int quantity)

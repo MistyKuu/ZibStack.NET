@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="build\ZibStack.NET.Log.Abstractions.props" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\ZibStack.NET.Log.Abstractions.props" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
   <ItemGroup>

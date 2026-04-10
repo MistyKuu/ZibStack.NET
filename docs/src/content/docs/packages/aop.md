@@ -42,6 +42,39 @@ AspectServiceProvider.ServiceProvider = app.Services;
 
 Now any method with aspects will resolve its handler from DI.
 
+### Dependency injection in handlers
+
+Handlers are resolved from DI — they support **constructor injection** like any other service:
+
+```csharp
+public class TimingHandler : IAspectHandler
+{
+    private readonly ILogger<TimingHandler> _logger;
+    private readonly ITimingRecorder _recorder;
+
+    // Dependencies injected automatically by the DI container
+    public TimingHandler(ILogger<TimingHandler> logger, ITimingRecorder recorder)
+    {
+        _logger = logger;
+        _recorder = recorder;
+    }
+
+    public void OnBefore(AspectContext ctx) { }
+
+    public void OnAfter(AspectContext ctx)
+    {
+        _logger.LogInformation("{Class}.{Method} completed in {Ms}ms",
+            ctx.ClassName, ctx.MethodName, ctx.ElapsedMilliseconds);
+        _recorder.Record(ctx.MethodName, ctx.ElapsedMilliseconds);
+    }
+
+    public void OnException(AspectContext ctx, Exception ex)
+        => _logger.LogWarning(ex, "{Class}.{Method} failed", ctx.ClassName, ctx.MethodName);
+}
+```
+
+> **Fallback:** If DI is not configured, the generator falls back to `new TimingHandler()` — which requires a parameterless constructor. To use injected dependencies, always set `AspectServiceProvider.ServiceProvider`.
+
 ## Benchmarks
 
 Runtime handler overhead per call, measured with BenchmarkDotNet on .NET 10.0:

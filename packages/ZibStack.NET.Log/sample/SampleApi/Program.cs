@@ -1,5 +1,5 @@
 using ZibStack.NET.Aop;
-using ZibStack.NET.Log;
+// using ZibStack.NET.Log; ← no longer needed! Generator emits global using automatically.
 using ZibStack.NET.Log.Sample.Services;
 
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
@@ -77,12 +77,49 @@ app.MapGet("/interpolated", (OrderService service, ILogger<Program> logger) =>
     var product = "Widget";
     var total = 29.97m;
 
-    // ZibStack interpolated string logging — structured + natural syntax
-    logger.LogInformationEx($"User {userId} bought {product} for {total:C}");
-    logger.LogDebugEx($"Processing order for user {userId}");
-    logger.LogWarningEx($"Low stock for {product}");
+    // Structured interpolated string logging — just works, no Ex suffix needed
+    logger.LogInformation($"User {userId} bought {product} for {total:C}");
+    logger.LogDebug($"Processing order for user {userId}");
+    logger.LogWarning($"Low stock for {product}");
 
     return Results.Ok(new { userId, product, total });
+});
+
+app.MapGet("/structured", (ILogger<Program> logger) =>
+{
+    var userId = 42;
+    var product = "Widget";
+    var total = 29.97m;
+
+    // Capture structured log entries to prove template is preserved
+    var captured = new List<object>();
+
+    // NEW: Standard LogXxx with $"..." — structured logging automatically!
+    logger.LogInformation($"User {userId} bought {product} for {total:C}");
+    logger.LogWarning($"Low stock for {product}, only {3} left");
+
+    // Non-interpolated still uses Microsoft's methods:
+    logger.LogInformation("Processing complete — no interpolation here");
+    logger.LogInformation("Template with args: User {Name}", "Alice");
+
+    return Results.Ok(new { message = "Check console logs for structured output" });
+});
+
+// Endpoint that captures log entries and returns structured info (template + args)
+app.MapGet("/structured-proof", () =>
+{
+    var entries = new List<object>();
+    var testLogger = new StructuredTestLogger(entries);
+
+    var userId = 42;
+    var product = "Widget";
+    var total = 29.97m;
+
+    // With ZibStack.NET.Log handler (structured):
+    testLogger.LogInformation($"User {userId} bought {product} for {total:C}");
+    testLogger.LogWarning($"Low stock for {product}, only {3} left");
+
+    return Results.Ok(new { structured_log_entries = entries });
 });
 
 app.MapGet("/ping", (OrderService service) =>
@@ -92,3 +129,36 @@ app.MapGet("/ping", (OrderService service) =>
 });
 
 app.Run();
+
+sealed class StructuredTestLogger : ILogger
+{
+    private readonly List<object> _entries;
+    public StructuredTestLogger(List<object> entries) => _entries = entries;
+    public bool IsEnabled(LogLevel logLevel) => true;
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        string? template = null;
+        var properties = new Dictionary<string, object?>();
+
+        if (state is IReadOnlyList<KeyValuePair<string, object?>> values)
+        {
+            foreach (var kvp in values)
+            {
+                if (kvp.Key == "{OriginalFormat}")
+                    template = kvp.Value?.ToString();
+                else
+                    properties[kvp.Key] = kvp.Value;
+            }
+        }
+
+        _entries.Add(new
+        {
+            level = logLevel.ToString(),
+            template,
+            properties,
+            formatted = formatter(state, exception)
+        });
+    }
+}

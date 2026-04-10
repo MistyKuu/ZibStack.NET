@@ -21,6 +21,10 @@ public class LoggingBenchmarks
     private ZibLogSanitizerService _sanitizerService = null!;
     private ZibLogPlainService _plainService = null!;
 
+    // Interpolated string logging benchmarks
+    private InterpolatedLogService _interpolated = null!;
+    private InterpolatedLogService _interpolatedNull = null!;
+
     // NullLogger — logging is enabled but goes nowhere (measures pure overhead)
     private ZibLogService _smartLogNull = null!;
     private ManualLogService _manualNull = null!;
@@ -38,6 +42,10 @@ public class LoggingBenchmarks
         _plainService = new ZibLogPlainService();
         _manual = new ManualLogService(factory.CreateLogger<ManualLogService>());
         _optimized = new OptimizedManualLogService(factory.CreateLogger<OptimizedManualLogService>());
+
+        // Interpolated string logging
+        _interpolated = new InterpolatedLogService(factory.CreateLogger<InterpolatedLogService>());
+        _interpolatedNull = new InterpolatedLogService(NullLogger<InterpolatedLogService>.Instance);
 
         // With NullLogger (IsEnabled returns false — measures overhead when logging is off)
         _smartLogNull = new ZibLogService();
@@ -92,4 +100,20 @@ public class LoggingBenchmarks
 
     [Benchmark(Description = "[Log] return object (with [Sensitive])")]
     public SensitiveOrder Log_SanitizedObject() => _sanitizerService.GetOrder(1);
+
+    // ═══════════════════════════════════════════
+    // Interpolated string logging: structured vs standard template
+    // ═══════════════════════════════════════════
+
+    [Benchmark(Description = "LogInformation($\"...\") structured")]
+    public void Interpolated_Structured() => _interpolated.LogStructured(42, "Widget", 29.97m);
+
+    [Benchmark(Description = "LogInformation(\"template\", args)")]
+    public void Interpolated_StandardTemplate() => _interpolated.LogStandardTemplate(42, "Widget", 29.97m);
+
+    [Benchmark(Description = "LogInformation($\"...\") (level OFF)")]
+    public void Interpolated_Structured_Off() => _interpolatedNull.LogStructured(42, "Widget", 29.97m);
+
+    [Benchmark(Description = "LogInformation(\"template\") (level OFF)")]
+    public void Interpolated_StandardTemplate_Off() => _interpolatedNull.LogStandardTemplate(42, "Widget", 29.97m);
 }

@@ -108,6 +108,29 @@ public class ZibLogPlainService
     }
 }
 
+// ─── Interpolated string logging: structured vs standard ───
+public class InterpolatedLogService
+{
+    private readonly ILogger _logger;
+    public InterpolatedLogService(ILogger logger) => _logger = logger;
+
+    /// <summary>
+    /// ZibStack structured: logger.LogInformation($"...") → handler captures template + args.
+    /// </summary>
+    public void LogStructured(int userId, string product, decimal total)
+    {
+        _logger.LogInformation($"User {userId} bought {product} for {total:C}");
+    }
+
+    /// <summary>
+    /// Standard Microsoft: logger.LogInformation("template", args) — already structured.
+    /// </summary>
+    public void LogStandardTemplate(int userId, string product, decimal total)
+    {
+        _logger.LogInformation("User {userId} bought {product} for {total}", userId, product, total);
+    }
+}
+
 // ─── Bare service (no logging at all) ───
 public class NoLogService
 {
