@@ -25,6 +25,10 @@ public class LoggingBenchmarks
     private InterpolatedLogService _interpolated = null!;
     private InterpolatedLogService _interpolatedNull = null!;
 
+    // Real-world allocation measurement: consuming sink reads all properties
+    // so JIT can't eliminate boxing via escape analysis.
+    private InterpolatedLogService _interpolatedReal = null!;
+
     // NullLogger — logging is enabled but goes nowhere (measures pure overhead)
     private ZibLogService _smartLogNull = null!;
     private ManualLogService _manualNull = null!;
@@ -43,9 +47,15 @@ public class LoggingBenchmarks
         _manual = new ManualLogService(factory.CreateLogger<ManualLogService>());
         _optimized = new OptimizedManualLogService(factory.CreateLogger<OptimizedManualLogService>());
 
-        // Interpolated string logging
+        // Interpolated string logging (with NullLoggerProvider — JIT may elide)
         _interpolated = new InterpolatedLogService(factory.CreateLogger<InterpolatedLogService>());
         _interpolatedNull = new InterpolatedLogService(NullLogger<InterpolatedLogService>.Instance);
+
+        // Real-world: consuming sink that reads every property → forces actual allocations
+        var realFactory = LoggerFactory.Create(b => b
+            .SetMinimumLevel(LogLevel.Information)
+            .AddProvider(new ConsumingLoggerProvider()));
+        _interpolatedReal = new InterpolatedLogService(realFactory.CreateLogger<InterpolatedLogService>());
 
         // With NullLogger (IsEnabled returns false — measures overhead when logging is off)
         _smartLogNull = new ZibLogService();
@@ -116,4 +126,15 @@ public class LoggingBenchmarks
 
     [Benchmark(Description = "LogInformation(\"template\") (level OFF)")]
     public void Interpolated_StandardTemplate_Off() => _interpolatedNull.LogStandardTemplate(42, "Widget", 29.97m);
+
+    // ═══════════════════════════════════════════
+    // REAL-WORLD: consuming sink reads every property
+    // → JIT can't elide boxing → measures actual heap allocations
+    // ═══════════════════════════════════════════
+
+    [Benchmark(Description = "REAL: LogInformation($\"...\") structured")]
+    public void Real_Interpolated_Structured() => _interpolatedReal.LogStructured(42, "Widget", 29.97m);
+
+    [Benchmark(Description = "REAL: LogInformation(\"template\", args)")]
+    public void Real_Interpolated_StandardTemplate() => _interpolatedReal.LogStandardTemplate(42, "Widget", 29.97m);
 }

@@ -120,16 +120,18 @@ When return type has `[Sensitive]`/`[NoLog]` properties (Dictionary + JSON seria
 
 ### Interpolated string logging
 
-`LogInformation($"...")` vs standard `LogInformation("template", args)`:
+`LogInformation($"...")` vs standard `LogInformation("template", args)` — measured against a real consuming sink that reads every property (so JIT can't elide allocations):
 
 | Method | Mean | Allocated |
 |---|---:|---:|
-| **`LogInformation($"...")` (level OFF)** | **1.4 ns** | **0 B** |
-| **`LogInformation($"...")` structured** | **3.7 ns** | **0 B** |
-| `LogInformation("template", args)` (level OFF) | 16.0 ns | 104 B |
-| `LogInformation("template", args)` | 26.1 ns | 104 B |
+| **`LogInformation($"...")` (level OFF)** | **0.4 ns** | **0 B** |
+| `LogInformation("template", args)` (level OFF) | 15.7 ns | 104 B |
+| `LogInformation("template", args)` (standard) | 49.7 ns | 104 B |
+| **`LogInformation($"...")` structured** | **58.8 ns** | **112 B** |
 
-**7x faster** and **zero allocation** compared to standard `LogInformation("template", args)` — thanks to per-level `shouldAppend` (zero cost when disabled), `ArrayPool<char>` (no StringBuilder), and template caching (no string allocation on repeated calls).
+**~40x faster when the level is disabled** — the source-generated interceptor checks `IsEnabled` before evaluating the interpolated string, so disabled log calls cost virtually nothing. When enabled, performance is comparable to the standard Microsoft API (handler stores args in typed slots, interceptor dispatches via cached `LoggerMessage.Define<T>` delegates).
+
+How it works: the source generator scans every `logger.LogXxx($"...")` call site, parses the interpolated string at compile time, and emits a `[InterceptsLocation]` interceptor that creates a cached `LoggerMessage.Define<T1, T2, T3>` delegate with the literal template string. No template parsing at runtime, no `StringBuilder`, no boxing in your code.
 
 ## Features
 
@@ -264,7 +266,7 @@ public Order GetOrder(int id) { ... }
 
 Use `$"..."` interpolated strings with structured logging — no more `"template {Param}", value` boilerplate. Variable names are automatically captured as property names via `CallerArgumentExpression`.
 
-**Standard `LogXxx` methods (recommended)** — just add `using ZibStack.NET.Log;`. C# 10+ automatically prefers the handler overload for `$"..."` arguments:
+Just call standard `LogXxx` methods — C# 10+ automatically prefers the structured overload for `$"..."` arguments. The `using ZibStack.NET.Log` is added globally by the source generator, so no imports are required:
 
 ```csharp
 var userId = 42;
@@ -288,6 +290,14 @@ _logger.LogInformation("User {Name}", userName);
 Available methods: `LogTrace`, `LogDebug`, `LogInformation`, `LogWarning`, `LogError`, `LogCritical`. All accept an optional `Exception` parameter.
 
 > Expressions like `user.Name` are sanitized to valid property names: `userName`.
+
+**How it works:** The source generator scans every `logger.LogXxx($"...")` call site at compile time, parses the interpolated string from the syntax tree, and emits a `[InterceptsLocation]` interceptor. The interceptor:
+
+1. Creates a cached `LoggerMessage.Define<T1, T2, T3>` delegate with the literal template (one per call site, allocated once)
+2. Reads typed slots (`L0`, `D0`, `M0`, `S0`...) from the handler — no `object[]`, no template parsing at runtime
+3. Skips evaluation entirely when the level is disabled (one `IsEnabled` check, ~0.4 ns)
+
+This makes disabled log calls effectively free (40x faster than the standard `LogInformation("template", args)`) and enabled calls comparable to hand-written `LoggerMessage.Define` code.
 
 ### Structured Exceptions
 

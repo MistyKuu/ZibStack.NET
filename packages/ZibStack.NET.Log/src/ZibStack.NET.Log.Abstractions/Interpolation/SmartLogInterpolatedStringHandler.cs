@@ -1,352 +1,352 @@
-using System.Buffers;
-using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 
 namespace ZibStack.NET.Log;
 
 // ═══════════════════════════════════════════════════════════════════
-// Core logic shared by all per-level handlers.
-// Uses ArrayPool<char> instead of StringBuilder and caches templates.
+// Typed-slot handlers — store args in typed fields (no boxing).
+// A source-generated interceptor reads the typed slots and dispatches
+// via LoggerMessage.Define<T1,...> for zero-allocation logging.
+//
+// Without the interceptor, the handler degrades gracefully — args go
+// into the fallback object[] and the standard logger.Log path is used.
 // ═══════════════════════════════════════════════════════════════════
 
-internal struct ZibLogHandlerCore
-{
-    private char[]? _chars;
-    private int _pos;
-    private int _hash;
-    private object?[]? _args;
-    private int _argIndex;
+// Slot layout (per handler instance, ~180 bytes on stack):
+//   L0..L5  long  — int, long, bool, byte, short, char, uint, ulong (via cast)
+//   D0..D3  double — double, float
+//   M0..M1  decimal
+//   S0..S5  string
+//   O0..O1  object — fallback for custom types (boxes)
+//
+// Total slots: 18, but max 6 args per call site (LoggerMessage.Define limit).
+// If formattedCount > 6, falls back to object?[] + standard logger.Log path.
 
-    private static readonly ConcurrentDictionary<int, string> s_cache = new();
+#pragma warning disable CS0649 // fields assigned via slot writes
 
-    internal bool IsEnabled
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _chars is not null;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void Init(int literalLength, int formattedCount)
-    {
-        _chars = ArrayPool<char>.Shared.Rent(literalLength + formattedCount * 20);
-        _pos = 0;
-        _hash = formattedCount; // seed with arity so "a{x}" != "{x}a"
-        _args = new object?[formattedCount];
-        _argIndex = 0;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AppendLiteral(string s)
-    {
-        if (_chars is null) return;
-        _hash = HashCode.Combine(_hash, RuntimeHelpers.GetHashCode(s));
-
-        // Fast path: no braces to escape (vast majority of literals)
-        if (s.AsSpan().IndexOfAny('{', '}') < 0)
-        {
-            EnsureCapacity(s.Length);
-            s.AsSpan().CopyTo(_chars.AsSpan(_pos));
-            _pos += s.Length;
-            return;
-        }
-
-        // Slow path: escape { → {{ and } → }}
-        foreach (var c in s)
-        {
-            if (c is '{' or '}')
-            {
-                EnsureCapacity(2);
-                _chars[_pos++] = c;
-                _chars[_pos++] = c;
-            }
-            else
-            {
-                EnsureCapacity(1);
-                _chars[_pos++] = c;
-            }
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AppendFormatted<T>(T value, string name)
-    {
-        if (_chars is null) return;
-        _hash = HashCode.Combine(_hash, RuntimeHelpers.GetHashCode(name));
-        var sanitized = SanitizeName(name);
-        WritePlaceholder(sanitized, null);
-        _args![_argIndex++] = value;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AppendFormatted<T>(T value, string format, string name)
-    {
-        if (_chars is null) return;
-        _hash = HashCode.Combine(_hash, RuntimeHelpers.GetHashCode(name));
-        var sanitized = SanitizeName(name);
-        WritePlaceholder(sanitized, format);
-        _args![_argIndex++] = value;
-    }
-
-    internal string GetTemplate()
-    {
-        if (_chars is null) return "";
-
-        if (s_cache.TryGetValue(_hash, out var cached))
-        {
-            ArrayPool<char>.Shared.Return(_chars);
-            _chars = null;
-            return cached;
-        }
-
-        var template = new string(_chars, 0, _pos);
-        ArrayPool<char>.Shared.Return(_chars);
-        _chars = null;
-
-        // Cap cache to avoid unbounded growth (e.g. dynamic templates)
-        if (s_cache.Count < 2048)
-            s_cache.TryAdd(_hash, template);
-
-        return template;
-    }
-
-    internal object?[] GetArgs() => _args ?? Array.Empty<object?>();
-
-    private void WritePlaceholder(string name, string? format)
-    {
-        var needed = name.Length + 2 + (format?.Length ?? 0) + (format is null ? 0 : 1);
-        EnsureCapacity(needed);
-        _chars![_pos++] = '{';
-        name.AsSpan().CopyTo(_chars.AsSpan(_pos));
-        _pos += name.Length;
-        if (format is not null)
-        {
-            _chars[_pos++] = ':';
-            format.AsSpan().CopyTo(_chars.AsSpan(_pos));
-            _pos += format.Length;
-        }
-        _chars[_pos++] = '}';
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void EnsureCapacity(int additional)
-    {
-        if (_pos + additional <= _chars!.Length) return;
-        Grow(additional);
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void Grow(int additional)
-    {
-        var newSize = Math.Max(_chars!.Length * 2, _pos + additional);
-        var newChars = ArrayPool<char>.Shared.Rent(newSize);
-        _chars.AsSpan(0, _pos).CopyTo(newChars);
-        ArrayPool<char>.Shared.Return(_chars);
-        _chars = newChars;
-    }
-
-    /// <summary>
-    /// Sanitizes CallerArgumentExpression to a valid message template property name.
-    /// "user.Name" → "userName", "items[0]" → "items0", "GetId()" → "GetId"
-    /// </summary>
-    internal static string SanitizeName(string expression)
-    {
-        if (string.IsNullOrEmpty(expression))
-            return "_";
-
-        // Fast path: simple identifier (no dots, brackets, etc.)
-        bool simple = true;
-        for (int i = 0; i < expression.Length; i++)
-        {
-            char c = expression[i];
-            if (!char.IsLetterOrDigit(c) && c != '_')
-            {
-                simple = false;
-                break;
-            }
-        }
-        if (simple) return expression;
-
-        // Slow path: sanitize complex expression
-        Span<char> buf = expression.Length <= 128
-            ? stackalloc char[expression.Length]
-            : new char[expression.Length];
-        int pos = 0;
-        bool capitalizeNext = false;
-
-        for (int i = 0; i < expression.Length; i++)
-        {
-            char c = expression[i];
-            if (char.IsLetterOrDigit(c) || c == '_')
-            {
-                buf[pos++] = capitalizeNext ? char.ToUpperInvariant(c) : c;
-                capitalizeNext = false;
-            }
-            else
-            {
-                capitalizeNext = pos > 0;
-            }
-        }
-
-        return pos > 0 ? new string(buf[..pos]) : "_";
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// Per-level handlers — each hardcodes its LogLevel in the constructor
-// so shouldAppend can check IsEnabled for the exact level.
-// Zero cost when the level is disabled.
-// ═══════════════════════════════════════════════════════════════════
-
-/// <summary>Handler for <see cref="LogLevel.Trace"/> — zero cost when Trace is disabled.</summary>
+/// <summary>Handler for <see cref="LogLevel.Trace"/> — typed slots, zero boxing for primitives.</summary>
 [InterpolatedStringHandler]
 public ref struct ZibLogTraceHandler
 {
-    private ZibLogHandlerCore _core;
+    public bool IsEnabled;
+    public long L0, L1, L2, L3, L4, L5;
+    public double D0, D1, D2, D3;
+    public decimal M0, M1;
+    public string? S0, S1, S2, S3, S4, S5;
+    public object? O0, O1;
+    private byte _li, _di, _mi, _si, _oi;
+    public object?[]? FallbackArgs;
+    private byte _fi;
 
     public ZibLogTraceHandler(int literalLength, int formattedCount, ILogger logger, out bool shouldAppend)
     {
-        shouldAppend = logger.IsEnabled(LogLevel.Trace);
-        if (shouldAppend) _core.Init(literalLength, formattedCount);
+        IsEnabled = logger.IsEnabled(LogLevel.Trace);
+        shouldAppend = IsEnabled;
+        if (IsEnabled && formattedCount > 6)
+            FallbackArgs = new object?[formattedCount];
     }
 
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
+    public void AppendLiteral(string s) { }
 
-    internal bool IsEnabled => _core.IsEnabled;
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
+    public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(int v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(bool v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v ? 1 : 0);
+    public void AppendFormatted(byte v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(short v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(char v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(uint v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(double v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(double v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(float v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(decimal v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(decimal v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(string? v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted(string? v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted<T>(T v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+    public void AppendFormatted<T>(T v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StoreLong(long v)
+    {
+        if (!IsEnabled) return;
+        if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; }
+        switch (_li++) { case 0: L0 = v; break; case 1: L1 = v; break; case 2: L2 = v; break; case 3: L3 = v; break; case 4: L4 = v; break; case 5: L5 = v; break; }
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StoreDouble(double v)
+    {
+        if (!IsEnabled) return;
+        if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; }
+        switch (_di++) { case 0: D0 = v; break; case 1: D1 = v; break; case 2: D2 = v; break; case 3: D3 = v; break; }
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StoreDecimal(decimal v)
+    {
+        if (!IsEnabled) return;
+        if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; }
+        switch (_mi++) { case 0: M0 = v; break; case 1: M1 = v; break; }
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StoreString(string? v)
+    {
+        if (!IsEnabled) return;
+        if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; }
+        switch (_si++) { case 0: S0 = v; break; case 1: S1 = v; break; case 2: S2 = v; break; case 3: S3 = v; break; case 4: S4 = v; break; case 5: S5 = v; break; }
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StoreObject<T>(T v)
+    {
+        if (!IsEnabled) return;
+        if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; }
+        switch (_oi++) { case 0: O0 = v; break; case 1: O1 = v; break; }
+    }
 }
 
-/// <summary>Handler for <see cref="LogLevel.Debug"/> — zero cost when Debug is disabled.</summary>
+/// <summary>Handler for <see cref="LogLevel.Debug"/> — typed slots, zero boxing for primitives.</summary>
 [InterpolatedStringHandler]
 public ref struct ZibLogDebugHandler
 {
-    private ZibLogHandlerCore _core;
+    public bool IsEnabled;
+    public long L0, L1, L2, L3, L4, L5;
+    public double D0, D1, D2, D3;
+    public decimal M0, M1;
+    public string? S0, S1, S2, S3, S4, S5;
+    public object? O0, O1;
+    private byte _li, _di, _mi, _si, _oi;
+    public object?[]? FallbackArgs;
+    private byte _fi;
 
     public ZibLogDebugHandler(int literalLength, int formattedCount, ILogger logger, out bool shouldAppend)
     {
-        shouldAppend = logger.IsEnabled(LogLevel.Debug);
-        if (shouldAppend) _core.Init(literalLength, formattedCount);
+        IsEnabled = logger.IsEnabled(LogLevel.Debug);
+        shouldAppend = IsEnabled;
+        if (IsEnabled && formattedCount > 6)
+            FallbackArgs = new object?[formattedCount];
     }
 
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
+    public void AppendLiteral(string s) { }
+    public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(int v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(bool v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v ? 1 : 0);
+    public void AppendFormatted(byte v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(short v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(char v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(uint v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(double v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(double v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(float v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(decimal v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(decimal v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(string? v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted(string? v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted<T>(T v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+    public void AppendFormatted<T>(T v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
 
-    internal bool IsEnabled => _core.IsEnabled;
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreLong(long v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_li++) { case 0: L0 = v; break; case 1: L1 = v; break; case 2: L2 = v; break; case 3: L3 = v; break; case 4: L4 = v; break; case 5: L5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDouble(double v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_di++) { case 0: D0 = v; break; case 1: D1 = v; break; case 2: D2 = v; break; case 3: D3 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDecimal(decimal v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_mi++) { case 0: M0 = v; break; case 1: M1 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreString(string? v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_si++) { case 0: S0 = v; break; case 1: S1 = v; break; case 2: S2 = v; break; case 3: S3 = v; break; case 4: S4 = v; break; case 5: S5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreObject<T>(T v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_oi++) { case 0: O0 = v; break; case 1: O1 = v; break; } }
 }
 
-/// <summary>Handler for <see cref="LogLevel.Information"/> — zero cost when Information is disabled.</summary>
+/// <summary>Handler for <see cref="LogLevel.Information"/> — typed slots, zero boxing for primitives.</summary>
 [InterpolatedStringHandler]
 public ref struct ZibLogInformationHandler
 {
-    private ZibLogHandlerCore _core;
+    public bool IsEnabled;
+    public long L0, L1, L2, L3, L4, L5;
+    public double D0, D1, D2, D3;
+    public decimal M0, M1;
+    public string? S0, S1, S2, S3, S4, S5;
+    public object? O0, O1;
+    private byte _li, _di, _mi, _si, _oi;
+    public object?[]? FallbackArgs;
+    private byte _fi;
 
     public ZibLogInformationHandler(int literalLength, int formattedCount, ILogger logger, out bool shouldAppend)
     {
-        shouldAppend = logger.IsEnabled(LogLevel.Information);
-        if (shouldAppend) _core.Init(literalLength, formattedCount);
+        IsEnabled = logger.IsEnabled(LogLevel.Information);
+        shouldAppend = IsEnabled;
+        if (IsEnabled && formattedCount > 6)
+            FallbackArgs = new object?[formattedCount];
     }
 
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
+    public void AppendLiteral(string s) { }
+    public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(int v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(bool v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v ? 1 : 0);
+    public void AppendFormatted(byte v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(short v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(char v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(uint v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(double v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(double v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(float v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(decimal v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(decimal v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(string? v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted(string? v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted<T>(T v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+    public void AppendFormatted<T>(T v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
 
-    internal bool IsEnabled => _core.IsEnabled;
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreLong(long v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_li++) { case 0: L0 = v; break; case 1: L1 = v; break; case 2: L2 = v; break; case 3: L3 = v; break; case 4: L4 = v; break; case 5: L5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDouble(double v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_di++) { case 0: D0 = v; break; case 1: D1 = v; break; case 2: D2 = v; break; case 3: D3 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDecimal(decimal v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_mi++) { case 0: M0 = v; break; case 1: M1 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreString(string? v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_si++) { case 0: S0 = v; break; case 1: S1 = v; break; case 2: S2 = v; break; case 3: S3 = v; break; case 4: S4 = v; break; case 5: S5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreObject<T>(T v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_oi++) { case 0: O0 = v; break; case 1: O1 = v; break; } }
 }
 
-/// <summary>Handler for <see cref="LogLevel.Warning"/> — zero cost when Warning is disabled.</summary>
+/// <summary>Handler for <see cref="LogLevel.Warning"/> — typed slots, zero boxing for primitives.</summary>
 [InterpolatedStringHandler]
 public ref struct ZibLogWarningHandler
 {
-    private ZibLogHandlerCore _core;
+    public bool IsEnabled;
+    public long L0, L1, L2, L3, L4, L5;
+    public double D0, D1, D2, D3;
+    public decimal M0, M1;
+    public string? S0, S1, S2, S3, S4, S5;
+    public object? O0, O1;
+    private byte _li, _di, _mi, _si, _oi;
+    public object?[]? FallbackArgs;
+    private byte _fi;
 
     public ZibLogWarningHandler(int literalLength, int formattedCount, ILogger logger, out bool shouldAppend)
     {
-        shouldAppend = logger.IsEnabled(LogLevel.Warning);
-        if (shouldAppend) _core.Init(literalLength, formattedCount);
+        IsEnabled = logger.IsEnabled(LogLevel.Warning);
+        shouldAppend = IsEnabled;
+        if (IsEnabled && formattedCount > 6)
+            FallbackArgs = new object?[formattedCount];
     }
 
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
+    public void AppendLiteral(string s) { }
+    public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(int v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(bool v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v ? 1 : 0);
+    public void AppendFormatted(byte v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(short v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(char v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(uint v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(double v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(double v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(float v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(decimal v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(decimal v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(string? v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted(string? v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted<T>(T v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+    public void AppendFormatted<T>(T v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
 
-    internal bool IsEnabled => _core.IsEnabled;
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreLong(long v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_li++) { case 0: L0 = v; break; case 1: L1 = v; break; case 2: L2 = v; break; case 3: L3 = v; break; case 4: L4 = v; break; case 5: L5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDouble(double v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_di++) { case 0: D0 = v; break; case 1: D1 = v; break; case 2: D2 = v; break; case 3: D3 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDecimal(decimal v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_mi++) { case 0: M0 = v; break; case 1: M1 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreString(string? v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_si++) { case 0: S0 = v; break; case 1: S1 = v; break; case 2: S2 = v; break; case 3: S3 = v; break; case 4: S4 = v; break; case 5: S5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreObject<T>(T v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_oi++) { case 0: O0 = v; break; case 1: O1 = v; break; } }
 }
 
-/// <summary>Handler for <see cref="LogLevel.Error"/> — zero cost when Error is disabled.</summary>
+/// <summary>Handler for <see cref="LogLevel.Error"/> — typed slots, zero boxing for primitives.</summary>
 [InterpolatedStringHandler]
 public ref struct ZibLogErrorHandler
 {
-    private ZibLogHandlerCore _core;
+    public bool IsEnabled;
+    public long L0, L1, L2, L3, L4, L5;
+    public double D0, D1, D2, D3;
+    public decimal M0, M1;
+    public string? S0, S1, S2, S3, S4, S5;
+    public object? O0, O1;
+    private byte _li, _di, _mi, _si, _oi;
+    public object?[]? FallbackArgs;
+    private byte _fi;
 
     public ZibLogErrorHandler(int literalLength, int formattedCount, ILogger logger, out bool shouldAppend)
     {
-        shouldAppend = logger.IsEnabled(LogLevel.Error);
-        if (shouldAppend) _core.Init(literalLength, formattedCount);
+        IsEnabled = logger.IsEnabled(LogLevel.Error);
+        shouldAppend = IsEnabled;
+        if (IsEnabled && formattedCount > 6)
+            FallbackArgs = new object?[formattedCount];
     }
 
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
+    public void AppendLiteral(string s) { }
+    public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(int v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(bool v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v ? 1 : 0);
+    public void AppendFormatted(byte v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(short v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(char v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(uint v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(double v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(double v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(float v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(decimal v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(decimal v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(string? v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted(string? v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted<T>(T v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+    public void AppendFormatted<T>(T v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
 
-    internal bool IsEnabled => _core.IsEnabled;
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreLong(long v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_li++) { case 0: L0 = v; break; case 1: L1 = v; break; case 2: L2 = v; break; case 3: L3 = v; break; case 4: L4 = v; break; case 5: L5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDouble(double v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_di++) { case 0: D0 = v; break; case 1: D1 = v; break; case 2: D2 = v; break; case 3: D3 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDecimal(decimal v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_mi++) { case 0: M0 = v; break; case 1: M1 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreString(string? v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_si++) { case 0: S0 = v; break; case 1: S1 = v; break; case 2: S2 = v; break; case 3: S3 = v; break; case 4: S4 = v; break; case 5: S5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreObject<T>(T v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_oi++) { case 0: O0 = v; break; case 1: O1 = v; break; } }
 }
 
-/// <summary>Handler for <see cref="LogLevel.Critical"/> — zero cost when Critical is disabled.</summary>
+/// <summary>Handler for <see cref="LogLevel.Critical"/> — typed slots, zero boxing for primitives.</summary>
 [InterpolatedStringHandler]
 public ref struct ZibLogCriticalHandler
 {
-    private ZibLogHandlerCore _core;
+    public bool IsEnabled;
+    public long L0, L1, L2, L3, L4, L5;
+    public double D0, D1, D2, D3;
+    public decimal M0, M1;
+    public string? S0, S1, S2, S3, S4, S5;
+    public object? O0, O1;
+    private byte _li, _di, _mi, _si, _oi;
+    public object?[]? FallbackArgs;
+    private byte _fi;
 
     public ZibLogCriticalHandler(int literalLength, int formattedCount, ILogger logger, out bool shouldAppend)
     {
-        shouldAppend = logger.IsEnabled(LogLevel.Critical);
-        if (shouldAppend) _core.Init(literalLength, formattedCount);
+        IsEnabled = logger.IsEnabled(LogLevel.Critical);
+        shouldAppend = IsEnabled;
+        if (IsEnabled && formattedCount > 6)
+            FallbackArgs = new object?[formattedCount];
     }
 
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
+    public void AppendLiteral(string s) { }
+    public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(int v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(long v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(bool v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v ? 1 : 0);
+    public void AppendFormatted(byte v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(short v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(char v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(uint v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreLong(v);
+    public void AppendFormatted(double v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(double v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(float v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDouble(v);
+    public void AppendFormatted(decimal v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(decimal v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreDecimal(v);
+    public void AppendFormatted(string? v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted(string? v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreString(v);
+    public void AppendFormatted<T>(T v, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
+    public void AppendFormatted<T>(T v, string format, [CallerArgumentExpression(nameof(v))] string name = "") => StoreObject(v);
 
-    internal bool IsEnabled => _core.IsEnabled;
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreLong(long v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_li++) { case 0: L0 = v; break; case 1: L1 = v; break; case 2: L2 = v; break; case 3: L3 = v; break; case 4: L4 = v; break; case 5: L5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDouble(double v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_di++) { case 0: D0 = v; break; case 1: D1 = v; break; case 2: D2 = v; break; case 3: D3 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreDecimal(decimal v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_mi++) { case 0: M0 = v; break; case 1: M1 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreString(string? v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_si++) { case 0: S0 = v; break; case 1: S1 = v; break; case 2: S2 = v; break; case 3: S3 = v; break; case 4: S4 = v; break; case 5: S5 = v; break; } }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)] private void StoreObject<T>(T v) { if (!IsEnabled) return; if (FallbackArgs is not null) { FallbackArgs[_fi++] = v; return; } switch (_oi++) { case 0: O0 = v; break; case 1: O1 = v; break; } }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Legacy handler kept for ZibExceptionInterpolatedStringHandler compat.
-// Not used by the new LogXxx extension methods.
-// ═══════════════════════════════════════════════════════════════════
-
-/// <summary>
-/// Interpolated string handler that captures template and arguments separately.
-/// Prefer using the standard <c>LogXxx($"...")</c> methods which use per-level handlers.
-/// </summary>
-[InterpolatedStringHandler]
-public ref struct ZibLogInterpolatedStringHandler
-{
-    private ZibLogHandlerCore _core;
-
-    public ZibLogInterpolatedStringHandler(int literalLength, int formattedCount)
-    {
-        _core.Init(literalLength, formattedCount);
-    }
-
-    public void AppendLiteral(string s) => _core.AppendLiteral(s);
-    public void AppendFormatted<T>(T value, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, name);
-    public void AppendFormatted<T>(T value, string format, [CallerArgumentExpression(nameof(value))] string name = "") => _core.AppendFormatted(value, format, name);
-
-    internal string GetTemplate() => _core.GetTemplate();
-    internal object?[] GetArgs() => _core.GetArgs();
-}
+#pragma warning restore CS0649

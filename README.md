@@ -6,7 +6,7 @@ A collection of .NET source generators and utilities for common application conc
 
 **Logging is tedious.** In enterprise systems you need logs everywhere. Wrapping every method in try-catch just for entry/exit logging is boilerplate hell. `[Log]` on a class adds structured logging to every public method — automatic entry, exit, exception, and timing. One attribute, done.
 
-**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. With `using ZibStack.NET.Log;`, standard `LogInformation($"User {user}")` just works — C# automatically picks the structured handler overload for `$"..."` arguments. Zero code changes.
+**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. With ZibStack.NET.Log, standard `_logger.LogInformation($"User {user}")` just works — a source generator emits compile-time interceptors that dispatch via cached `LoggerMessage.Define<T>` delegates. Zero code changes, ~40x faster when the level is disabled.
 
 **TypeScript has it, C# doesn't.** `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, intersection types — if you write frontend code, you miss these in C#. Now you can: `[PartialFrom(typeof(Player))]` generates `PatchField<T>` properties with `ApplyTo()` for patching. `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]` — all source-generated, strongly-typed.
 
@@ -47,9 +47,11 @@ public Order PlaceOrder(int customerId, [Sensitive] string creditCard) { ... }
 [Log]
 public class OrderService { ... }
 
-// Interpolated string logging — just add: using ZibStack.NET.Log;
+// Interpolated string logging — works out of the box, no using needed:
 logger.LogInformation($"User {userId} bought {product} for {total:C}");
-// Template: "User {userId} bought {product} for {total:C}" — structured automatically
+// Source generator emits compile-time interceptor:
+// → cached LoggerMessage.Define<int, string, decimal> with literal template
+// → ~40x faster when level is disabled (one IsEnabled check)
 
 // Optional: override assembly-level defaults (default: Information level, Destructure mode)
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]

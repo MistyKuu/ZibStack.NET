@@ -4,9 +4,12 @@ namespace ZibStack.NET.Log;
 
 /// <summary>
 /// Extension methods for <see cref="ILogger"/> that automatically convert interpolated strings
-/// into structured log messages. Each method uses a per-level handler with <c>shouldAppend</c> —
-/// when the log level is disabled, the interpolated string is never evaluated (zero cost).
-/// C# 10+ automatically prefers these handler overloads for <c>$"..."</c> arguments.
+/// into structured log messages with zero boxing for primitive types.
+/// <para>
+/// These methods rely on the <c>ZibStack.NET.Log</c> source generator to emit interceptors
+/// that read typed slots from the handler and dispatch via <c>LoggerMessage.Define&lt;T&gt;</c>.
+/// Without the generator installed, these methods are no-ops.
+/// </para>
 /// </summary>
 public static class LoggerStructuredExtensions
 {
@@ -17,8 +20,7 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogTraceHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Trace, handler.GetTemplate(), handler.GetArgs());
+        // No-op fallback. Replaced by generator-emitted [InterceptsLocation] interceptor.
     }
 
     public static void LogTrace(
@@ -27,8 +29,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogTraceHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Trace, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     // ── Debug ────────────────────────────────────────────────────────────
@@ -38,8 +38,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogDebugHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Debug, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogDebug(
@@ -48,8 +46,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogDebugHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Debug, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     // ── Information ──────────────────────────────────────────────────────
@@ -59,8 +55,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogInformationHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Information, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogInformation(
@@ -69,8 +63,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogInformationHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Information, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     // ── Warning ──────────────────────────────────────────────────────────
@@ -80,8 +72,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogWarningHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Warning, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogWarning(
@@ -90,8 +80,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogWarningHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Warning, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     // ── Error ────────────────────────────────────────────────────────────
@@ -101,8 +89,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogErrorHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Error, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogError(
@@ -111,8 +97,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogErrorHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Error, exception, handler.GetTemplate(), handler.GetArgs());
     }
 
     // ── Critical ─────────────────────────────────────────────────────────
@@ -122,8 +106,6 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogCriticalHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Critical, handler.GetTemplate(), handler.GetArgs());
     }
 
     public static void LogCritical(
@@ -132,7 +114,5 @@ public static class LoggerStructuredExtensions
         [System.Runtime.CompilerServices.InterpolatedStringHandlerArgument("logger")]
         ref ZibLogCriticalHandler handler)
     {
-        if (handler.IsEnabled)
-            logger.Log(LogLevel.Critical, exception, handler.GetTemplate(), handler.GetArgs());
     }
 }

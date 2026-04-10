@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated;ZibStack.Generated.Log</InterceptorsPreviewNamespaces>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,7 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ZibStack.NET.Log\ZibStack.NET.Log.csproj" />
+    <!-- Generator must be loaded as analyzer so its interceptors are emitted in this project -->
+    <ProjectReference Include="..\..\src\ZibStack.NET.Log\ZibStack.NET.Log.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\..\src\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
   </ItemGroup>
