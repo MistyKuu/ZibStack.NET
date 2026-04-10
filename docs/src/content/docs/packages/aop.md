@@ -15,13 +15,7 @@ AOP (Aspect-Oriented Programming) framework for .NET 8+ using **C# interceptors*
 dotnet add package ZibStack.NET.Aop
 ```
 
-Enable interceptors in your `.csproj`:
-
-```xml
-<PropertyGroup>
-    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated</InterceptorsPreviewNamespaces>
-</PropertyGroup>
-```
+> The package's `build/.props` enables `InterceptorsNamespaces` for `ZibStack.Generated` automatically on restore — no manual `.csproj` edit required.
 
 ## Setup (DI)
 
@@ -331,8 +325,9 @@ Both can be combined on the same method — inline emitters and runtime handlers
 
 ## Requirements
 
-- **.NET 8.0** or later
-- `<InterceptorsPreviewNamespaces>ZibStack.Generated</InterceptorsPreviewNamespaces>` in `.csproj`
+- **.NET 8.0** or later (uses C# interceptors)
+
+The package's `build/.props` enables `InterceptorsNamespaces` automatically on restore — no manual `.csproj` edit needed.
 
 ## License
 

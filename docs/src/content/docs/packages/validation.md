@@ -71,7 +71,7 @@ if (!result.IsValid)
 All attributes support a `Message` property for custom error messages:
 
 ```csharp
-[Required(Message = "Please provide your name")]
+[ZRequired(Message = "Please provide your name")]
 [ZMatch(@"^\d{3}-\d{4}$", Message = "Phone must be in format XXX-XXXX")]
 ```
 

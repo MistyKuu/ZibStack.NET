@@ -17,20 +17,15 @@ Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[L
 dotnet add package ZibStack.NET.Log
 ```
 
-### 2. Enable interceptors + wire DI
-
-```xml
-<!-- .csproj -->
-<PropertyGroup>
-    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated</InterceptorsPreviewNamespaces>
-</PropertyGroup>
-```
+### 2. Wire DI
 
 ```csharp
 // Program.cs — wire DI (required):
 var app = builder.Build();
 AspectServiceProvider.ServiceProvider = app.Services;
 ```
+
+> Interceptor namespaces (`ZibStack.Generated`, `ZibStack.Generated.Log`) are added to your project automatically by the package's `build/.props` file on restore. No manual `<InterceptorsNamespaces>` edit needed.
 
 ### 3. Add `[Log]`
 
@@ -461,8 +456,9 @@ With `using ZibStack.NET.Log;`, standard `LogXxx` methods accept `$"..."` with s
 
 ## Requirements
 
-- **.NET 8.0** or later (uses interceptors)
-- `<InterceptorsPreviewNamespaces>ZibStack.Generated</InterceptorsPreviewNamespaces>` in `.csproj`
+- **.NET 8.0** or later (uses C# interceptors)
+
+That's it. The package's `build/.props` enables `InterceptorsNamespaces` automatically — you don't need to touch your `.csproj`.
 
 ## Roadmap
 

@@ -13,7 +13,8 @@ When used with `ZibStack.NET.Dto`, the source generator auto-detects `ZibStack.N
 ## Quick Start
 
 ```csharp
-// Your model — [CrudApi] or [ImTiredOfCrud] with ZibStack.NET.Dto
+// Your model — annotate with [CrudApi] (from ZibStack.NET.Dto) or
+// [ImTiredOfCrud] (from ZibStack.NET.UI, generates the full stack including DTOs).
 [ImTiredOfCrud(DefaultSort = "Name")]
 public partial class Player
 {
