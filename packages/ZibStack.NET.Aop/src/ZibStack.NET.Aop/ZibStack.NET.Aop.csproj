@@ -18,7 +18,10 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- Intentionally NOT setting DevelopmentDependency=true.
+         That flag tells NuGet to treat this as a dev-only package, which
+         excludes compile assets and PREVENTS our Abstractions ProjectReference
+         from being propagated as a transitive dependency to consumers. -->
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,6 +38,9 @@
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Auto-enable interceptor namespaces in consumer projects on restore. -->
+    <None Include="build\ZibStack.NET.Aop.props" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\ZibStack.NET.Aop.props" Pack="true" PackagePath="buildTransitive\" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 

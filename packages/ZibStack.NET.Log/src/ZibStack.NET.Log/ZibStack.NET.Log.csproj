@@ -19,7 +19,10 @@
     <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')">README.md</PackageReadmeFile>
 
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- Intentionally NOT setting DevelopmentDependency=true.
+         That flag tells NuGet to treat this as a dev-only package, which
+         excludes compile assets and PREVENTS our Abstractions ProjectReference
+         from being propagated as a transitive dependency to consumers. -->
   </PropertyGroup>
 
   <ItemGroup>
@@ -57,6 +60,9 @@
          enables the ZLOG002 diagnostic. No separate package install required. -->
     <None Include="..\ZibStack.NET.Log.Analyzers\bin\$(Configuration)\netstandard2.0\ZibStack.NET.Log.Analyzers.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Auto-enable interceptor namespaces in consumer projects on restore. -->
+    <None Include="build\ZibStack.NET.Log.props" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\ZibStack.NET.Log.props" Pack="true" PackagePath="buildTransitive\" />
     <None Include="$(MSBuildProjectDirectory)\..\..\README.md" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')" />
   </ItemGroup>
 

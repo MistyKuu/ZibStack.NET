@@ -1,0 +1,9 @@
+<Project>
+  <!-- Auto-enable C# interceptors for the namespaces emitted by ZibStack.NET.Aop generators.
+       Without these properties, the compiler errors with CS9137 ('interceptors' feature is
+       not enabled in this namespace) when consuming generated interceptor code. -->
+  <PropertyGroup>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);ZibStack.Generated</InterceptorsNamespaces>
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated</InterceptorsPreviewNamespaces>
+  </PropertyGroup>
+</Project>
