@@ -10,6 +10,8 @@ A collection of .NET source generators and utilities for common application conc
 
 **TypeScript has it, C# doesn't.** `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, intersection types — if you write frontend code, you miss these in C#. Now you can: `[PartialFrom(typeof(Player))]` generates `PatchField<T>` properties with `ApplyTo()` for patching. `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]` — all source-generated, strongly-typed.
 
+**JS-style destructuring with rest.** `const { name, id, ...rest } = person` is one of the most missed features when moving from JS/TS to C#. Now: mark a type with `[Destructurable]` and write `var (name, id, rest) = person.PickNameId()` — fully typed, with autocomplete. The source generator scans your `PickXxx()` call sites and emits matching extension methods + 'rest' types on demand (no combinatorial explosion — only the combos you actually use).
+
 **CRUD is 80% copy-paste.** Define a model, write Create/Update/Response DTOs, wire up endpoints, add validation, build query filters, set up EF stores. Or: `[ImTiredOfCrud]` — one attribute generates everything. CRUD API + DTOs + validation + query DSL (filter/sort/select with OR, grouping, IN, dot notation on relations) + form/table UI schemas with `filterOperators` per column. One attribute, full stack.
 
 
@@ -23,7 +25,7 @@ A collection of .NET source generators and utilities for common application conc
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides structured interpolated string logging — `LogInformation($"...")` just works. |
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
-| [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`). |
+| [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable` → `PickXxx()` methods). |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField support and full CRUD API generation. |
 | [**ZibStack.NET.Query**](packages/ZibStack.NET.Query/) | `dotnet add package ZibStack.NET.Query` | Filter/sort DSL for REST APIs. Parses query strings (`filter=Level>25,Team.Name=*ski&sort=-Level`) into LINQ/SQL. Compile-time field allowlists via source generation. |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
@@ -109,6 +111,29 @@ public class MetricsHandler : IAsyncAspectHandler
         => await _client.RecordAsync(ctx.MethodName, ctx.ElapsedMilliseconds);
     public ValueTask OnExceptionAsync(AspectContext ctx, Exception ex) => default;
 }
+```
+
+### ZibStack.NET.Core — `[Destructurable]`
+
+```csharp
+[Destructurable]
+public partial class Person
+{
+    public string Name { get; set; } = "";
+    public int Id { get; set; }
+    public string Email { get; set; }  = "";
+    public int Age { get; set; }
+    public string City { get; set; } = "";
+}
+
+// JS-style destructuring — fully typed, with autocomplete:
+var (name, rest) = person.PickName();             // rest: PersonRest_Name { Id, Email, Age, City }
+var (name, id, rest) = person.PickNameId();       // rest: PersonRest_NameId { Email, Age, City }
+var (name, id, email, rest) = person.PickNameIdEmail();
+
+// Generator scans every PickXxx() call site and emits matching extension methods
+// + 'rest' types on demand. No combinatorial explosion — only the combos you use.
+// Hover Person in the IDE → see all generated picks via <see cref> XML links.
 ```
 
 ### `[ImTiredOfCrud]` — one attribute, full-stack CRUD

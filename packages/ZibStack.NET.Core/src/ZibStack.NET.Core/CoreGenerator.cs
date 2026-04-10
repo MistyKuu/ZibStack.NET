@@ -29,12 +29,16 @@ public partial class CoreGenerator : IIncrementalGenerator
             ctx.AddSource("IntersectFromAttribute.g.cs", IntersectFromAttributeSource);
             ctx.AddSource("PickFromAttribute.g.cs", PickFromAttributeSource);
             ctx.AddSource("OmitFromAttribute.g.cs", OmitFromAttributeSource);
+            ctx.AddSource("DestructurableAttribute.g.cs", DestructurableAttributeSource);
 
             // Relationship / entity attributes
             ctx.AddSource("OneToManyAttribute.g.cs", OneToManyAttributeSource);
             ctx.AddSource("OneToOneAttribute.g.cs", OneToOneAttributeSource);
             ctx.AddSource("EntityAttribute.g.cs", EntityAttributeSource);
         });
+
+        // [Destructurable] — scans PickXxx() invocations and emits typed picks + rest types
+        RegisterDestructurable(context);
 
         // [PartialFrom]
         var partialFromDeclarations = context.SyntaxProvider
