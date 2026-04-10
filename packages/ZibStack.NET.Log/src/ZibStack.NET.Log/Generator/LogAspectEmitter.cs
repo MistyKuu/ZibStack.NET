@@ -95,7 +95,12 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         var loggable = logParams ? method.Parameters.Where(p => !p.IsNoLog).ToList()
             : new List<InterceptedParameterModel>();
 
-        sb.AppendLine($"{indent}var __logger = __cachedLogger ??= (global::Microsoft.Extensions.Logging.ILogger)global::ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider!.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
+        sb.AppendLine($"{indent}var __sp = global::ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider");
+        sb.AppendLine($"{indent}    ?? throw new global::System.InvalidOperationException(");
+        sb.AppendLine($"{indent}        \"ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set. \" +");
+        sb.AppendLine($"{indent}        \"[Log] resolves ILogger<T> from DI; you must wire it once at app startup. \" +");
+        sb.AppendLine($"{indent}        \"For ASP.NET Core: 'var app = builder.Build(); ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider = app.Services;'\");");
+        sb.AppendLine($"{indent}var __logger = __cachedLogger ??= (global::Microsoft.Extensions.Logging.ILogger)__sp.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
 
         if (loggable.Count <= 6)
         {
