@@ -101,13 +101,24 @@ public partial class CoreGenerator
             foreach (var t in types)
                 byFqn[t.FullyQualifiedName] = t;
 
-            // For each source type, gather all PickXxx invocations targeting it,
-            // resolve method name → property list, dedupe combos.
+            // For each source type:
+            // 1. Always emit a single-property PickX() for each property (baseline — gives
+            //    instant feedback in IDE/playground without needing the user to write a call).
+            // 2. Add any multi-property PickXxx() combos discovered at call sites.
             foreach (var typeInfo in types)
             {
                 var combos = new HashSet<string>(); // dedupe by method name
                 var resolved = new List<List<DestructProperty>>();
 
+                // Baseline: one PickX() per property
+                foreach (var prop in typeInfo.Properties)
+                {
+                    var methodName = "Pick" + prop.Name;
+                    if (!combos.Add(methodName)) continue;
+                    resolved.Add(new List<DestructProperty> { prop });
+                }
+
+                // User-requested combos from PickXxx() invocations
                 foreach (var inv in invocations)
                 {
                     if (inv.ReceiverTypeFqn != typeInfo.FullyQualifiedName) continue;

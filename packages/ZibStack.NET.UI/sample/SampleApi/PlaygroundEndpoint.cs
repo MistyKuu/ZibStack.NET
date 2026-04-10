@@ -201,6 +201,8 @@ public static class PlaygroundEndpoint
                     result.Generated.Add(new GeneratedFile("UI", name, source));
                 else if (name.Contains(".Partial.") || name.Contains(".Pick.") || name.Contains(".Omit.") || name.Contains(".Intersect."))
                     result.Generated.Add(new GeneratedFile("Utility Types", name, source));
+                else if (name.Contains(".Destructurable."))
+                    result.Generated.Add(new GeneratedFile("Utility Types", name, source));
                 else if (name.Contains(".Validation."))
                     result.Generated.Add(new GeneratedFile("Validation", name, source));
                 else if (!name.EndsWith("Attribute.g.cs"))
