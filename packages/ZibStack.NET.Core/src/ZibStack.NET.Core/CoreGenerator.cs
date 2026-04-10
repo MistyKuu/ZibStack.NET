@@ -71,7 +71,7 @@ public partial class CoreGenerator : IIncrementalGenerator
             {
                 if (seen.Add(info.FullyQualifiedName))
                 {
-                    var source = GenerateIntersectSource(info);
+                    var source = GenerateIntersectPlainSource(info);
                     spc.AddSource($"{info.FullyQualifiedName}.Intersect.g.cs", source);
                 }
             }
@@ -88,7 +88,7 @@ public partial class CoreGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(pickFromDeclarations, static (spc, info) =>
         {
-            var source = GeneratePartialFromSource(info);
+            var source = GeneratePlainShapeSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Pick.g.cs", source);
         });
 
@@ -103,7 +103,7 @@ public partial class CoreGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(omitFromDeclarations, static (spc, info) =>
         {
-            var source = GeneratePartialFromSource(info);
+            var source = GeneratePlainShapeSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Omit.g.cs", source);
         });
     }

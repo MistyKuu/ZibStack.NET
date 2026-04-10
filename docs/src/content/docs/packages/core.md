@@ -15,13 +15,20 @@ Source generator for shared attributes used across ZibStack.NET packages — rel
 dotnet add package ZibStack.NET.Core
 ```
 
-Requires `ZibStack.NET.Dto` for `PatchField<T>` (used in generated utility type properties).
+`[PartialFrom]` requires `ZibStack.NET.Dto` for `PatchField<T>`. The other utility type attributes (`[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]`) emit plain properties and have no extra dependency.
 
 ## Relationship Attributes
 
+These attributes live in `ZibStack.NET.Core` because they are read by **multiple generators** — keeping them in a single dependency-free package avoids cyclic references and duplicate declarations across `ZibStack.NET.Dto`, `ZibStack.NET.Query`, and `ZibStack.NET.UI`.
+
+The attributes themselves are pure markers (no EF Core or ASP.NET runtime dependency). Each consuming generator picks up only the parts it cares about.
+
 ### `[OneToOne]`
 
-Declares a one-to-one navigation property. Used by the Dto generator for dot-notation filtering and by the UI generator for EF Core configuration.
+Declares a one-to-one navigation property. Consumed by:
+
+- **`ZibStack.NET.Dto` / `ZibStack.NET.Query`** — enables dot-notation filtering across the relation (e.g. `team.name`) when generating DTOs and predicates.
+- **`ZibStack.NET.UI`** — excludes the navigation from auto-generated forms/tables, registers it as a related entity for drill-down, and (when combined with `[Entity]`) emits the EF Core `HasOne().WithOne()` configuration.
 
 ```csharp
 using ZibStack.NET.Core;
@@ -37,7 +44,10 @@ public class Player
 
 ### `[OneToMany]`
 
-Declares a one-to-many relationship on a collection navigation property.
+Declares a one-to-many relationship on a collection navigation property. Consumed by:
+
+- **`ZibStack.NET.Dto` / `ZibStack.NET.Query`** — generates `Any` / `All` / `Count` predicates for filtering parents by child collection state.
+- **`ZibStack.NET.UI`** — emits a child table for hierarchical ERP-style drill-down on the parent's detail view, and (when combined with `[Entity]`) generates the EF Core `HasMany().WithOne()` configuration.
 
 ```csharp
 public class Team
@@ -52,30 +62,29 @@ public class Team
 
 Properties:
 - `ForeignKey` — foreign key property name on the child type (auto-detected by convention if omitted)
-- `Label` — display label for UI
+- `Label` — display label used by the UI generator for the child table tab
 - `SchemaUrl` / `FormSchemaUrl` — override URLs for UI schema resolution
 
 ### `[Entity]`
 
-Opt-in for EF Core `IEntityTypeConfiguration<T>` generation.
+Opt-in marker that tells the **`ZibStack.NET.UI`** generator to emit an EF Core `IEntityTypeConfiguration<T>` for this class — including table mapping, key configuration, and any `HasOne` / `HasMany` calls derived from `[OneToOne]` / `[OneToMany]` navigations on the same type.
+
+The attribute itself has no dependency on `Microsoft.EntityFrameworkCore`; only the **generated** configuration class references EF Core, so consumers who don't use EF Core simply don't apply `[Entity]` and pay nothing.
 
 ```csharp
 [Entity(TableName = "Players", Schema = "dbo")]
 public partial class Player { ... }
 ```
 
-
-Defines a child table relationship for hierarchical drill-down (ERP-style).
-
-```csharp
-public partial class VoivodeshipView { ... }
-```
+Properties:
+- `TableName` — overrides the database table name (defaults to the class name)
+- `Schema` — database schema name
 
 ## Utility Type Attributes
 
 ### `[PartialFrom(typeof(T))]`
 
-Like TypeScript's `Partial<T>` — generates a class where every property is a `PatchField<T>` with an `ApplyTo()` method:
+Like TypeScript's `Partial<T>` — every property of the target type becomes a `PatchField<T>` so you can model partial updates (the value can be **unset**, set to a value, or explicitly set to `null`). An `ApplyTo(target)` method writes only the fields that were actually provided. Used by Dto-style `Update*Request` shapes.
 
 ```csharp
 using ZibStack.NET.Core;
@@ -83,38 +92,79 @@ using ZibStack.NET.Core;
 [PartialFrom(typeof(Player))]
 public partial record PartialPlayer;
 
-// Generated: PatchField properties for all public properties of Player + ApplyTo(Player)
+// Generated:
+//   public PatchField<string> Name { get; init; }
+//   public PatchField<int>    Level { get; init; }
+//   public PatchField<string?> Email { get; init; }
+//   ...
+//   public void ApplyTo(Player target) { /* writes only fields with HasValue */ }
+```
+
+> Requires `ZibStack.NET.Dto` for `PatchField<T>`. The other three utility-type attributes below do **not** use `PatchField` — they emit plain properties.
+
+### `[PickFrom(typeof(T), ...)]`
+
+Like TypeScript's `Pick<T, K>` — generates a record with the whitelisted properties **as plain fields** (their original types, not `PatchField`), plus a static `FromEntity(source)` factory that copies them from the source. Use it for projections / lightweight DTOs.
+
+```csharp
+[PickFrom(typeof(Player), nameof(Player.Name), nameof(Player.Level))]
+public partial record PlayerSummary;
+
+// Generated:
+//   public string Name  { get; init; } = default!;
+//   public int    Level { get; init; } = default!;
+//   public static PlayerSummary FromEntity(Player source) => new() { Name = source.Name, Level = source.Level };
+
+// Usage:
+var summary = PlayerSummary.FromEntity(player);
+```
+
+### `[OmitFrom(typeof(T), ...)]`
+
+Like TypeScript's `Omit<T, K>` — same as `PickFrom` but you list the properties to **exclude**. Also emits plain properties + `FromEntity(source)`.
+
+```csharp
+[OmitFrom(typeof(Player), nameof(Player.Id), nameof(Player.CreatedAt))]
+public partial record PlayerWithoutMeta;
+
+// Generated:
+//   public string  Name  { get; init; } = default!;
+//   public int     Level { get; init; } = default!;
+//   public string? Email { get; init; } = default!;
+//   public static PlayerWithoutMeta FromEntity(Player source) => new() { /* all included fields */ };
 ```
 
 ### `[IntersectFrom(typeof(T))]`
 
-Like TypeScript's `&` operator — combine properties from multiple types:
+Like TypeScript's `&` operator — generates a record that **merges** properties from multiple sources (deduplicated by name; first source wins on conflict). Emits plain properties, plus a `FromEntity(source)` per source type and an `ApplyTo(target)` per source type.
 
 ```csharp
 [IntersectFrom(typeof(Player))]
 [IntersectFrom(typeof(Address))]
 public partial record PlayerWithAddress;
 
-// Generated: all properties from both types + ApplyTo(Player) + ApplyTo(Address)
+// Generated:
+//   public string Name   { get; init; } = default!;   // from Player
+//   public int    Level  { get; init; } = default!;   // from Player
+//   public string City   { get; init; } = default!;   // from Address
+//   public string Street { get; init; } = default!;   // from Address
+//
+//   public static PlayerWithAddress FromEntity(Player source)  => new() { /* fills Player fields  */ };
+//   public static PlayerWithAddress FromEntity(Address source) => new() { /* fills Address fields */ };
+//   public void ApplyTo(Player target)  { /* writes Player  fields back */ }
+//   public void ApplyTo(Address target) { /* writes Address fields back */ }
+
+// Usage — chain FromEntity + with-expression to merge:
+var combined = PlayerWithAddress.FromEntity(player) with
+{
+    City   = address.City,
+    Street = address.Street,
+};
+combined.ApplyTo(somePlayer);   // writes Player-side fields back
+combined.ApplyTo(someAddress);  // writes Address-side fields back
 ```
 
-### `[PickFrom(typeof(T), ...)]`
-
-Like TypeScript's `Pick<T, K>` — whitelist of properties:
-
-```csharp
-[PickFrom(typeof(Player), nameof(Player.Name), nameof(Player.Level))]
-public partial record PlayerSummary;
-```
-
-### `[OmitFrom(typeof(T), ...)]`
-
-Like TypeScript's `Omit<T, K>` — exclude listed properties:
-
-```csharp
-[OmitFrom(typeof(Player), nameof(Player.Id), nameof(Player.CreatedAt))]
-public partial record PlayerWithoutMeta;
-```
+Unlike `[PartialFrom]`, none of `[PickFrom]`/`[OmitFrom]`/`[IntersectFrom]` use `PatchField` — they model **shape transformations**, not partial updates. If you want a partial-update DTO, use `[PartialFrom]` (or the `Update*Request` shapes generated by `[CrudApi]` in `ZibStack.NET.Dto`).
 
 ## JS-Style Destructuring
 
