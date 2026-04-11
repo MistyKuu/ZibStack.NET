@@ -16,24 +16,43 @@ export default defineConfig({
 				{ label: 'Getting Started', slug: 'getting-started' },
 				{ label: 'Live Playground', link: 'https://zibstack-net.onrender.com/index.html', attrs: { target: '_blank' } },
 				{
-					label: 'Packages',
+					label: 'Drop-in Attributes',
+					items: [
+						{ label: 'Log — Structured Logging', slug: 'packages/log' },
+						{ label: 'AOP — Aspects & [Trace]', slug: 'packages/aop' },
+					],
+				},
+				{
+					label: 'Utilities',
+					items: [
+						{ label: 'Core — Relations & Utility Types', slug: 'packages/core' },
+						{ label: 'Validation — Compile-Time Rules', slug: 'packages/validation' },
+						{ label: 'Result — Functional Errors', slug: 'packages/result' },
+					],
+				},
+				{
+					label: 'CRUD Stack',
 					items: [
 						{ label: 'Dto — CRUD API & DTOs', slug: 'packages/dto' },
-						{ label: 'EntityFramework', slug: 'packages/entityframework' },
-						{ label: 'Dapper', slug: 'packages/dapper' },
-						{ label: 'Log', slug: 'packages/log' },
-						{ label: 'Aop', slug: 'packages/aop' },
-						{ label: 'Validation', slug: 'packages/validation' },
-						{ label: 'Core', slug: 'packages/core' },
 						{ label: 'Query — Filter & Sort DSL', slug: 'packages/query' },
-						{ label: 'Result', slug: 'packages/result' },
-						{ label: 'UI', slug: 'packages/ui' },
+						{ label: 'UI — Form & Table Metadata', slug: 'packages/ui' },
+						{
+							label: 'Storage Adapters',
+							collapsed: false,
+							items: [
+								{ label: 'EF Core', slug: 'packages/entityframework' },
+								{ label: 'Dapper', slug: 'packages/dapper' },
+							],
+						},
 					],
 				},
 				{
 					label: 'Guides',
 					items: [
 						{ label: 'Full CRUD with SQLite', slug: 'guides/crud-sqlite' },
+						{ label: 'Modeling Relationships & Query DSL', slug: 'guides/relationships-query-dsl' },
+						{ label: 'Declarative Observability', slug: 'guides/observability' },
+						{ label: 'PatchField Tri-State', slug: 'guides/patchfield-tri-state' },
 					],
 				},
 			],

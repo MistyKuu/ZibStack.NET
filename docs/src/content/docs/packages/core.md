@@ -27,7 +27,7 @@ The attributes themselves are pure markers (no EF Core or ASP.NET runtime depend
 
 Declares a one-to-one navigation property. Consumed by:
 
-- **`ZibStack.NET.Dto` / `ZibStack.NET.Query`** — enables dot-notation filtering across the relation (e.g. `team.name`) when generating DTOs and predicates.
+- **`ZibStack.NET.Dto` / `ZibStack.NET.Query`** — expands the navigation into the generated `QueryDto` filter allowlist so `filter=Team.Name=Lakers`, `sort=Team.City`, and `select=Team.Name` all work. Without this marker the Dto generator skips the navigation entirely (complex types aren't valid query parameters on their own), so relational filtering is silently unavailable.
 - **`ZibStack.NET.UI`** — excludes the navigation from auto-generated forms/tables, registers it as a related entity for drill-down, and (when combined with `[Entity]`) emits the EF Core `HasOne().WithOne()` configuration.
 
 ```csharp
@@ -42,11 +42,16 @@ public class Player
 }
 ```
 
+Properties:
+- `ForeignKey` — foreign key property name on this type (auto-detected by the `{NavProp}Id` convention if omitted — e.g. `Team` → `TeamId`)
+- `Label` — display label used by the UI generator
+- `SchemaUrl` / `FormSchemaUrl` — override URLs for UI schema resolution
+
 ### `[OneToMany]`
 
 Declares a one-to-many relationship on a collection navigation property. Consumed by:
 
-- **`ZibStack.NET.Dto` / `ZibStack.NET.Query`** — generates `Any` / `All` / `Count` predicates for filtering parents by child collection state.
+- **`ZibStack.NET.Dto` / `ZibStack.NET.Query`** — lets the query DSL reach into the collection. `filter=Players.Name=*ski` translates to "any player named *ski", `filter=Players.Count>5` to "teams with more than 5 players". Without this marker the collection is invisible to the filter allowlist.
 - **`ZibStack.NET.UI`** — emits a child table for hierarchical ERP-style drill-down on the parent's detail view, and (when combined with `[Entity]`) generates the EF Core `HasMany().WithOne()` configuration.
 
 ```csharp

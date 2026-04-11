@@ -17,12 +17,14 @@ When used with `ZibStack.NET.Dto`, the Dto source generator auto-detects `ZibSta
 
 ## Quick Start
 
+The standalone way to get a query DSL on any model is `[QueryDto]` from `ZibStack.NET.Dto`. As long as `ZibStack.NET.Query` is referenced in the same project, the Dto source generator automatically wires filter/sort string parsing into the generated query record:
+
 ```csharp
-[ImTiredOfCrud(DefaultSort = "Name")]
+[QueryDto(DefaultSort = "Name")]
 public partial class Player
 {
     public int Id { get; set; }
-    public string Name { get; set; }
+    public string Name { get; set; } = "";
     public int Level { get; set; }
     public string? Email { get; set; }
     public int? TeamId { get; set; }
@@ -32,14 +34,28 @@ public partial class Player
 }
 ```
 
-That's it. The generated list endpoint now accepts `filter` and `sort` query string parameters:
+Generates `PlayerQuery` with `ApplyFilter(query, filter?)`, `ApplySort(query, sort?)`, `Apply(query, filter?, sort?)`, and `ProjectFields()`. Point it at an `IQueryable<Player>` in any endpoint:
+
+```csharp
+app.MapGet("/api/players", (string? filter, string? sort, AppDbContext db) =>
+{
+    var q = new PlayerQuery();
+    return q.Apply(db.Players, filter, sort).ToList();
+});
+```
+
+And the endpoint now accepts filter/sort strings:
 
 ```
-GET /api/players?filter=Level>25,Name=*ski&sort=-Level&page=1&pageSize=20
+GET /api/players?filter=Level>25,Name=*ski&sort=-Level
 GET /api/players?filter=Team.Name=Lakers
 GET /api/players?filter=(Level>50|Level<10),Team.City=LA
 GET /api/players?filter=Name=in=Jan;Anna;Kasia
 ```
+
+> **About `Team.Name` filtering** — dot notation across navigation properties only works because `Team` is marked with `[OneToOne]` from `ZibStack.NET.Core`. The Dto generator reads the relationship attribute and expands the navigation into the filter allowlist (`Team.Name`, `Team.City`, etc.) so the query DSL can reach into the related entity. Collection navigations use `[OneToMany]` to enable `filter=Players.Name=*ski` / `filter=Players.Count>5`. See [Core → Relationship Attributes](/ZibStack.NET/packages/core/#relationship-attributes) for the full contract.
+
+> If you're using `[CrudApi]` (or the full `[ImTiredOfCrud]` from `ZibStack.NET.UI`), the generator produces the query record, the list endpoint, **and** wires `filter`/`sort`/`page`/`pageSize` query string parameters automatically — you don't have to write the endpoint yourself. `[QueryDto]` is what you reach for when you only want the DSL on a plain model without the rest of the CRUD scaffolding.
 
 ## Filter Operators
 
@@ -161,28 +177,28 @@ This means:
 - **Type safety** — each field has its correct C# type at compile time
 - **AOT compatible** — no `Type.GetProperty()` or expression compilation at runtime
 
-## [ZQuery] Attribute
+## [QueryDto] Attribute
 
 Standalone query DSL without CRUD endpoints — use on any model:
 
 ```csharp
-[ZQuery(DefaultSort = "Name")]
+[QueryDto(DefaultSort = "Name")]
 public partial class Product
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public decimal Price { get; set; }
-    
+
     [OneToOne]
     public Category? Category { get; set; }
-    
+
     [OneToMany]
     public ICollection<Tag> Tags { get; set; }
 }
 ```
 
 Generates `ProductQuery` with `ApplyFilter(query, filter?)`, `ApplySort(query, sort?)`, `Apply(query, filter?, sort?)`, `ProjectFields()`.
-`[ZQuery]` defaults `Sortable = true`. Alias for `[QueryDto]`.
+`Sortable` defaults to `true` — set `[QueryDto(Sortable = false)]` for endpoints with a fixed result order (analytics, exports).
 
 ## Standalone Usage
 

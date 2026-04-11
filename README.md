@@ -264,7 +264,7 @@ GET /api/teams?filter=Players.Name=*ski                     // OneToMany → fil
 GET /api/players?filter=Level>25&count=true                 // count only → { "count": 42 }
 GET /api/players?select=Name,Level,Team.Name                // field selection
 
-// [ZQuery] — standalone query DSL attribute (same as [QueryDto] with Sortable=true default)
+// [QueryDto] — standalone query DSL attribute, Sortable defaults to true
 // Operators: = != > >= < <= =* !* ^ !^ $ !$ =in= =out=
 // Logic: , (AND) | (OR) () (grouping) /i (case insensitive)
 ```

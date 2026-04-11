@@ -187,7 +187,7 @@ public static class PlaygroundEndpoint
                     result.Generated.Add(new GeneratedFile("DTOs", name, source));
                 else if (name.Contains(".ListItem."))
                     result.Generated.Add(new GeneratedFile("DTOs", name, source));
-                else if (name.Contains(".Query.") || name.Contains(".ZQuery."))
+                else if (name.Contains(".Query."))
                     result.Generated.Add(new GeneratedFile("Query", name, source));
                 else if (name.Contains(".Entity.") || name.Contains("EntityConfigurations"))
                     result.Generated.Add(new GeneratedFile("Database", name, source));

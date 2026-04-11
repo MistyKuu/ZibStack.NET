@@ -205,9 +205,8 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[UpdateDto]` | Class | Generates Update request with `Validate()` + `ApplyTo()` |
 | `[CreateOrUpdateDto]` | Class | Generates single DTO with `ValidateForCreate/Update()` + both |
 | `[ResponseDto]` | Class | Generates read-only Response DTO with `FromEntity()` + `ProjectFrom()` |
-| `[QueryDto]` | Class | Generates filter DTO with nullable properties + `ApplyFilter(IQueryable)` |
-| `[QueryDto(Sortable = true)]` | Class | Adds `SortBy`, `SortDirection`, `ApplySort()`, `Apply()` to query DTO |
-| `[ZQuery]` | Class | Standalone query DSL. Same as `[QueryDto]` with `Sortable=true` default. | `Name?`, `DefaultSort?`, `DefaultSortDirection?` |
+| `[QueryDto]` | Class | Generates filter + sort DTO with nullable properties + `ApplyFilter/ApplySort/Apply(IQueryable)`. `Sortable` defaults to `true`. |
+| `[QueryDto(Sortable = false)]` | Class | Filter-only DTO — skips `SortBy`, `SortDirection`, `ApplySort()`. For endpoints with a fixed result order. |
 | `[CrudApi]` | Class | Generates full CRUD API endpoints + auto-implies missing DTOs |
 | `[CreateDtoFor(typeof(T))]` | Record (partial) | Generates create DTO for external type `T` |
 | `[UpdateDtoFor(typeof(T))]` | Record (partial) | Generates update DTO for external type `T` |

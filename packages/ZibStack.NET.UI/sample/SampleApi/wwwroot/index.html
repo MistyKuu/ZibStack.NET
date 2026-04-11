@@ -83,7 +83,7 @@
     <option value="validation">Validation</option>
     <option value="utility-types">Utility Types (Pick, Omit, Partial)</option>
     <option value="relations">Relations + Entity</option>
-    <option value="zquery">ZQuery — Standalone DSL</option>
+    <option value="querydto">QueryDto — Standalone DSL</option>
   </select>
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="data">Data</div>
@@ -407,7 +407,7 @@ public partial class Player
     public Team? Team { get; set; }
 }`,
 
-zquery: `// [ZQuery] — standalone query DSL
+querydto: `// [QueryDto] — standalone query DSL
 // Supports: flat fields, OneToOne (dot notation), OneToMany (Any/All/Count)
 
 public partial class Tag
@@ -424,7 +424,7 @@ public partial class Category
     public string? Region { get; set; }
 }
 
-[ZQuery(DefaultSort = "Name")]
+[QueryDto(DefaultSort = "Name")]
 public partial class Product
 {
     public int Id { get; set; }
@@ -592,7 +592,7 @@ function renderExamples() {
     }
   }
 
-  if (!cols.length && !tableSchema && !formSchema) { el.innerHTML='<div class="empty">No schemas or query generated — add [ImTiredOfCrud], [CrudApi], [ZQuery], [UiForm], or [UiTable]</div>'; return; }
+  if (!cols.length && !tableSchema && !formSchema) { el.innerHTML='<div class="empty">No schemas or query generated — add [ImTiredOfCrud], [CrudApi], [QueryDto], [UiForm], or [UiTable]</div>'; return; }
   let h = '';
   const api = tableSchema?.apiUrl || formSchema?.apiUrl || '/api/{entity}';
   const key = tableSchema?.keyProperty || formSchema?.keyProperty || 'id';

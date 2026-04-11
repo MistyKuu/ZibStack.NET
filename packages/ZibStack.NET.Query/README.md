@@ -113,28 +113,28 @@ GET /api/players?filter=Level>25&count=true    # → { "count": 42 }
 GET /api/players?count=true                     # → { "count": 150 }
 ```
 
-## [ZQuery] Attribute
+## [QueryDto] Attribute
 
 Standalone query DSL without CRUD endpoints — use on any model:
 
 ```csharp
-[ZQuery(DefaultSort = "Name")]
+[QueryDto(DefaultSort = "Name")]
 public partial class Product
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public decimal Price { get; set; }
-    
+
     [OneToOne]
     public Category? Category { get; set; }
-    
+
     [OneToMany]
     public ICollection<Tag> Tags { get; set; }
 }
 ```
 
 Generates `ProductQuery` with `ApplyFilter(query, filter?)`, `ApplySort(query, sort?)`, `Apply(query, filter?, sort?)`, `ProjectFields()`.
-`[ZQuery]` defaults `Sortable = true`. Alias for `[QueryDto]`.
+`Sortable` defaults to `true` — set `[QueryDto(Sortable = false)]` for endpoints with a fixed result order (analytics, exports).
 
 ## Standalone Usage
 
