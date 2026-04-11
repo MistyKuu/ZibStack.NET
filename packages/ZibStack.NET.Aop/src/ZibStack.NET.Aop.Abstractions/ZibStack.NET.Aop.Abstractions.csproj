@@ -20,10 +20,19 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- IAsyncAspectHandler and Trace aspect need .NET 8+ features -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- IAsyncAspectHandler, the built-in Trace aspect, and AddAop() need .NET 8+
+       features (ActivityStatusCode, DI abstractions). The netstandard2.0 target exists
+       only so source generators can share these abstractions at compile time. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <Compile Remove="IAsyncAspectHandler.cs" />
     <Compile Remove="IAsyncAroundAspectHandler.cs" />
+    <Compile Remove="TraceAttribute.cs" />
+    <Compile Remove="TraceHandler.cs" />
+    <Compile Remove="AspectServiceCollectionExtensions.cs" />
   </ItemGroup>
 
 </Project>

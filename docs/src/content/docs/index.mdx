@@ -19,26 +19,59 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
+## Tier 1 — Drop-in
+
+Zero architectural buy-in. Add one attribute, keep everything else unchanged.
+
+<CardGrid>
+	<Card title="Log" icon="document">
+		`[Log]` on a method or class — compile-time entry/exit/exception logging with zero allocation. Interpolated-string `LogInformation($"...")` works out of the box.
+
+		[Learn more](/ZibStack.NET/packages/log/)
+	</Card>
+	<Card title="Aop — built-in [Trace]" icon="setting">
+		`[Trace]` gives you OpenTelemetry spans on any method with one attribute. Stack with `[Log]` or build your own `IAspectHandler` for metrics, retry, cache, auth.
+
+		[Learn more](/ZibStack.NET/packages/aop/)
+	</Card>
+</CardGrid>
+
+## Tier 2 — Ergonomics
+
+Opt-in per file. TypeScript-inspired utilities and helpers you reach for when you want them — no framework, no configuration.
+
+<CardGrid>
+	<Card title="Core" icon="puzzle">
+		Shared attributes: relationships (`[OneToMany]`, `[OneToOne]`, `[Entity]`) and TypeScript-style utility types (`[PartialFrom]`, `[PickFrom]`, `[OmitFrom]`) plus JS-style `[Destructurable]`.
+
+		[Learn more](/ZibStack.NET/packages/core/)
+	</Card>
+	<Card title="Validation" icon="approve-check">
+		`[ZRequired]`, `[ZEmail]`, `[ZRange]` — compile-time validation with `Validate()` method generated.
+
+		[Learn more](/ZibStack.NET/packages/validation/)
+	</Card>
+	<Card title="Result" icon="random">
+		Functional `Result&lt;T&gt;` monad with Map/Bind/Match — error handling without exceptions.
+
+		[Learn more](/ZibStack.NET/packages/result/)
+	</Card>
+</CardGrid>
+
+## Tier 3 — Opinionated scaffolding
+
+High buy-in, high payoff. Full-stack CRUD, query DSL, UI metadata. Best for solo projects and small teams; in larger teams start with Tier 1 and adopt Tier 3 only once everyone has seen what's generated.
+
 <CardGrid>
 	<Card title="Dto — CRUD API" icon="rocket">
 		One attribute, full CRUD. `[CrudApi]` generates endpoints, DTOs, validation, and ProblemDetails responses.
 
 		[Learn more](/ZibStack.NET/packages/dto/)
 	</Card>
-	<Card title="Log" icon="document">
-		`[Log]` on a method or class — compile-time entry/exit/exception logging with zero allocation.
+	<Card title="Query" icon="magnifier">
+		Filter/sort DSL for REST APIs: `filter=Level>25,Team.Name=Lakers&sort=-Level&select=Name,Level`.
 
-		[Learn more](/ZibStack.NET/packages/log/)
-	</Card>
-	<Card title="Aop" icon="setting">
-		Custom aspects via interceptors. `[Timing]`, `[Trace]`, or build your own `IAspectHandler`.
-
-		[Learn more](/ZibStack.NET/packages/aop/)
-	</Card>
-	<Card title="Validation" icon="approve-check">
-		`[ZRequired]`, `[ZEmail]`, `[ZRange]` — compile-time validation with `Validate()` method generated.
-
-		[Learn more](/ZibStack.NET/packages/validation/)
+		[Learn more](/ZibStack.NET/packages/query/)
 	</Card>
 	<Card title="EntityFramework" icon="seti:db">
 		`[GenerateCrudStores]` on DbContext — auto-generates EfCrudStore implementations + DI registration.
@@ -49,20 +82,5 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 		Form + table metadata from attributes. Framework-agnostic JSON for Blazor, React, Vue.
 
 		[Learn more](/ZibStack.NET/packages/ui/)
-	</Card>
-	<Card title="Result" icon="random">
-		Functional `Result&lt;T&gt;` monad with Map/Bind/Match — error handling without exceptions.
-
-		[Learn more](/ZibStack.NET/packages/result/)
-	</Card>
-	<Card title="Core" icon="puzzle">
-		Shared attributes: relationships (`[OneToMany]`, `[OneToOne]`, `[Entity]`) and TypeScript-style utility types (`[PartialFrom]`, `[PickFrom]`, `[OmitFrom]`).
-
-		[Learn more](/ZibStack.NET/packages/core/)
-	</Card>
-	<Card title="Query" icon="magnifier">
-		Filter/sort DSL for REST APIs: `filter=Level>25,Team.Name=Lakers&sort=-Level&select=Name,Level`.
-
-		[Learn more](/ZibStack.NET/packages/query/)
 	</Card>
 </CardGrid>

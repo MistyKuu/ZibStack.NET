@@ -5,25 +5,17 @@ description: Install and start using ZibStack.NET source generators.
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-ZibStack.NET is a collection of **source generators** for .NET. Each package is independent — install only what you need.
+ZibStack.NET is a collection of **source generators** for .NET. Each package is independent — install only what you need. Start at Tier 1 (drop-in, zero architectural buy-in) and move deeper only if it fits your project — see the [Three tiers](./#tier-1--drop-in) overview for orientation.
 
 ## Quick Install
 
 <Tabs>
-  <TabItem label="CRUD API">
-    ```bash
-    dotnet add package ZibStack.NET.Dto
-    dotnet add package ZibStack.NET.Validation
-    dotnet add package ZibStack.NET.EntityFramework
-    dotnet add package Microsoft.EntityFrameworkCore.Sqlite
-    ```
-  </TabItem>
   <TabItem label="Logging">
     ```bash
     dotnet add package ZibStack.NET.Log
     ```
   </TabItem>
-  <TabItem label="AOP">
+  <TabItem label="AOP + [Trace]">
     ```bash
     dotnet add package ZibStack.NET.Aop
     ```
@@ -33,11 +25,55 @@ ZibStack.NET is a collection of **source generators** for .NET. Each package is 
     dotnet add package ZibStack.NET.Validation
     ```
   </TabItem>
+  <TabItem label="CRUD API">
+    ```bash
+    dotnet add package ZibStack.NET.Dto
+    dotnet add package ZibStack.NET.Validation
+    dotnet add package ZibStack.NET.EntityFramework
+    dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+    ```
+  </TabItem>
 </Tabs>
 
-## Minimal CRUD API Example
+## Tier 1 — Minimal drop-in example
 
-Define a model, add one attribute, and get a full REST API with database persistence:
+Add one attribute to get structured logging, OpenTelemetry tracing, or both — no architectural changes.
+
+```csharp
+// Program.cs
+using ZibStack.NET.Aop;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddAop();                     // registers built-in [Trace] handler
+
+var app = builder.Build();
+app.Services.UseAop();                          // bridges DI into the aspect runtime
+app.Run();
+```
+
+```csharp
+// Services/OrderService.cs
+using ZibStack.NET.Aop;
+
+public class OrderService
+{
+    [Log]                                       // structured entry/exit/exception logging
+    [Trace]                                     // OpenTelemetry span with parameter tags
+    public async Task<Order> GetOrderAsync(int id)
+    {
+        // ... your code unchanged
+    }
+
+    // Or, for the whole class:
+    // [Log] [Trace] public class OrderService { ... }
+}
+```
+
+You now have compile-time structured logging and OpenTelemetry spans with zero boilerplate. Wire an exporter (`AddOpenTelemetry().WithTracing().AddOtlpExporter()`) and you're done.
+
+## Tier 3 — Minimal CRUD API example
+
+If you want the full-stack scaffold: define a model, add one attribute, and get a full REST API with database persistence. Note this moves a lot of code out of your hands — best for solo or small-team projects.
 
 ```csharp
 // Models/Player.cs
