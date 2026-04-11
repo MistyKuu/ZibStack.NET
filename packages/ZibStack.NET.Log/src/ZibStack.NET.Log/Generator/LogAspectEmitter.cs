@@ -99,7 +99,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         sb.AppendLine($"{indent}    ?? throw new global::System.InvalidOperationException(");
         sb.AppendLine($"{indent}        \"ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set. \" +");
         sb.AppendLine($"{indent}        \"[Log] resolves ILogger<T> from DI; you must wire it once at app startup. \" +");
-        sb.AppendLine($"{indent}        \"For ASP.NET Core: 'var app = builder.Build(); ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider = app.Services;'\");");
+        sb.AppendLine($"{indent}        \"For ASP.NET Core: 'var app = builder.Build(); app.Services.UseAop();'\");");
         sb.AppendLine($"{indent}var __logger = __cachedLogger ??= (global::Microsoft.Extensions.Logging.ILogger)__sp.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
 
         if (loggable.Count <= 6)

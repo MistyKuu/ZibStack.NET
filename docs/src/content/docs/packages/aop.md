@@ -22,9 +22,11 @@ dotnet add package ZibStack.NET.Aop
 All aspect handlers are resolved from DI. There are **two things** you must do at startup:
 
 1. **Register every handler type** in the DI container (`AddTransient` / `AddScoped` / `AddSingleton`).
-2. **Bridge the container** to `AspectServiceProvider.ServiceProvider` after `Build()`.
+2. **Bridge the container** to the aspect runtime by calling `UseAop()` after `Build()`.
 
 ```csharp
+using ZibStack.NET.Aop;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Register every aspect handler you reference via [AspectHandler(typeof(...))].
@@ -34,14 +36,16 @@ builder.Services.AddSingleton<ITimingRecorder, MyMetricsRecorder>();
 
 var app = builder.Build();
 
-// 2. Bridge DI into the aspect runtime — required, do it once.
-AspectServiceProvider.ServiceProvider = app.Services;
+// 2. Bridge DI into the aspect runtime — one call, required once.
+app.Services.UseAop();
 ```
 
 Both steps are mandatory:
 
 - **Forget step 2** → first call into any aspect-decorated method throws `InvalidOperationException: ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set...` with the exact line of code to add.
 - **Forget step 1** (handler missing from DI) → throws `InvalidOperationException: Aspect handler 'YourHandler' is not registered in DI. Add 'builder.Services.AddTransient<YourHandler>();' at startup.`
+
+> `UseAop()` is a thin wrapper around `AspectServiceProvider.ServiceProvider = services` — if you prefer the assignment form you can still use it.
 
 You'll see the same error for every handler attribute you stack on a method, so register all of them up-front.
 

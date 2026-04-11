@@ -10,7 +10,7 @@ builder.Services.AddSingleton<OrderService>();
 
 var app = builder.Build();
 
-AspectServiceProvider.ServiceProvider = app.Services;
+app.Services.UseAop();
 
 app.MapGet("/order", (OrderService service) =>
 {

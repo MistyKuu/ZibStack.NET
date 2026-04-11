@@ -20,9 +20,11 @@ dotnet add package ZibStack.NET.Log
 ### 2. Wire DI
 
 ```csharp
+using ZibStack.NET.Aop;
+
 // Program.cs — wire DI (required):
 var app = builder.Build();
-AspectServiceProvider.ServiceProvider = app.Services;
+app.Services.UseAop();
 ```
 
 > Interceptor namespaces (`ZibStack.Generated`, `ZibStack.Generated.Log`) are added to your project automatically by the package's `build/.props` file on restore. No manual `<InterceptorsNamespaces>` edit needed.

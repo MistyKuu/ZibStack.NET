@@ -10,7 +10,7 @@ builder.Services.AddTransient<TimingHandler>();
 
 var app = builder.Build();
 
-AspectServiceProvider.ServiceProvider = app.Services;
+app.Services.UseAop();
 
 app.MapGet("/order/{id:int}", (int id, OrderService service) =>
 {
