@@ -75,7 +75,9 @@ public Order PlaceOrder(int customerId, [Sensitive] string creditCard) { ... }
 [Log]
 public class OrderService { ... }
 
-// Interpolated string logging — works out of the box, no using needed:
+// Interpolated string logging — just add the using:
+using ZibStack.NET.Log;
+
 logger.LogInformation($"User {userId} bought {product} for {total:C}");
 // Source generator emits compile-time interceptor:
 // → cached LoggerMessage.Define<int, string, decimal> with literal template
@@ -84,6 +86,8 @@ logger.LogInformation($"User {userId} bought {product} for {total:C}");
 // Optional: override assembly-level defaults (default: Information level, Destructure mode)
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
 ```
+
+> **Quiet by default.** ZibStack.NET.Log doesn't force a global using and the interpolated-logging suggestion (`ZLOG002`) is a hint, not a warning — your existing `LogInformation("...", arg)` call sites stay untouched. If you want the opinionated experience (global using + warnings on every legacy call site), opt in with `<ZibLogStrict>true</ZibLogStrict>` in your `.csproj`. See the [Log package docs](https://mistykuu.github.io/ZibStack.NET/packages/log/#configuration) for individual toggles.
 
 ### ZibStack.NET.Aop — built-in `[Trace]` + custom aspects
 

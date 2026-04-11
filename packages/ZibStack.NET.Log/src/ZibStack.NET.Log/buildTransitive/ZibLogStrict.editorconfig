@@ -1,0 +1,4 @@
+# Activated when <ZibLogStrict>true</ZibLogStrict> is set in the consumer .csproj.
+# Lifts ZibStack.NET.Log's interpolated-logging hint from Info to Warning.
+[*.cs]
+dotnet_diagnostic.ZLOG002.severity = warning

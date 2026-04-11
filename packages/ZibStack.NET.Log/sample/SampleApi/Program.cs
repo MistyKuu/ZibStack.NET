@@ -1,5 +1,5 @@
 using ZibStack.NET.Aop;
-// using ZibStack.NET.Log; ← no longer needed! Generator emits global using automatically.
+using ZibStack.NET.Log;
 using ZibStack.NET.Log.Sample.Services;
 
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]

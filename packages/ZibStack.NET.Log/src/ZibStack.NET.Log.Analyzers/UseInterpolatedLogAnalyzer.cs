@@ -29,12 +29,25 @@ public sealed class UseInterpolatedLogAnalyzer : DiagnosticAnalyzer
     private static readonly LocalizableString Description =
         "Standard ILogger.LogXxx(\"template {Param}\", value) calls work but go through the runtime FormattedLogValues parser. The interpolated form $\"template {value}\" is intercepted by the ZibStack.NET.Log source generator and dispatched via a cached LoggerMessage.Define<T> delegate.";
 
+    // Severity is intentionally Info: ZibStack.NET.Log should be a quiet guest in
+    // consumer projects. Users who want the louder "please migrate all your call sites"
+    // experience can opt in via their .editorconfig:
+    //
+    //   dotnet_diagnostic.ZLOG002.severity = warning
+    //
+    // …or in .csproj:
+    //
+    //   <PropertyGroup>
+    //     <ZibLogStrict>true</ZibLogStrict>
+    //   </PropertyGroup>
+    //
+    // which our build/.props lifts ZLOG002 to a warning automatically.
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
         Title,
         MessageFormat,
         category: "Usage",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         description: Description);
 

@@ -8,4 +8,25 @@
     <!-- .NET 8 preview name (kept for back-compat) -->
     <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);ZibStack.Generated;ZibStack.Generated.Log</InterceptorsPreviewNamespaces>
   </PropertyGroup>
+
+  <!-- Opt-in switches. ZibStack.NET.Log is quiet by default:
+         * no global using is emitted
+         * the analyzer (ZLOG002) reports at Info severity (hint in the IDE, no build noise)
+       Setting <ZibLogStrict>true</ZibLogStrict> in your .csproj turns on the opinionated
+       experience: global using on, analyzer lifted to Warning. You can also set the two
+       switches individually. -->
+  <PropertyGroup Condition="'$(ZibLogStrict)' == 'true' and '$(ZibLogEmitGlobalUsing)' == ''">
+    <ZibLogEmitGlobalUsing>true</ZibLogEmitGlobalUsing>
+  </PropertyGroup>
+
+  <!-- Make ZibLogEmitGlobalUsing visible to the source generator via AnalyzerConfigOptions. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="ZibLogEmitGlobalUsing" />
+  </ItemGroup>
+
+  <!-- When strict mode is on, lift the ZLOG002 analyzer from Info to Warning so it shows up
+       in normal build output instead of only as an IDE hint. -->
+  <ItemGroup Condition="'$(ZibLogStrict)' == 'true'">
+    <EditorConfigFiles Include="$(MSBuildThisFileDirectory)ZibLogStrict.editorconfig" />
+  </ItemGroup>
 </Project>

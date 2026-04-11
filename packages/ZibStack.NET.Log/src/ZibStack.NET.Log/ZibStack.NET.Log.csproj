@@ -63,6 +63,10 @@
     <!-- Auto-enable interceptor namespaces in consumer projects on restore. -->
     <None Include="build\ZibStack.NET.Log.props" Pack="true" PackagePath="build\" />
     <None Include="buildTransitive\ZibStack.NET.Log.props" Pack="true" PackagePath="buildTransitive\" />
+    <!-- Shipped alongside the props — activated only when <ZibLogStrict>true</ZibLogStrict>
+         is set in the consumer .csproj, to raise ZLOG002 from Info to Warning. -->
+    <None Include="build\ZibLogStrict.editorconfig" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\ZibLogStrict.editorconfig" Pack="true" PackagePath="buildTransitive\" />
     <None Include="$(MSBuildProjectDirectory)\..\..\README.md" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')" />
   </ItemGroup>
 

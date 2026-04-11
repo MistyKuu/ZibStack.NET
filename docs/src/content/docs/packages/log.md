@@ -5,7 +5,9 @@ description: Lightweight, compile-time logging for .NET 8+ using C# interceptors
 
 [![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Log.svg)](https://www.nuget.org/packages/ZibStack.NET.Log) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Log)
 
-Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[Log]` to any method and ZibStack.NET.Log generates zero-allocation logging wrappers automatically — no reflection, no IL weaving, no runtime proxies. Also provides **interpolated string logging** — just write `_logger.LogInformation($"User {user}")` and get structured logging automatically (with `using ZibStack.NET.Log;`).
+Lightweight, compile-time logging for .NET 8+ using **C# interceptors**. Add `[Log]` to any method and ZibStack.NET.Log generates zero-allocation logging wrappers automatically — no reflection, no IL weaving, no runtime proxies. Also provides **interpolated string logging** — add `using ZibStack.NET.Log;` and `_logger.LogInformation($"User {user}")` becomes structured at compile time.
+
+> **Quiet by default.** The package doesn't inject a global using and the "use interpolated string" suggestion (`ZLOG002`) is an IDE hint, not a warning. Existing call sites stay untouched until you opt in — see [Configuration](#configuration) below.
 
 > **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Log/sample/SampleApi)
 
@@ -69,10 +71,12 @@ fail: OrderService[3] OrderService.PlaceOrder failed after 12ms
 ### Interpolated string logging
 
 Use `$"..."` with structured logging — no more `"template {Param}", value` boilerplate.
-Standard `LogXxx` calls with `$"..."` get structured logging automatically — C# 10+ prefers the handler overload for interpolated strings (the `using ZibStack.NET.Log` is added globally by the generator):
+Standard `LogXxx` calls with `$"..."` get structured logging because C# 10+ prefers the interpolated-string handler overload shipped by this package. Add `using ZibStack.NET.Log;` in the file (or enable the global using, see [Configuration](#configuration)):
 
 ```csharp
-// Standard ILogger — C# automatically picks the structured overload for $"..."
+using ZibStack.NET.Log;   // needed for the structured overload to be picked
+
+// Standard ILogger — C# now prefers the structured overload for $"..."
 _logger.LogInformation($"User {userId} bought {product} for {total:C}");
 // Template: "User {userId} bought {product} for {total:C}"
 // Structured properties: userId=42, product="Widget", total=29.97
@@ -81,6 +85,53 @@ _logger.LogInformation($"User {userId} bought {product} for {total:C}");
 _logger.LogInformation("Processing complete");
 _logger.LogInformation("User {Name}", userName);
 ```
+
+## Configuration
+
+ZibStack.NET.Log is designed to be a **quiet guest** in consumer projects — no unsolicited global usings, no build warnings on your existing logging code. Two MSBuild properties control the opt-in experience:
+
+| Property | Default | Effect |
+|---|---|---|
+| `ZibLogEmitGlobalUsing` | `false` | When `true`, the source generator emits `global using ZibStack.NET.Log;` so the interpolated-string handler overload is available everywhere without per-file `using`. |
+| `ZibLogStrict` | `false` | When `true`, turns on the opinionated experience: `ZibLogEmitGlobalUsing=true` **and** the `ZLOG002` analyzer is raised from `Info` (IDE hint) to `Warning` (visible in build output). |
+
+### Examples
+
+**New project / greenfield — you want the full experience:**
+
+```xml
+<PropertyGroup>
+  <ZibLogStrict>true</ZibLogStrict>
+</PropertyGroup>
+```
+
+Global using on, analyzer shouts at every legacy `LogInformation("template", arg)` call, ready to migrate.
+
+**Large existing codebase — you just want `[Log]` on a few classes without touching everything:**
+
+```xml
+<!-- Nothing. Quiet by default. -->
+```
+
+Add `using ZibStack.NET.Log;` only in files that use `[Log]` or interpolated-string logging. The `ZLOG002` hint still appears in the IDE as a subtle dot, but won't fail your `TreatWarningsAsErrors` build.
+
+**You want the global using but NOT the warning upgrade:**
+
+```xml
+<PropertyGroup>
+  <ZibLogEmitGlobalUsing>true</ZibLogEmitGlobalUsing>
+</PropertyGroup>
+```
+
+**You want the warning upgrade but NOT the global using** (e.g., you prefer explicit imports):
+
+```ini
+# .editorconfig
+[*.cs]
+dotnet_diagnostic.ZLOG002.severity = warning
+```
+
+You can always override the analyzer severity per-file or per-folder via `.editorconfig`, regardless of the MSBuild properties.
 
 ## Benchmarks
 
@@ -282,9 +333,11 @@ public Order GetOrder(int id) { ... }
 
 Use `$"..."` interpolated strings with structured logging — no more `"template {Param}", value` boilerplate. Variable names are automatically captured as property names via `CallerArgumentExpression`.
 
-Just call standard `LogXxx` methods — C# 10+ automatically prefers the structured overload for `$"..."` arguments. The `using ZibStack.NET.Log` is added globally by the source generator, so no imports are required:
+Just call standard `LogXxx` methods — C# 10+ automatically prefers the structured overload for `$"..."` arguments, as long as `ZibStack.NET.Log` is in scope. Add `using ZibStack.NET.Log;` in the file, or enable the global using once via [`<ZibLogEmitGlobalUsing>true</ZibLogEmitGlobalUsing>`](#configuration):
 
 ```csharp
+using ZibStack.NET.Log;   // needed for the structured overload to be picked
+
 var userId = 42;
 var product = "Widget";
 var total = 29.97m;
