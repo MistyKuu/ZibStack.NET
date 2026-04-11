@@ -42,10 +42,12 @@ app.Services.UseAop();
 
 Both steps are mandatory:
 
-- **Forget step 2** → first call into any aspect-decorated method throws `InvalidOperationException: ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set...` with the exact line of code to add.
-- **Forget step 1** (handler missing from DI) → throws `InvalidOperationException: Aspect handler 'YourHandler' is not registered in DI. Add 'builder.Services.AddTransient<YourHandler>();' at startup.`
+- **Forget step 2** → first call into any aspect-decorated method throws:
+  > `InvalidOperationException: ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set. [Log] resolves ILogger<T> from DI; you must wire it once at app startup. For ASP.NET Core: 'var app = builder.Build(); app.Services.UseAop();'`
+- **Forget step 1** (handler missing from DI) → throws:
+  > `InvalidOperationException: Aspect handler 'YourHandler' is not registered in DI. Add 'builder.Services.AddTransient<YourHandler>();' at startup.`
 
-> `UseAop()` is a thin wrapper around `AspectServiceProvider.ServiceProvider = services` — if you prefer the assignment form you can still use it.
+> `UseAop()` is a thin wrapper that sets `AspectServiceProvider.ServiceProvider = services`. If you prefer the assignment form you can still use it — they are equivalent.
 
 You'll see the same error for every handler attribute you stack on a method, so register all of them up-front.
 
