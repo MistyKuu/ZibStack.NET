@@ -1,9 +1,8 @@
 using ZibStack.NET.Dto;
 
-// SDTO012 warns when [CrudApi] types have no matching DbSet<T>. These test fixtures
-// exist only to verify the generator's output via reflection — they never get an
-// ICrudStore at runtime and never run in an ASP.NET host, so the warning is noise here.
-#pragma warning disable SDTO012
+// SDTO012 is suppressed project-wide in ZibStack.NET.Dto.Tests.csproj — these
+// [CrudApi] fixtures are inspected via reflection, never wired into a real DI
+// container or ASP.NET host, so the "no ICrudStore registered" warning is noise.
 
 namespace ZibStack.NET.Dto.Tests;
 

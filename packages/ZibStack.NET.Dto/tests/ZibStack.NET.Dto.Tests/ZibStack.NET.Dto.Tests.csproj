@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- These test fixtures have [CrudApi] types that never get a real store
+         (they're inspected via reflection, not run in an ASP.NET host). -->
+    <NoWarn>$(NoWarn);SDTO012</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

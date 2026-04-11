@@ -159,7 +159,20 @@ VoivodeshipView.GetTableDescriptor()   // TableDescriptor object
 VoivodeshipView.GetTableSchemaJson()   // Compile-time baked JSON string
 ```
 
-Serve via API:
+Serve via API. One-liner — the generator emits a `MapZibStackUiSchemas()` extension method that registers `GET /api/forms/{name}` and `GET /api/tables/{name}` for every type in the assembly that has `[UiForm]` / `[UiTable]` / `[ImTiredOfCrud]`:
+
+```csharp
+using ZibStack.NET.UI;
+// ...
+var app = builder.Build();
+app.MapZibStackUiSchemas();
+// Registers all your form and table schema endpoints at once.
+// The {name} segment is the type name lower-cased
+// (e.g. VoivodeshipView → /api/forms/voivodeshipview).
+```
+
+If you'd rather wire each endpoint by hand (e.g. to customise the route or
+add authorisation), you can still call the generated static methods directly:
 
 ```csharp
 app.MapGet("/api/forms/voivodeship", () =>

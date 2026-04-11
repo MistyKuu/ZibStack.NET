@@ -201,5 +201,31 @@ public sealed partial class UiGenerator : IIncrementalGenerator
             if (infos.Length > 0)
                 spc.AddSource("EntityConfigurations.g.cs", GenerateEntityRegistrations(infos));
         });
+
+        // ─── Schema endpoint helper ─────────────────────────────────────
+        // Combines all form/table targets (explicit [UiForm]/[UiTable] AND implicit
+        // via [ImTiredOfCrud]) into a single MapZibStackUiSchemas() extension method
+        // that registers GET /api/forms/{name} + GET /api/tables/{name} per type.
+
+        var hasAspNetCore = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("Microsoft.AspNetCore.Http.Results") is not null);
+
+        var allFormTargets = formTargets.Collect()
+            .Combine(modelFormTargets.Collect())
+            .Select(static (pair, _) => pair.Left.AddRange(pair.Right));
+
+        var allTableTargets = tableTargets.Collect()
+            .Combine(modelTableTargets.Collect())
+            .Select(static (pair, _) => pair.Left.AddRange(pair.Right));
+
+        context.RegisterSourceOutput(
+            allFormTargets.Combine(allTableTargets).Combine(hasAspNetCore),
+            static (spc, pair) =>
+            {
+                var ((forms, tables), hasAsp) = pair;
+                if (!hasAsp) return;
+                if (forms.Length == 0 && tables.Length == 0) return;
+                spc.AddSource("ZibStackUiSchemaEndpoints.g.cs", GenerateSchemaEndpoints(forms, tables));
+            });
     }
 }
