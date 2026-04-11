@@ -233,6 +233,84 @@ Each link is clickable — F12 / Go To Definition jumps to the generated type. W
 - Picks are positional in the tuple — order in the method name determines order in the deconstruction (`PickNameId` returns `(Name, Id, rest)`, not `(Id, Name, rest)`)
 - Property names that aren't valid C# identifier prefixes won't resolve
 
+### Pattern matching with `PickXxx()`
+
+`PickXxx()` returns a regular C# `ValueTuple`, which means it plugs straight into **positional patterns**, **property patterns**, and `switch` expressions with `when` guards. One thing to keep in mind before you start writing patterns:
+
+> **Every `PickXxx()` produces exactly N+1 slots: one slot per picked property, then a single `rest` object at the end.** The `rest` is a strongly-typed object with properties for everything you didn't pick — not additional tuple elements. If you want to match on an unpicked field, go through the rest via a property pattern.
+
+Concretely, for `Person { Name, Id, Email, Age, City }`:
+
+```csharp
+person.PickName()              // (string, PersonRest_Name)            — 2 slots
+person.PickNameId()            // (string, int, PersonRest_NameId)     — 3 slots
+person.PickNameIdEmail()       // (string, int, string, PersonRest_…)  — 4 slots
+
+// rest is an object, NOT more tuple elements:
+var (name, id, rest) = person.PickNameId();
+// rest.Age, rest.Email, rest.City — access as properties
+```
+
+**Positional pattern in `if`** — match shape and values in one go:
+
+```csharp
+if (person.PickNameId() is ("Admin", 0, _))
+{
+    // Name == "Admin" AND Id == 0 — newly created admin
+}
+```
+
+**Pattern matching the rest object** — use a nested property pattern in the last slot:
+
+```csharp
+// Match on a field that lives inside rest
+if (person.PickNameId() is (var name, _, { Age: < 18 }))
+{
+    Console.WriteLine($"underage: {name}");
+}
+
+// Multiple rest fields at once
+if (person.PickName() is (var name, { Age: >= 18 and < 65, City: "Warsaw" }))
+{
+    Console.WriteLine($"working-age warsaw local: {name}");
+}
+```
+
+**`switch` expression with `when` guards** — full combination of positional + property + logical conditions:
+
+```csharp
+var description = person.PickNameId() switch
+{
+    // Guard on a picked slot (needs when because StartsWith is a method call)
+    (var n, _, _)            when n.StartsWith("Guest")  => $"guest: {n}",
+
+    // Constant pattern on slot 1
+    (_, 0, _)                                             => "unsaved",
+
+    // Drill into rest via property pattern
+    (var n, _, { Age: < 18 })                             => $"minor: {n}",
+    (var n, _, { Age: >= 65 })                            => $"senior: {n}",
+
+    // Mix slot match with a rest-property guard
+    ("Admin", var id, { Email: var e })
+        when id > 0 && e.EndsWith("@company.com")         => $"internal admin ({e})",
+
+    // Bind rest and use it in `when` — equivalent to a nested property pattern,
+    // useful when the condition spans multiple rest fields
+    (var n, _, var rest) when rest.Age > 18 && rest.City == rest.Email.Split('@')[1]
+                                                            => $"{n} emails from home",
+
+    // Fallback
+    (var n, _, _)                                          => $"regular: {n}"
+};
+```
+
+Two patterns to notice:
+- `(var n, _, { Age: < 18 })` — the third slot isn't discarded, it's matched with a property pattern that descends into `rest.Age`. The compiler knows `rest` is `PersonRest_NameId` so `Age` is strongly typed.
+- `(var n, _, var rest)` + `when` — bind the whole rest object, then use it freely in the guard. Useful when you need multiple rest fields in one boolean expression.
+
+**Why this matters if you come from TypeScript:** `const { name, id, ...rest } = person` in TS gives you `rest` as a plain object, and you reach into it with `rest.age`. `PickXxx()` + positional pattern does exactly the same shape — picked fields are individual slots, everything else lives behind a typed `rest` handle. Positional patterns on `ValueTuple` happen to use parentheses `(...)` instead of square brackets `[...]`, but the mental model is identical.
+
 ## Requirements
 
 - .NET 6+ (or .NET Framework with SDK-style projects)
