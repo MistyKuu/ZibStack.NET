@@ -371,7 +371,7 @@ static Order GetOrder_Aop(this OrderService @this, int id)
 
 ### Inline Emitters (`IAspectEmitter`)
 
-Compile-time code generation. The emitter writes code directly into the interceptor — no objects, no dispatch. Used by `[Log]`:
+Compile-time code generation. The emitter writes code directly into the AOP interceptor — no objects, no dispatch. Used by the `[Log]` **attribute** (not to be confused with interpolated-string `logger.LogInformation($"...")` calls, which use a different mechanism — see [Log → How `LogInformation($"...")` actually works](/ZibStack.NET/packages/log/#in-depth-how-loginformation-actually-works)):
 
 ```csharp
 // What [Log] produces (via LogAspectEmitter):
@@ -395,8 +395,8 @@ static Order GetOrder_Aop(this OrderService @this, int id)
 |---|---|---|
 | **Ease of writing** | Simple C# class | Roslyn code generation |
 | **Overhead** | ~60ns, ~304B/call | ~40ns, ~64B/call |
-| **Best for** | Most aspects: timing, tracing, auth, cache, retry | Hot paths: logging, metrics |
-| **Built-in** | `[Trace]` (OpenTelemetry spans) | `[Log]` (structured logging) |
+| **Best for** | Most aspects: timing, tracing, auth, cache, retry | Hot paths: method-level entry/exit logging, metrics |
+| **Built-in** | `[Trace]` (OpenTelemetry spans) | `[Log]` attribute (method-level entry/exit logs) |
 
 Both can be combined on the same method — inline emitters and runtime handlers execute in the same interceptor.
 

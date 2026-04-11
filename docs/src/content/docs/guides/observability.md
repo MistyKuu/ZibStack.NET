@@ -123,10 +123,12 @@ public static async Task<Order> PlaceOrderAsync_Intercepted(
 
 Two details that matter:
 
-- **`[Log]` is an "inline emitter"** — the generator writes the logging code directly into the interceptor with zero per-call allocation (one cached `LoggerMessage.Define<T1,T2,T3>` delegate per method).
+- **`[Log]` is an "inline emitter"** — the generator writes the logging code directly into the AOP interceptor with zero per-call allocation (one cached `LoggerMessage.Define<T1,T2,T3>` delegate per decorated method).
 - **`[Trace]` is a "runtime handler"** — the generator calls `TraceHandler.OnBefore/OnAfter/OnException` through the `IAspectHandler` interface. Handler is a singleton registered by `AddAop()`, so dispatch cost is one virtual call.
 
 You can stack more aspects beyond `[Log]` / `[Trace]` — write your own `IAspectHandler` and they all run in a single generated interceptor. See [AOP → Custom Aspects](/ZibStack.NET/packages/aop/#custom-aspects) for the recipe.
+
+> **Not to be confused with interpolated-string logging.** The `[Log]` attribute path above rewrites the **method definition** to wrap each call with entry/exit/exception code. The interpolated-string structured-logging path (shown in the next section) rewrites individual **`logger.LogXxx($"...")` call sites** inside the method body. Both use source-generated interceptors and both end up dispatching through `LoggerMessage.Define`, but they target different things and can be used independently. A method can have `[Log]` without containing any interpolated-string logs, and vice versa.
 
 ## Structured interpolated logging
 
@@ -138,20 +140,30 @@ using ZibStack.NET.Log;
 _logger.LogInformation($"Processing order for customer {customerId}");
 ```
 
-That looks like a plain flat string, but because `ZibStack.NET.Log` ships interpolated-string-handler overloads and the source generator intercepts them at call site, what actually ships in the binary is equivalent to:
+That looks like a plain flat string, but it isn't. The mechanism is two layers stacked:
 
-```csharp
-// Cached at static construction:
-private static readonly Action<ILogger, int, Exception?> __logHey =
-    LoggerMessage.Define<int>(LogLevel.Information,
-        new EventId(1, "ProcessingOrder"),
-        "Processing order for customer {customerId}");
+1. **Extension-method shadowing.** `ZibStack.NET.Log` ships `LogInformation(this ILogger, [InterpolatedStringHandlerArgument("logger")] ref ZibLogInformationHandler)` as an extension method. Once `using ZibStack.NET.Log;` is in scope, C# 11 overload resolution prefers this overload over Microsoft's `LogInformation(this ILogger, string, params object[])` whenever the argument is an interpolated string. The handler itself is a `ref struct` with **typed slots** (`long`, `double`, `decimal`, `string`, `object?`) that store each interpolation argument without boxing, and it captures structured property names via `[CallerArgumentExpression]`. The handler's constructor checks `logger.IsEnabled(…)` and writes `out bool shouldAppend` — if the level is disabled, the compiler skips every `AppendFormatted` call, so `$"{ExpensiveToString()}"` is never evaluated. That gives you lazy eval, zero boxing, and structured properties **from the handler alone**, before any source generator runs.
 
-// At the call site:
-__logHey(_logger, customerId, null);
-```
+2. **Source-generated interceptor.** The ZibStack.NET.Log generator scans every `logger.LogXxx($"...")` call site and emits a per-call-site `[InterceptsLocation]` interceptor that dispatches through a **cached** `LoggerMessage.Define<T1, T2, T3>` delegate. Conceptually the generated code is:
 
-Result: structured properties (`customerId=42` as an indexed field in Seq/Elastic/App Insights) + ~40× speedup when the log level is disabled (one `IsEnabled` check, nothing else).
+   ```csharp
+   // One cached delegate per call site, allocated at static init:
+   private static readonly Action<ILogger, int, Exception?> __logProcessingOrder =
+       LoggerMessage.Define<int>(
+           LogLevel.Information,
+           new EventId(1, "ProcessingOrder"),
+           "Processing order for customer {customerId}");
+
+   // The interceptor your original call site is rewritten to:
+   if (!handler.IsEnabled) return;
+   __logProcessingOrder(logger, (int)handler.L0, null);
+   ```
+
+   The template is parsed exactly once by `LoggerMessage.Define` at static init — not once per call like Microsoft's default path. That's where the ~40× disabled-level speedup and the zero-per-call-allocation win come from.
+
+Result: structured properties (`customerId=42` as an indexed field in Seq / Elastic / App Insights), lazy evaluation when the level is disabled (~0.4 ns for disabled `LogDebug`), and zero allocation per call.
+
+See [Log → In-depth: how `LogInformation($"...")` actually works](/ZibStack.NET/packages/log/#in-depth-how-loginformation-actually-works) for the full breakdown — including why you can't do it with the handler alone, and what each layer contributes independently.
 
 This works with **every** `LogXxx` method — `LogTrace`, `LogDebug`, `LogInformation`, `LogWarning`, `LogError`, `LogCritical` — and all their overloads (with `Exception`, with `EventId`, etc.).
 
