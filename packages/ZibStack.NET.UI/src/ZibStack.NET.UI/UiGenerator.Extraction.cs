@@ -306,6 +306,9 @@ public partial class UiGenerator
             ExtractRelationsFromProperties(symbol, formRelations);
 
             var formInfo = new FormClassInfo(symbol.Name, ns, hintName, formName, layout.ToLowerInvariant(), isRecord, fields, groups);
+            formInfo.IsPartial = symbol.DeclaringSyntaxReferences
+                .Any(r => r.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax tds
+                    && tds.Modifiers.Any(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword));
             formInfo.Relations.AddRange(formRelations);
 
             // Extract API metadata from [ImTiredOfCrud] or [CrudApi]
@@ -639,6 +642,9 @@ public partial class UiGenerator
 
             var result = new TableClassInfo(symbol.Name, ns, hintName, tableName, isRecord, columns,
                 defaultPageSize, pageSizes, defaultSort, defaultSortDirection.ToLowerInvariant(), schemaUrl);
+            result.IsPartial = symbol.DeclaringSyntaxReferences
+                .Any(r => r.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax tds
+                    && tds.Modifiers.Any(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword));
 
             // Extract API metadata from [ImTiredOfCrud] or [CrudApi]
             ExtractApiMetadata(symbol, out var apiUrl, out var keyProperty);

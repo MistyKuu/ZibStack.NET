@@ -194,7 +194,11 @@ public static class AopParser
             ? ""
             : classSymbol.ContainingNamespace.ToDisplayString();
 
-        return new InterceptedClassModel(ns, classSymbol.Name, methods, classData);
+        bool isPartial = classSymbol.DeclaringSyntaxReferences
+            .Any(r => r.GetSyntax(ct) is ClassDeclarationSyntax cds
+                && cds.Modifiers.Any(SyntaxKind.PartialKeyword));
+
+        return new InterceptedClassModel(ns, classSymbol.Name, methods, classData, isPartial);
     }
 
     private const int MaxPropertyDepth = 5;

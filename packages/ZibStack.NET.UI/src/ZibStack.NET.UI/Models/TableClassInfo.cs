@@ -21,6 +21,7 @@ internal sealed class TableClassInfo
     public List<RowActionInfo> RowActions { get; } = new List<RowActionInfo>();
     public List<ToolbarActionInfo> ToolbarActions { get; } = new List<ToolbarActionInfo>();
     public PermissionInfo? Permissions { get; set; }
+    public bool IsPartial { get; set; }
 
     public TableClassInfo(
         string className,

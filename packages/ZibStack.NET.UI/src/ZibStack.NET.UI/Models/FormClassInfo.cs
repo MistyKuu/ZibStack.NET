@@ -14,6 +14,7 @@ internal sealed class FormClassInfo
     public List<FormGroupInfo> Groups { get; }
     public string? ApiUrl { get; set; }
     public string? KeyProperty { get; set; }
+    public bool IsPartial { get; set; }
     public List<RelationInfo> Relations { get; } = new List<RelationInfo>();
 
     public FormClassInfo(

@@ -9,6 +9,7 @@ public sealed class InterceptedClassModel : IEquatable<InterceptedClassModel>
     public string Namespace { get; }
     public string ClassName { get; }
     public IReadOnlyList<InterceptedMethodModel> Methods { get; }
+    public bool IsPartial { get; }
 
     /// <summary>
     /// Aspect-specific class-level data. Key = aspect attribute FQN, Value = arbitrary data.
@@ -20,11 +21,13 @@ public sealed class InterceptedClassModel : IEquatable<InterceptedClassModel>
         string @namespace,
         string className,
         IReadOnlyList<InterceptedMethodModel> methods,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? aspectClassData = null)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? aspectClassData = null,
+        bool isPartial = false)
     {
         Namespace = @namespace;
         ClassName = className;
         Methods = methods;
+        IsPartial = isPartial;
         AspectClassData = aspectClassData ?? new Dictionary<string, IReadOnlyDictionary<string, object?>>();
     }
 
