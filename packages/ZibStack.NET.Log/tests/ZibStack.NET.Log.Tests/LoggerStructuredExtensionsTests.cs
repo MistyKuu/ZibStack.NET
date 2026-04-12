@@ -130,6 +130,123 @@ public class LoggerStructuredExtensionsTests
         Assert.Equal(LogLevel.Critical, _logger.Entries[5].Level);
     }
 
+    // ── Name override via # in format specifier ─────────────────────────
+
+    [Fact]
+    public void NameOverride_HashOnly_UsesCustomName()
+    {
+        var result = 42;
+        _logger.LogInformation($"Order {result:#orderId} processed");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Order {orderId} processed", _logger.Entries[0].Template);
+        Assert.Equal(new object?[] { 42 }, _logger.Entries[0].Args);
+    }
+
+    [Fact]
+    public void NameOverride_FormatPlusHash_BothPreserved()
+    {
+        var total = 29.97m;
+        _logger.LogInformation($"Total: {total:C#orderTotal}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Total: {orderTotal:C}", _logger.Entries[0].Template);
+        Assert.Equal(new object?[] { 29.97m }, _logger.Entries[0].Args);
+    }
+
+    [Fact]
+    public void NameOverride_NoHash_UsesCallerExpression()
+    {
+        var userId = 5;
+        _logger.LogInformation($"User {userId}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("User {userId}", _logger.Entries[0].Template);
+    }
+
+    [Fact]
+    public void NameOverride_TwoArgs_MixedOverride()
+    {
+        var x = 1;
+        var y = "hello";
+        _logger.LogInformation($"Got {x:#count} and {y}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Got {count} and {y}", _logger.Entries[0].Template);
+        Assert.Equal(new object?[] { 1, "hello" }, _logger.Entries[0].Args);
+    }
+
+    [Fact]
+    public void NameOverride_AllArgsOverridden()
+    {
+        var a = 1;
+        var b = "test";
+        var c = 3.14m;
+        _logger.LogInformation($"Values: {a:#alpha} {b:#beta} {c:#gamma}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Values: {alpha} {beta} {gamma}", _logger.Entries[0].Template);
+        Assert.Equal(new object?[] { 1, "test", 3.14m }, _logger.Entries[0].Args);
+    }
+
+    [Fact]
+    public void NameOverride_DotExpression_OverridesCallerExpr()
+    {
+        var order = new { Name = "Widget" };
+        _logger.LogInformation($"Product: {order.Name:#productName}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Product: {productName}", _logger.Entries[0].Template);
+        Assert.Equal(new object?[] { "Widget" }, _logger.Entries[0].Args);
+    }
+
+    [Fact]
+    public void NameOverride_IntWithFormat_PreservesFormat()
+    {
+        var count = 1000;
+        _logger.LogInformation($"Items: {count:N0#itemCount}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Items: {itemCount:N0}", _logger.Entries[0].Template);
+        Assert.Equal(new object?[] { 1000 }, _logger.Entries[0].Args);
+    }
+
+    [Fact]
+    public void NameOverride_DifferentLevels()
+    {
+        var id = 42;
+        _logger.LogWarning($"Warn {id:#warningId}");
+        _logger.LogError($"Error {id:#errorId}");
+
+        Assert.Equal(2, _logger.Entries.Count);
+        Assert.Equal("Warn {warningId}", _logger.Entries[0].Template);
+        Assert.Equal("Error {errorId}", _logger.Entries[1].Template);
+    }
+
+    [Fact]
+    public void NameOverride_WithException()
+    {
+        var ex = new InvalidOperationException("boom");
+        var step = "validation";
+        _logger.LogError(ex, $"Failed at {step:#stage}");
+
+        Assert.Single(_logger.Entries);
+        Assert.Equal("Failed at {stage}", _logger.Entries[0].Template);
+        Assert.Same(ex, _logger.Entries[0].Exception);
+    }
+
+    [Fact]
+    public void NameOverride_SameVarDifferentNames()
+    {
+        var result = 42;
+        _logger.LogInformation($"Input: {result:#inputValue}");
+        _logger.LogInformation($"Output: {result:#outputValue}");
+
+        Assert.Equal(2, _logger.Entries.Count);
+        Assert.Equal("Input: {inputValue}", _logger.Entries[0].Template);
+        Assert.Equal("Output: {outputValue}", _logger.Entries[1].Template);
+    }
+
     // ── Test infrastructure ─────────────────────────────────────────────
 
     private sealed class TestLogger : ILogger

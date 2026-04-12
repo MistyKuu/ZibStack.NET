@@ -358,6 +358,33 @@ Available methods: `LogTrace`, `LogDebug`, `LogInformation`, `LogWarning`, `LogE
 
 > Expressions like `user.Name` are sanitized to valid property names: `userName`.
 
+### Custom property names (`#` override)
+
+By default, the structured property name comes from `CallerArgumentExpression` — the variable name in your code. Override it with `#name` in the format specifier:
+
+```csharp
+var result = GetOrderId();
+
+// Default — property name is "result" (from CallerArgumentExpression):
+_logger.LogInformation($"Order {result} processed");
+// Template: "Order {result} processed"
+
+// Override — property name is "orderId":
+_logger.LogInformation($"Order {result:#orderId} processed");
+// Template: "Order {orderId} processed"
+
+// With format specifier + override:
+_logger.LogInformation($"Total: {total:C#orderTotal}");
+// Template: "Total: {orderTotal:C}"
+```
+
+Useful when:
+- Two log calls use the same variable name (`result`) but mean different things — Elastic/Kibana creates one field per name, so type mismatches on `result` cause log rejection
+- The variable name is unhelpful (`x`, `tmp`, `item`)
+- You want stable property names that survive variable renames
+
+The `#` override is resolved at **compile time** by the source generator — zero runtime cost. Everything before `#` is the format specifier, everything after is the property name. No `#` = default `CallerArgumentExpression` behavior.
+
 **How it works (short):** see the [In-depth mechanism](#in-depth-how-loginformation-actually-works) section below. Two layers work together — the interpolated-string handler does the argument capture and lazy `IsEnabled` check, the source-generated interceptor rewrites the dispatch to use a cached `LoggerMessage.Define` delegate. Disabled log calls cost ~3.2 ns (one `IsEnabled` check via the handler's `out bool shouldAppend`), enabled calls are comparable to hand-written `LoggerMessage.Define`.
 
 ### Structured Exceptions

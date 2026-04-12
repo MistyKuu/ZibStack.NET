@@ -119,8 +119,23 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
                     var type = typeInfo.Type;
                     if (type is null) return null;
 
-                    var sanitized = SanitizeName(interp.Expression.ToString());
-                    var format = interp.FormatClause?.FormatStringToken.ValueText;
+                    var rawFormat = interp.FormatClause?.FormatStringToken.ValueText;
+
+                    // Parse #name override: "C#orderTotal" → format="C", name="orderTotal"
+                    //                       "#orderTotal"  → format=null, name="orderTotal"
+                    //                       "C"            → format="C", name from expression
+                    string sanitized;
+                    string? format;
+                    if (rawFormat != null && rawFormat.IndexOf('#') is var hashIdx && hashIdx >= 0)
+                    {
+                        sanitized = rawFormat.Substring(hashIdx + 1);
+                        format = hashIdx > 0 ? rawFormat.Substring(0, hashIdx) : null;
+                    }
+                    else
+                    {
+                        sanitized = SanitizeName(interp.Expression.ToString());
+                        format = rawFormat;
+                    }
 
                     template.Append('{').Append(sanitized);
                     if (!string.IsNullOrEmpty(format))
