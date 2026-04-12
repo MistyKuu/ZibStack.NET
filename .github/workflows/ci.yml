@@ -45,16 +45,6 @@ jobs:
       - name: Test Query
         run: dotnet test packages/ZibStack.NET.Query/tests/ZibStack.NET.Query.Tests/ZibStack.NET.Query.Tests.csproj -c Release --no-build
 
-      - name: Benchmark Log
-        run: dotnet run --project packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj -c Release -- --filter "*" --exporters json
-
-      - name: Benchmark Aop
-        run: dotnet run --project packages/ZibStack.NET.Aop/tests/ZibStack.NET.Aop.Benchmarks/ZibStack.NET.Aop.Benchmarks.csproj -c Release -- --filter "*" --exporters json
-
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: benchmark-results
-          path: BenchmarkDotNet.Artifacts/
-          retention-days: 30
+      # Benchmarks removed from CI — run locally with:
+      #   dotnet run --project packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks -c Release
+      #   dotnet run --project packages/ZibStack.NET.Aop/tests/ZibStack.NET.Aop.Benchmarks -c Release

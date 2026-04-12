@@ -5,9 +5,6 @@ using BenchmarkDotNet.Order;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Serilog;
-using Serilog.Sinks.InMemory;
-
 namespace ZibStack.NET.Log.Benchmarks;
 
 [MemoryDiagnoser]
@@ -26,10 +23,6 @@ public class LoggingBenchmarks
     // Interpolated string logging benchmarks
     private InterpolatedLogService _interpolated = null!;
     private InterpolatedLogService _interpolatedNull = null!;
-
-    // Real-world allocation measurement: consuming sink reads all properties
-    // so JIT can't eliminate boxing via escape analysis.
-    private InterpolatedLogService _interpolatedReal = null!;
 
     // NullLogger — logging is enabled but goes nowhere (measures pure overhead)
     private ZibLogService _smartLogNull = null!;
@@ -52,19 +45,6 @@ public class LoggingBenchmarks
         // Interpolated string logging (with NullLoggerProvider — JIT may elide)
         _interpolated = new InterpolatedLogService(factory.CreateLogger<InterpolatedLogService>());
         _interpolatedNull = new InterpolatedLogService(NullLogger<InterpolatedLogService>.Instance);
-
-        // Real-world: Serilog with in-memory sink. Serilog enumerates the
-        // FormattedLogValues state and materializes properties — exactly what
-        // a production sink (Seq/Console/File) would do, so JIT can't elide
-        // the boxing of typed args.
-        var serilogLogger = new global::Serilog.LoggerConfiguration()
-            .MinimumLevel.Information()
-            .WriteTo.InMemory()
-            .CreateLogger();
-        var serilogFactory = LoggerFactory.Create(b => b
-            .SetMinimumLevel(LogLevel.Information)
-            .AddSerilog(serilogLogger));
-        _interpolatedReal = new InterpolatedLogService(serilogFactory.CreateLogger<InterpolatedLogService>());
 
         // With NullLogger (IsEnabled returns false — measures overhead when logging is off)
         _smartLogNull = new ZibLogService();
@@ -136,27 +116,4 @@ public class LoggingBenchmarks
     [Benchmark(Description = "LogInformation(\"template\") (level OFF)")]
     public void Interpolated_StandardTemplate_Off() => _interpolatedNull.LogStandardTemplate(42, "Widget", 29.97m);
 
-    // ═══════════════════════════════════════════
-    // REAL-WORLD: consuming sink reads every property
-    // → JIT can't elide boxing → measures actual heap allocations
-    // ═══════════════════════════════════════════
-
-    [Benchmark(Description = "REAL: LogInformation($\"...\") structured")]
-    public void Real_Interpolated_Structured() => _interpolatedReal.LogStructured(42, "Widget", 29.97m);
-
-    [Benchmark(Description = "REAL: LogInformation(\"template\", args)")]
-    public void Real_Interpolated_StandardTemplate() => _interpolatedReal.LogStandardTemplate(42, "Widget", 29.97m);
-
-    // ═══════════════════════════════════════════
-    // FALLBACK: extension method body (no interceptor) — measures slow-path
-    // ═══════════════════════════════════════════
-
-    [Benchmark(Description = "LogInformation($\"...\") FALLBACK (no interceptor)")]
-    public void Interpolated_Fallback() => _interpolated.LogFallback(42, "Widget", 29.97m);
-
-    [Benchmark(Description = "LogInformation($\"...\") FALLBACK (level OFF)")]
-    public void Interpolated_Fallback_Off() => _interpolatedNull.LogFallback(42, "Widget", 29.97m);
-
-    [Benchmark(Description = "REAL: LogInformation($\"...\") FALLBACK")]
-    public void Real_Interpolated_Fallback() => _interpolatedReal.LogFallback(42, "Widget", 29.97m);
 }

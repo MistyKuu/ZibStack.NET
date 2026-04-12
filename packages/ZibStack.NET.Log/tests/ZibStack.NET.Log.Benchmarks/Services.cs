@@ -130,27 +130,6 @@ public class InterpolatedLogService
         _logger.LogInformation("User {userId} bought {product} for {total}", userId, product, total);
     }
 
-    /// <summary>
-    /// ZibStack fallback path: same $"..." but forces the extension method body
-    /// (no interceptor) by calling through a wrapper that the generator can't intercept.
-    /// </summary>
-    public void LogFallback(int userId, string product, decimal total)
-    {
-        // The generator intercepts logger.LogInformation($"...") at THIS call site.
-        // To measure fallback, we call the extension directly with a pre-built handler.
-        var handler = new ZibLogInformationHandler(0, 3, _logger, out var shouldAppend);
-        if (shouldAppend)
-        {
-            handler.AppendLiteral("User ");
-            handler.AppendFormatted(userId, "userId");
-            handler.AppendLiteral(" bought ");
-            handler.AppendFormatted(product, "product");
-            handler.AppendLiteral(" for ");
-            handler.AppendFormatted(total, "C", "total");
-        }
-        // Call extension method directly — no InterceptsLocation matches this call
-        LoggerStructuredExtensions.LogInformation(_logger, ref handler);
-    }
 }
 
 // ─── Bare service (no logging at all) ───
