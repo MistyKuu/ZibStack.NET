@@ -111,17 +111,15 @@ namespace ZibStack.NET.Dto
 {
     /// <summary>
     /// Excludes a property from generated DTOs. Without arguments, excludes from
-    /// Create, Update, and Query DTOs but <b>keeps</b> the property in Response
-    /// (this matches the common pattern where <c>Id</c> is excluded from write DTOs
-    /// but included in read responses). With a <see cref=""DtoTarget""/> argument,
-    /// excludes from exactly the specified DTOs.
+    /// <b>all</b> DTOs (Create, Update, Response, Query, List). With a
+    /// <see cref=""DtoTarget""/> argument, excludes from only the specified targets.
     /// </summary>
     [System.AttributeUsage(System.AttributeTargets.Property, Inherited = false)]
     internal sealed class DtoIgnoreAttribute : System.Attribute
     {
         public DtoTarget Target { get; }
-        /// <summary>Excludes from Create + Update + Query (not Response, not List).</summary>
-        public DtoIgnoreAttribute() => Target = DtoTarget.Create | DtoTarget.Update | DtoTarget.Query;
+        /// <summary>Excludes from all DTOs.</summary>
+        public DtoIgnoreAttribute() => Target = DtoTarget.All;
         /// <summary>Excludes from the specified targets only.</summary>
         public DtoIgnoreAttribute(DtoTarget target) => Target = target;
     }

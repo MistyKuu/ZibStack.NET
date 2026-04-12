@@ -173,7 +173,7 @@ clause.Field.ToLowerInvariant() switch
 
 This means:
 - **No reflection** — static switch, not runtime property lookup
-- **Security** — `[DtoIgnore]`, `[QueryIgnore]`, `[UiTableColumn(Filterable=false)]` exclude fields from the allowlist. Sensitive fields like `Password` never appear.
+- **Security** — `[DtoIgnore]`, `[DtoIgnore(DtoTarget.Query)]`, `[UiTableColumn(Filterable=false)]` exclude fields from the allowlist. Sensitive fields like `Password` never appear.
 - **Type safety** — each field has its correct C# type at compile time
 - **AOT compatible** — no `Type.GetProperty()` or expression compilation at runtime
 

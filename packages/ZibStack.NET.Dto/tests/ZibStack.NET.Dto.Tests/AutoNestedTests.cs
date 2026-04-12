@@ -18,7 +18,7 @@ public class Company
 [UpdateDto]
 public class Employee
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
     public required string Name { get; set; }
     public Company? Company { get; set; }  // nested → auto UpdateCompanyRequest → auto UpdateContactInfoRequest
@@ -27,7 +27,7 @@ public class Employee
 [CreateDto]
 public class Project
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
     public required string Title { get; set; }
     public ContactInfo? Lead { get; set; }  // nested → auto CreateContactInfoRequest

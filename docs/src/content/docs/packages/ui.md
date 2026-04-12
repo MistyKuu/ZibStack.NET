@@ -942,6 +942,6 @@ Also recognizes `System.ComponentModel.DataAnnotations` equivalents (`[ZRequired
 
 ### ZibStack.NET.Dto
 
-When referenced, `[CreateOnly]` and `[UpdateOnly]` flags appear in form field descriptors — the client can show/hide fields based on create vs. update mode.
+When referenced, `[DtoOnly(DtoTarget.Create)]` and `[DtoOnly(DtoTarget.Update)]` flags appear in form field descriptors — the client can show/hide fields based on create vs. update mode.
 
 No project-level dependencies — detection is by attribute FQN at compile time.

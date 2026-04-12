@@ -111,7 +111,8 @@ The custom `PatchFieldJsonConverterFactory` (shipped by `ZibStack.NET.Dto`) read
 [CrudApi]
 public partial class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
     public string? Email { get; set; }
@@ -281,7 +282,8 @@ See [Core → Pattern matching with `PickXxx()`](/ZibStack.NET/packages/core/#pa
 [ZValidate]
 public partial class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     [ZRequired] [ZMinLength(2)] public required string Name { get; set; }
     [ZRange(1, 100)] public int Level { get; set; }
     [ZEmail]        public string? Email { get; set; }

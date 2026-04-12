@@ -12,7 +12,7 @@ namespace ZibStack.NET.Dto.Tests;
 [ResponseDto]
 public class CrudItem
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
 
     public required string Name { get; set; }
@@ -24,7 +24,7 @@ public class CrudItem
 [ResponseDto]
 public class CrudWidget
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
 
     public required string Label { get; set; }

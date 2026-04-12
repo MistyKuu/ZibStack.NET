@@ -29,7 +29,7 @@ using ZibStack.NET.Dto;
 [UpdateDto]
 public class Player
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
 
     public required string Name { get; set; }
@@ -89,7 +89,7 @@ Generates a single `TeamRequest` with `ValidateForCreate()` and `ValidateForUpda
 [CreateOrUpdateDto]
 public class Team
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
 
     public required string Name { get; set; }
@@ -234,15 +234,12 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 
 | Attribute | Description |
 |-----------|-------------|
-| `[DtoIgnore]` | Excludes from generated DTOs |
+| `[DtoIgnore]` | Excludes from **all** generated DTOs (equivalent to `DtoTarget.All`) |
+| `[DtoIgnore(DtoTarget.X)]` | Excludes from specific DTO targets: `Create`, `Update`, `Response`, `Query`, `List` (combinable with `\|`) |
+| `[DtoOnly(DtoTarget.X)]` | Includes **only** in the specified DTO target(s): e.g. `DtoTarget.Create`, `DtoTarget.Update` |
 | `[DtoName("json_name")]` | Overrides the JSON property name (works on all DTOs including Response) |
-| `[CreateOnly]` | Only included in Create (or `ValidateForCreate`/`ToEntity` in Combined) |
-| `[UpdateOnly]` | Only included in Update (or `ValidateForUpdate`/`ApplyTo` in Combined) |
 | `[Immutable]` | Visible in Update DTO but skipped in `ApplyTo()` |
 | `[Flatten]` | Expands nested object properties into parent DTO (Response only) |
-| `[ResponseIgnore]` | Excludes from Response DTO only |
-| `[QueryIgnore]` | Excludes from Query DTO (filtering/sorting) only |
-| `[ListIgnore]` | Excludes from list Response (GET list), visible in detail Response (GET by ID) |
 
 **`[DtoName]` on Response DTO:**
 
@@ -292,15 +289,15 @@ public class Player
 {
     public required string Name { get; set; }
 
-    [CreateOnly]
+    [DtoOnly(DtoTarget.Create)]
     public required string Password { get; set; }    // only in CreatePlayerRequest
 
-    [UpdateOnly]
+    [DtoOnly(DtoTarget.Update)]
     public string? DeactivationReason { get; set; }  // only in UpdatePlayerRequest
 }
 ```
 
-With `[CreateOrUpdateDto]`, `[CreateOnly]` properties are included but excluded from `ValidateForUpdate()` and `ApplyTo()`. `[UpdateOnly]` properties are excluded from `ValidateForCreate()` and `ToEntity()`.
+With `[CreateOrUpdateDto]`, `[DtoOnly(DtoTarget.Create)]` properties are included but excluded from `ValidateForUpdate()` and `ApplyTo()`. `[DtoOnly(DtoTarget.Update)]` properties are excluded from `ValidateForCreate()` and `ToEntity()`.
 
 ## External types (`[CreateDtoFor]` / `[UpdateDtoFor]`)
 
@@ -520,7 +517,8 @@ Add `[CrudApi]` to your entity to generate complete CRUD API endpoints. A single
 [CrudApi]
 public class Player
 {
-    [DtoIgnore]  public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
     public string? Email { get; set; }
@@ -701,7 +699,8 @@ You can also implement `ICrudStore<T,K>` manually or inherit `EfCrudStore<T,K,TC
 [CrudApi]  // generates CreatePlayerRequest, UpdatePlayerRequest, PlayerResponse + endpoints
 public class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
 }
@@ -759,15 +758,12 @@ Per-operation policies override the default `AuthorizePolicy` for specific opera
 
 | Attribute | Effect on CRUD |
 |-----------|---------------|
-| `[DtoIgnore]` | Excluded from request and response DTOs |
-| `[CreateOnly]` | Included only in POST request (not in PATCH) |
-| `[UpdateOnly]` | Included only in PATCH request (not in POST) |
+| `[DtoIgnore]` | Excluded from **all** request and response DTOs |
+| `[DtoIgnore(DtoTarget.X)]` | Excluded from specific DTO targets (e.g. `DtoTarget.Response`, `DtoTarget.Query`, `DtoTarget.List`) |
+| `[DtoOnly(DtoTarget.X)]` | Included **only** in the specified target (e.g. `DtoTarget.Create` for POST-only, `DtoTarget.Update` for PATCH-only) |
 | `[Immutable]` | Visible in PATCH DTO but `ApplyTo()` skips it |
-| `[ResponseIgnore]` | Hidden from GET responses (e.g. passwords) |
-| `[ListIgnore]` | Hidden from GET list, visible in GET by ID (e.g. large fields) |
 | `[Flatten]` | Nested object properties flattened into response |
 | `required` | Validated as mandatory in POST, optional in PATCH |
-| `[QueryIgnore]` | Hidden from query/filter DTO (not filterable/sortable) |
 | `[ZRequired]`, `[ZMinLength]`, `[ZMaxLength]`, `[ZRange]`, `[ZEmail]`, `[ZMatch]` | Propagated to generated validation |
 
 **Custom DTO names:**
@@ -856,22 +852,23 @@ All error responses use the [RFC 9110](https://tools.ietf.org/html/rfc9110) **Pr
 }
 ```
 
-### List vs Detail responses (`[ListIgnore]`)
+### List vs Detail responses (`[DtoIgnore(DtoTarget.List)]`)
 
-Mark properties with `[ListIgnore]` to exclude them from the GET list response while keeping them in the GET by ID response. The generator creates a separate `{Entity}ListItem` DTO for list endpoints:
+Mark properties with `[DtoIgnore(DtoTarget.List)]` to exclude them from the GET list response while keeping them in the GET by ID response. The generator creates a separate `{Entity}ListItem` DTO for list endpoints:
 
 ```csharp
 [CrudApi]
 public class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
 
-    [ListIgnore]
+    [DtoIgnore(DtoTarget.List)]
     public string? Bio { get; set; }          // only in GET /api/players/{id}
 
-    [ListIgnore]
+    [DtoIgnore(DtoTarget.List)]
     public Address? Address { get; set; }      // only in GET /api/players/{id}
 }
 ```
@@ -931,7 +928,7 @@ public class Player
     public int Id { get; set; }
     public required string Name { get; set; }
     
-    [ResponseIgnore]
+    [DtoIgnore(DtoTarget.Response)]
     public required string Password { get; set; }
 }
 ```
@@ -940,9 +937,9 @@ public class Player
 // Generated — plain properties, no PatchField
 public record PlayerResponse
 {
-    public int Id { get; init; }       // DtoIgnore doesn't affect Response
+    public int Id { get; init; }       // DtoIgnore(DtoTarget.Create|Update|Query) doesn't affect Response
     public string Name { get; init; }
-    // Password excluded by [ResponseIgnore]
+    // Password excluded by [DtoIgnore(DtoTarget.Response)]
     
     public static PlayerResponse FromEntity(Player entity) => ...;
     public static IQueryable<PlayerResponse> ProjectFrom(IQueryable<Player> query) => ...;
@@ -977,7 +974,7 @@ When a model has `[CreateDto]` or `[UpdateDto]`, nested complex type properties 
 [UpdateDto]
 public class Employee
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)] public int Id { get; set; }
     public required string Name { get; set; }
     public Company? Company { get; set; }          // Level 2 — auto-generated
 }

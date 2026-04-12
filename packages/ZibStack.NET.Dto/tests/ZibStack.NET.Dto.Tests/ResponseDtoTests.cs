@@ -9,12 +9,13 @@ public class ResponseDtoTests
     }
 
     [Fact]
-    public void ResponseDto_IncludesIgnoredDtoProperties()
+    public void ResponseDto_RespectsTargetedIgnore()
     {
-        // [DtoIgnore] does NOT affect Response — Id and CreatedAt should be present
         var type = typeof(ProductResponse);
+        // [DtoIgnore(DtoTarget.Create | Update | Query)] on Id — keeps it in Response
         Assert.NotNull(type.GetProperty("Id"));
-        Assert.NotNull(type.GetProperty("CreatedAt"));
+        // [DtoIgnore] (= All) on CreatedAt — excluded from Response too
+        Assert.Null(type.GetProperty("CreatedAt"));
     }
 
     [Fact]
@@ -60,7 +61,7 @@ public class ResponseDtoTests
         Assert.Equal(10, response.Stock);
         Assert.Equal("A widget", response.Description);
         Assert.Equal("WDG-001", response.Sku);
-        Assert.Equal(new DateTime(2024, 1, 1), response.CreatedAt);
+        // CreatedAt has [DtoIgnore] (All) — not in Response
     }
 
     [Fact]

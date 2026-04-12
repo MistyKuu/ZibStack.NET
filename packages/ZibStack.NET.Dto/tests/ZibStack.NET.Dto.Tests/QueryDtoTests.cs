@@ -5,7 +5,7 @@ namespace ZibStack.NET.Dto.Tests;
 [QueryDto]
 public class Inventory
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
 
     public string Name { get; set; } = "";

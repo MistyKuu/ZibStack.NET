@@ -97,7 +97,7 @@ public partial class DtoGenerator
         // GET list
         if ((info.Operations & OpGetList) != 0)
         {
-            // Use ListResponseName (from [ListIgnore]) if available, otherwise ResponseName
+            // Use ListResponseName (from [DtoIgnore(DtoTarget.List)]) if available, otherwise ResponseName
             var listResponseType = info.ListResponseName ?? info.ResponseName;
             var fqListResponse = info.HasResponseDto && listResponseType is not null
                 ? (info.Namespace is not null ? $"{info.Namespace}.{listResponseType}" : listResponseType)

@@ -182,7 +182,8 @@ public partial class DtoGenerator
 
     private static void GenerateCombinedRequestClass(StringBuilder sb, DtoClassInfo classInfo)
     {
-        var allProps = classInfo.Properties;
+        // Combined is Create + Update. Exclude properties ignored from BOTH.
+        var allProps = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1) || !p.IsIgnoredFrom(2)).ToList();
 
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanCreate<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanApply<{classInfo.ClassName}>");
         sb.AppendLine("{");

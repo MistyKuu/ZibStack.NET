@@ -11,7 +11,7 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [ZValidate]
 public partial class Team
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     [UiFormIgnore]
     [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }

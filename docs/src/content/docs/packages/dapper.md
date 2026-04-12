@@ -26,7 +26,8 @@ dotnet add package Dapper
 [ResponseDto]
 public class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
 }

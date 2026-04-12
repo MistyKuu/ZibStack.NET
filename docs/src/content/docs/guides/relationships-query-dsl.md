@@ -19,7 +19,8 @@ using ZibStack.NET.Dto;
 [CrudApi]
 public partial class Team
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public required string City { get; set; }
     public int Founded { get; set; }
@@ -37,7 +38,8 @@ using ZibStack.NET.Dto;
 [CrudApi]
 public partial class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
     public string? Email { get; set; }
@@ -59,7 +61,8 @@ using ZibStack.NET.Dto;
 [CrudApi]
 public partial class Achievement
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Title { get; set; }
     public int Points { get; set; }
     public DateTime EarnedAt { get; set; }
@@ -78,7 +81,8 @@ using ZibStack.NET.Dto;
 [CrudApi]
 public partial class Tournament
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public DateTime StartsAt { get; set; }
 
@@ -288,7 +292,7 @@ fieldName => fieldName switch
 
 Three consequences:
 
-1. **Private fields are invisible.** Properties marked `[DtoIgnore]` or `[QueryIgnore]` never appear in the switch, so `filter=Password=*` returns "unknown field".
+1. **Private fields are invisible.** Properties marked `[DtoIgnore]` or `[DtoIgnore(DtoTarget.Query)]` never appear in the switch, so `filter=Password=*` returns "unknown field".
 2. **Typos become 400s, not crashes.** `filter=Levle>10` hits the `_ => null` branch and the Query runtime returns `ArgumentException: Unknown field 'Levle'`, which the Dto-generated endpoint converts into a `400 Bad Request` with ProblemDetails. Always with an explicit field name so the client knows exactly what they typed wrong.
 3. **AOT-safe.** No `typeof(T).GetProperty(fieldName)` at runtime. The entire field→predicate mapping is baked into the generated code at compile time, which means AOT publishing keeps working.
 

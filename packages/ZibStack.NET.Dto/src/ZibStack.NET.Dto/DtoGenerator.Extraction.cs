@@ -619,10 +619,8 @@ public partial class DtoGenerator
             if (prop.SetMethod is null || prop.GetMethod is null) continue;
 
             var (ignoreTargets, onlyTargets) = GetDtoTargetFlags(prop);
-            // [DtoIgnore] without args → ignoreTargets = 11 (Create|Update|Query).
-            // In the create/update DTO extraction context, that means "skip this property".
-            // Also skip if both Create(1) and Update(2) are explicitly ignored.
-            if ((ignoreTargets & 3) == 3) continue;
+            // [DtoIgnore] without args → ignoreTargets = 31 (All). Skip entirely.
+            if (ignoreTargets == 31) continue;
 
             var dtoName = renameMap.TryGetValue(prop.Name, out var renamed) ? renamed : prop.Name;
             var jsonName = renameMap.ContainsKey(prop.Name) ? CamelCase(dtoName) : GetJsonName(prop);
@@ -1095,7 +1093,7 @@ public partial class DtoGenerator
                 if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int target)
                     ignoreTargets |= target;
                 else
-                    ignoreTargets |= 11; // DtoTarget.Create | Update | Query (not Response, not List)
+                    ignoreTargets = 31; // DtoTarget.All
             }
             else if (fqn == DtoOnlyAttributeFqn)
             {

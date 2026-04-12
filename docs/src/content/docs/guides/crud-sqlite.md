@@ -43,7 +43,8 @@ using ZibStack.NET.Validation;
 [ZValidate]
 public partial class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
 
     [ZRequired] [ZMinLength(2)] [ZMaxLength(50)]
     public required string Name { get; set; }
@@ -73,7 +74,8 @@ using ZibStack.NET.Validation;
 [ZValidate]
 public partial class Team
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
 
     [ZRequired] [ZMinLength(2)] [ZMaxLength(50)]
     public required string Name { get; set; }
@@ -428,11 +430,12 @@ Set `Sortable = false` only for endpoints with a fixed result order (analytics, 
 [CrudApi]
 public class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
 
-    [ListIgnore]
+    [DtoIgnore(DtoTarget.List)]
     public string? Bio { get; set; }  // only in GET /api/players/{id}
 }
 ```

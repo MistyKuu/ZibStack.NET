@@ -8,7 +8,7 @@ namespace ZibStack.NET.Dto.Tests;
 [UpdateDto]
 public class Article
 {
-    [DtoIgnore]
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     public int Id { get; set; }
 
     public required string Title { get; set; }

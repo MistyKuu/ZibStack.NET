@@ -227,13 +227,14 @@ if (!result.IsValid) return BadRequest(result.Errors);
 [CrudApi]
 public class Player
 {
-    [DtoIgnore]  public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
     public string? Email { get; set; }
 
-    [CreateOnly]     public required string Password { get; set; }
-    [ResponseIgnore] public DateTime CreatedAt { get; set; }
+    [DtoOnly(DtoTarget.Create)]     public required string Password { get; set; }
+    [DtoIgnore(DtoTarget.Response)] public DateTime CreatedAt { get; set; }
 }
 
 // EF Core — auto-generated stores from DbContext:

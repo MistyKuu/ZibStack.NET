@@ -14,7 +14,8 @@ dotnet add package ZibStack.NET.Dto
 [CrudApi]
 public class Player
 {
-    [DtoIgnore] public int Id { get; set; }
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
     public required string Name { get; set; }
     public int Level { get; set; }
 }
