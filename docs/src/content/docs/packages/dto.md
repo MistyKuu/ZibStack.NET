@@ -41,6 +41,11 @@ public class Player
 Register the JSON converter:
 
 ```csharp
+// Minimal API:
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new PatchFieldJsonConverterFactory()));
+
+// Or MVC Controllers:
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
         new PatchFieldJsonConverterFactory()));
@@ -169,6 +174,19 @@ var request = new CreatePlayerRequest { Name = "Bob", Level = 5 };
 string name = request.Name;
 ```
 
+For custom logic (audit logging, conditional business rules), `PatchField<T>` works naturally with C# pattern matching:
+
+```csharp
+switch (request.Email)
+{
+    case { HasValue: false }:               break;  // not sent — leave unchanged
+    case { HasValue: true, Value: null }:   player.Email = null; break;  // explicit clear
+    case { HasValue: true, Value: var v }:  player.Email = v; break;     // new value
+}
+```
+
+See the [PatchField Tri-State guide](/ZibStack.NET/guides/patchfield-tri-state/) for the full walkthrough — why nullable DTOs can't distinguish "not sent" from "set to null", and how `PatchField<T>` solves it.
+
 ## Interfaces
 
 Generated types implement generic interfaces for type-safe generic handlers:
@@ -223,6 +241,7 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[Immutable]` | Visible in Update DTO but skipped in `ApplyTo()` |
 | `[Flatten]` | Expands nested object properties into parent DTO (Response only) |
 | `[ResponseIgnore]` | Excludes from Response DTO only |
+| `[QueryIgnore]` | Excludes from Query DTO (filtering/sorting) only |
 | `[ListIgnore]` | Excludes from list Response (GET list), visible in detail Response (GET by ID) |
 
 **`[DtoName]` on Response DTO:**
@@ -382,12 +401,12 @@ public IActionResult List([FromQuery] ProductQuery query)
 }
 ```
 
-### Sortable queries
+### Sorting
 
-Add `Sortable = true` to get `SortBy`, `SortDirection` properties and `ApplySort(IQueryable<T>)`:
+`Sortable` defaults to `true`, so `[QueryDto]` already generates `SortBy`, `SortDirection` properties and `ApplySort(IQueryable<T>)`. Set a default sort column with `DefaultSort`:
 
 ```csharp
-[QueryDto(Sortable = true, DefaultSort = "Name")]
+[QueryDto(DefaultSort = "Name")]
 public class Product
 {
     public string Name { get; set; }
@@ -422,9 +441,27 @@ public IActionResult List([FromQuery] ProductQuery query)
 
 `SortBy` is case-insensitive and matches property names. Unknown values are ignored (no sort applied). `DefaultSort` and `DefaultSortDirection` set fallback behavior when `SortBy`/`SortDirection` are not provided.
 
-### Count, select, and OneToMany filtering
+Set `[QueryDto(Sortable = false)]` only for endpoints with a fixed result order (analytics, ordered exports) where clients should not re-sort.
 
-When `ZibStack.NET.Query` is referenced, the generated CRUD list endpoints support additional query parameters:
+### Query DSL (with `ZibStack.NET.Query`)
+
+When `ZibStack.NET.Query` is referenced, the generated CRUD list endpoints accept `filter` and `sort` string parameters parsed as a DSL. Dot notation into `[OneToOne]` / `[OneToMany]` relations works automatically — see [Modeling Relationships & Query DSL](/ZibStack.NET/guides/relationships-query-dsl/) for the full walkthrough.
+
+**Filter** — 14 operators, AND/OR/grouping, case insensitive, dot notation:
+
+```
+GET /api/players?filter=Level>25,Name=*ski&sort=-Level
+GET /api/players?filter=Team.Name=Lakers                    // [OneToOne] dot notation
+GET /api/players?filter=(Level<10|Level>90),Team.City=LA    // OR + grouping
+GET /api/players?filter=Name=in=Alice;Bob;Diana             // IN list
+```
+
+**Collection filtering via `[OneToMany]`:**
+
+```
+GET /api/teams?filter=Players.Name=*ski                  // any player name contains "ski"
+GET /api/teams?filter=Players.Count>5                    // team has more than 5 players
+```
 
 **Count only** — return just the total count without fetching items:
 
@@ -436,14 +473,6 @@ GET /api/players?filter=Level>25&count=true → { "count": 42 }
 
 ```
 GET /api/players?select=Name,Level,Team.Name
-```
-
-**OneToMany filtering** — filter parent entities by child collection properties:
-
-```
-GET /api/teams?filter=Players.Name=*ski                  // any player name contains "ski"
-GET /api/teams?filter=Players.All.Level>50               // all players have Level > 50
-GET /api/teams?filter=Players.Count>5                    // team has more than 5 players
 ```
 
 ## Paginated response (`PaginatedResponse<T>`)
@@ -504,7 +533,7 @@ This generates `CreatePlayerRequest`, `UpdatePlayerRequest`, `PlayerResponse`, a
 ```csharp
 [CrudApi(Style = ApiStyle.Both)]
 [CreateDto(Name = "NewPlayerDto")]            // custom request name
-[QueryDto(Sortable = true, DefaultSort = "Name")]  // filtering + sorting
+[QueryDto(DefaultSort = "Name")]              // filtering + sorting (Sortable is true by default)
 public class Player { ... }
 ```
 
@@ -738,7 +767,8 @@ Per-operation policies override the default `AuthorizePolicy` for specific opera
 | `[ListIgnore]` | Hidden from GET list, visible in GET by ID (e.g. large fields) |
 | `[Flatten]` | Nested object properties flattened into response |
 | `required` | Validated as mandatory in POST, optional in PATCH |
-| `[ZMinLength]`, `[ZMaxLength]`, `[ZRange]`, `[EmailAddress]` | Propagated to generated validation |
+| `[QueryIgnore]` | Hidden from query/filter DTO (not filterable/sortable) |
+| `[ZRequired]`, `[ZMinLength]`, `[ZMaxLength]`, `[ZRange]`, `[ZEmail]`, `[ZMatch]` | Propagated to generated validation |
 
 **Custom DTO names:**
 
@@ -1009,13 +1039,13 @@ Attributes from `System.ComponentModel.DataAnnotations` are automatically copied
 public class User
 {
     [ZMaxLength(100)]
-    [EmailAddress]
+    [ZEmail]
     public required string Email { get; set; }
 
     [ZRange(1, 999)]
     public int Quantity { get; set; }
 }
-// Generated CreateUserRequest.Email has [ZMaxLength(100)] and [EmailAddress]
+// Generated CreateUserRequest.Email has [ZMaxLength(100)] and [ZEmail]
 ```
 
 ### `[Immutable]` properties
@@ -1056,13 +1086,15 @@ DtoMapper.MapTo(source, target);
 
 ### Swagger / OpenAPI support
 
-When Swashbuckle is detected, the generator emits a `PatchFieldSchemaFilter` that unwraps `PatchField<T>` to its inner type in the Swagger schema:
+When `Swashbuckle.AspNetCore` is detected at compile time, the generator **automatically** emits a `PatchFieldSchemaFilter` that unwraps `PatchField<T>` to its inner type in the Swagger schema — no manual registration needed. Just install the package:
 
-```csharp
-builder.Services.AddSwaggerGen(c => c.SchemaFilter<PatchFieldSchemaFilter>());
+```bash
+dotnet add package Swashbuckle.AspNetCore
 ```
 
-Without this, Swagger shows `{ "hasValue": true, "value": "Bob" }` instead of just `"Bob"`.
+Without Swashbuckle, `PatchField<T>` shows as `{ "hasValue": true, "value": "Bob" }` in the OpenAPI schema. With it, the schema filter collapses it to just `"Bob"` (or `null | "Bob"` for nullable types).
+
+> Both Swashbuckle legacy (pre-v10) and v10+ with `IOpenApiSchema` are supported — the generator detects the API surface at compile time and emits the correct filter variant.
 
 ## JSON serializer support
 
@@ -1093,7 +1125,7 @@ public class MyCreateValidator : IDtoValidator<CreatePlayerRequest>
     }
 }
 
-[Dto(CreateValidator = typeof(MyCreateValidator))]
+[CreateDto(Validator = typeof(MyCreateValidator))]
 public class Player { ... }
 ```
 
@@ -1120,7 +1152,7 @@ public class MyCreateValidator : CreatePlayerRequestCreateBaseValidator
     }
 }
 
-[Dto(CreateValidator = typeof(MyCreateValidator))]
+[CreateDto(Validator = typeof(MyCreateValidator))]
 public class Player { ... }
 ```
 
@@ -1136,10 +1168,17 @@ public class MyCreateValidator : FluentDtoValidator<CreatePlayerRequest>
 }
 ```
 
+## Related guides
+
+- [Full CRUD with SQLite](/ZibStack.NET/guides/crud-sqlite/) — end-to-end project with `[CrudApi]`, relationships, Query DSL, observability, and PatchField tri-state demo
+- [Modeling Relationships & Query DSL](/ZibStack.NET/guides/relationships-query-dsl/) — `[OneToOne]` / `[OneToMany]`, dot-notation filtering, every DSL operator with SQL translations
+- [PatchField Tri-State](/ZibStack.NET/guides/patchfield-tri-state/) — the null-vs-missing problem and `PatchField<T>` with pattern-matching handlers
+- [Declarative Observability](/ZibStack.NET/guides/observability/) — `[Log]` + `[Trace]` for structured logging and OpenTelemetry spans on CRUD stores
+
 ## Requirements
 
 - .NET 6+ (or .NET Framework with SDK-style projects and System.Text.Json NuGet)
-- `required` keyword needs C# 11 / .NET 7+ (optional -- without it all properties are optional in Create)
+- `required` keyword needs C# 11 / .NET 7+ (optional — without it all properties are optional in Create)
 
 ## License
 
