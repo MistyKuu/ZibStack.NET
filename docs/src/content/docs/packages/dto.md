@@ -967,52 +967,180 @@ public IActionResult List()
 
 ### Auto-recursive nested DTOs
 
-When a model has `[CreateDto]` or `[UpdateDto]`, nested complex type properties automatically get their own DTOs generated — **no need to annotate nested types**:
+When a model has `[CreateDto]` or `[UpdateDto]`, nested complex type properties automatically get their own DTOs generated — **no need to annotate nested types**. This works recursively to any depth, with deduplication (if a nested type already has an explicit `[UpdateDto]`, its DTO is reused).
+
+#### 3-level example — Employee → Company → ContactInfo
 
 ```csharp
+// Your models — only the top level has attributes:
+[CreateDto]
 [UpdateDto]
-public class Player
+public class Employee
+{
+    [DtoIgnore] public int Id { get; set; }
+    public required string Name { get; set; }
+    public Company? Company { get; set; }          // Level 2 — auto-generated
+}
+
+public class Company
 {
     public required string Name { get; set; }
-    public Address? Address { get; set; }  // Address has NO attributes
+    public ContactInfo? Contact { get; set; }      // Level 3 — auto-generated
 }
 
-public class Address
+public class ContactInfo
 {
-    public string Street { get; set; }
-    public string City { get; set; }
+    public required string Phone { get; set; }
+    public string? Fax { get; set; }
 }
 ```
 
-Generates both `UpdatePlayerRequest` and `UpdateAddressRequest`. Partial updates work recursively:
+The generator produces **three** Update request records from a single `[UpdateDto]`:
+
+```csharp
+// Generated — Level 1
+public record UpdateEmployeeRequest : ICanApply<Employee>, ICanValidate
+{
+    public PatchField<string> Name { get; init; }
+    public PatchField<UpdateCompanyRequest?> Company { get; init; }   // nested DTO, not Company
+
+    public void ApplyTo(Employee target)
+    {
+        if (Name.HasValue) target.Name = Name.Value!;
+        if (Company.HasValue)
+        {
+            if (Company.Value is null)
+                target.Company = null;                                 // explicit clear
+            else if (target.Company is not null)
+                Company.Value.ApplyTo(target.Company);                 // recursive partial update
+        }
+    }
+}
+
+// Generated — Level 2 (auto, no attribute on Company)
+public record UpdateCompanyRequest : ICanApply<Company>, ICanValidate
+{
+    public PatchField<string> Name { get; init; }
+    public PatchField<UpdateContactInfoRequest?> Contact { get; init; }
+
+    public void ApplyTo(Company target)
+    {
+        if (Name.HasValue) target.Name = Name.Value!;
+        if (Contact.HasValue)
+        {
+            if (Contact.Value is null)
+                target.Contact = null;
+            else if (target.Contact is not null)
+                Contact.Value.ApplyTo(target.Contact);                 // chain continues
+        }
+    }
+}
+
+// Generated — Level 3 (auto, leaf)
+public record UpdateContactInfoRequest : ICanApply<ContactInfo>, ICanValidate
+{
+    public PatchField<string> Phone { get; init; }
+    public PatchField<string?> Fax { get; init; }
+
+    public void ApplyTo(ContactInfo target)
+    {
+        if (Phone.HasValue) target.Phone = Phone.Value!;
+        if (Fax.HasValue) target.Fax = Fax.Value;
+    }
+}
+```
+
+Now a 3-level-deep partial update is a single PATCH:
 
 ```json
-{ "address": { "city": "New York" } }
+PATCH /api/employees/1
+{
+  "company": {
+    "contact": {
+      "fax": null
+    }
+  }
+}
 ```
-Changes only `city` — `street` stays unchanged.
 
-If the nested type already has an explicit `[UpdateDto]`, its DTO is reused instead of auto-generating. Deep nesting (A → B → C) works recursively with deduplication.
+Only `employee.Company.Contact.Fax` is cleared. `Company.Name`, `Contact.Phone`, `Employee.Name` — all untouched. Each level's `ApplyTo` checks `HasValue` independently, so the partial-update semantics compose naturally without any manual wiring.
+
+#### Create DTOs — same recursive pattern
+
+`[CreateDto]` follows the same structure, but with `ToEntity()` that chains construction:
+
+```csharp
+// Generated
+public record CreateEmployeeRequest : ICanCreate<Employee>, ICanValidate
+{
+    public PatchField<string> Name { get; init; }
+    public PatchField<CreateCompanyRequest?> Company { get; init; }
+
+    public Employee ToEntity()
+    {
+        return new Employee
+        {
+            Name = Name.HasValue ? Name.Value! : default!,
+            Company = Company.HasValue && Company.Value is not null
+                ? Company.Value.ToEntity()     // recursive construction
+                : default,
+        };
+    }
+}
+```
+
+#### Key patterns in the generated code
+
+1. **`PatchField<UpdateXxxRequest?>` wrapping** — the nested type in the parent DTO is the *generated request*, not the original entity. This is what makes tri-state tracking recursive: `Company.HasValue == false` means "don't touch Company at all", `Company.Value == null` means "clear Company", `Company.Value != null` means "apply partial changes to Company's fields".
+
+2. **Null-safe `ApplyTo` chaining** — the generator emits `if (target.Company is not null)` before calling the nested `ApplyTo`. If the parent's navigation is null and the client sends a partial update to it, the update is silently skipped (you can't `ApplyTo` a null target). To create a new nested object from a PATCH, the client should use a full object value, not a partial one.
+
+3. **Deduplication** — if `ContactInfo` is used in multiple parent types (`Employee.Company.Contact` and `Project.Lead`), the generator emits `UpdateContactInfoRequest` once and reuses it everywhere.
+
+4. **`ProjectFrom()` skips nested properties** — in the Response DTO, `ProjectFrom()` (LINQ-to-SQL projection) does not project nested objects because EF Core requires `.Include()` for navigation properties. Use `FromEntity()` with `.Include()` for nested responses.
 
 ### Nested type mapping in Response
 
-When a property's type also has `[ResponseDto]`, the generator uses the nested response DTO and maps via `FromEntity()`:
+When a property's type also has `[ResponseDto]`, the generator uses the nested response DTO and maps via `FromEntity()` with null checks:
 
 ```csharp
-[ResponseDto]
-public class Player
+// Generated
+public record OrderResponse
 {
-    public Address? Address { get; set; }
-}
+    public int Id { get; init; }
+    public string Title { get; init; }
+    public OrderLineResponse? Line { get; init; }
 
-[ResponseDto]
-public class Address
-{
-    public string Street { get; set; }
-    public string City { get; set; }
+    public static OrderResponse FromEntity(Order entity)
+    {
+        return new OrderResponse
+        {
+            Id = entity.Id,
+            Title = entity.Title,
+            Line = entity.Line is not null
+                ? OrderLineResponse.FromEntity(entity.Line)    // null-safe nested mapping
+                : null,
+        };
+    }
+
+    public static IQueryable<OrderResponse> ProjectFrom(IQueryable<Order> query)
+    {
+        return query.Select(x => new OrderResponse
+        {
+            Id = x.Id,
+            Title = x.Title,
+            // Line is NOT projected — use FromEntity() with .Include(x => x.Line) instead
+        });
+    }
 }
 ```
 
-Generated `PlayerResponse` has `AddressResponse? Address` and `FromEntity()` maps nested objects automatically. `ProjectFrom()` skips nested properties (use `FromEntity()` with `.Include()` for nested EF Core queries).
+`ProjectFrom()` is EF Core-safe (no navigation property access in the LINQ expression). For nested data, load via `Include` and map with `FromEntity`:
+
+```csharp
+var order = await db.Orders.Include(o => o.Line).FirstAsync(o => o.Id == id);
+return OrderResponse.FromEntity(order);   // nested Line is mapped via OrderLineResponse.FromEntity
+```
 
 ### Flatten nested properties (`[Flatten]`)
 
