@@ -146,4 +146,17 @@ public class LoggingBenchmarks
 
     [Benchmark(Description = "REAL: LogInformation(\"template\", args)")]
     public void Real_Interpolated_StandardTemplate() => _interpolatedReal.LogStandardTemplate(42, "Widget", 29.97m);
+
+    // ═══════════════════════════════════════════
+    // FALLBACK: extension method body (no interceptor) — measures slow-path
+    // ═══════════════════════════════════════════
+
+    [Benchmark(Description = "LogInformation($\"...\") FALLBACK (no interceptor)")]
+    public void Interpolated_Fallback() => _interpolated.LogFallback(42, "Widget", 29.97m);
+
+    [Benchmark(Description = "LogInformation($\"...\") FALLBACK (level OFF)")]
+    public void Interpolated_Fallback_Off() => _interpolatedNull.LogFallback(42, "Widget", 29.97m);
+
+    [Benchmark(Description = "REAL: LogInformation($\"...\") FALLBACK")]
+    public void Real_Interpolated_Fallback() => _interpolatedReal.LogFallback(42, "Widget", 29.97m);
 }
