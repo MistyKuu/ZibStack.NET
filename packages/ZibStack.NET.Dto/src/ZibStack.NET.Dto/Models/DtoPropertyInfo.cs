@@ -11,7 +11,6 @@ internal sealed class DtoPropertyInfo
     public bool IsNullable { get; }
     public bool IsRequired { get; }
     public bool IsValueType { get; }
-    public bool IsImmutable { get; }
     public List<string> ValidationAttributes { get; }
     public List<ValidationRule> ValidationRules { get; }
     public string? NestedCreateDtoName { get; set; }
@@ -21,7 +20,7 @@ internal sealed class DtoPropertyInfo
 
     /// <summary>
     /// Which DTO targets this property is excluded from (via [DtoIgnore(target)]).
-    /// DtoTarget.All means excluded from everything (the old [DtoIgnore] behavior).
+    /// DtoTarget.All means excluded from everything.
     /// 0 means no ignoring.
     /// </summary>
     public int IgnoreTargets { get; }
@@ -32,10 +31,7 @@ internal sealed class DtoPropertyInfo
     /// </summary>
     public int OnlyTargets { get; }
 
-    // Compat shims used by Generation.cs — derived from IgnoreTargets / OnlyTargets.
     // DtoTarget flags: Create=1, Update=2, Response=4, Query=8, List=16
-    public bool IsCreateOnly => OnlyTargets != 0 && (OnlyTargets & 1) != 0 && (OnlyTargets & ~1) == 0;
-    public bool IsUpdateOnly => OnlyTargets != 0 && (OnlyTargets & 2) != 0 && (OnlyTargets & ~2) == 0;
     public bool IsIgnoredFrom(int target) => IgnoreTargets != 0
         ? (IgnoreTargets & target) != 0
         : OnlyTargets != 0 && (OnlyTargets & target) == 0;
@@ -43,7 +39,7 @@ internal sealed class DtoPropertyInfo
     public DtoPropertyInfo(string propertyName, string jsonName, string displayTypeName,
         bool isNullable, bool isRequired, bool isValueType,
         int ignoreTargets, int onlyTargets,
-        bool isImmutable = false, string? sourcePropertyName = null,
+        string? sourcePropertyName = null,
         List<string>? validationAttributes = null, List<ValidationRule>? validationRules = null)
     {
         PropertyName = propertyName;
@@ -53,7 +49,6 @@ internal sealed class DtoPropertyInfo
         IsNullable = isNullable;
         IsRequired = isRequired;
         IsValueType = isValueType;
-        IsImmutable = isImmutable;
         IgnoreTargets = ignoreTargets;
         OnlyTargets = onlyTargets;
         ValidationAttributes = validationAttributes ?? new List<string>();

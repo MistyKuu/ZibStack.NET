@@ -486,7 +486,6 @@ public partial class DtoGenerator
         sb.AppendLine("    {");
         foreach (var prop in props)
         {
-            if (prop.IsImmutable) continue;
 
             if (prop.IsFlattened)
             {
@@ -915,7 +914,6 @@ public partial class DtoGenerator
         sb.AppendLine("        var changed = new System.Collections.Generic.List<string>();");
         foreach (var prop in props)
         {
-            if (prop.IsImmutable) continue;
 
             if (prop.NestedUpdateDtoName is null)
             {

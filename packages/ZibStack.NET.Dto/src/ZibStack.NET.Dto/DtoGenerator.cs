@@ -17,7 +17,6 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string DtoIgnoreAttributeFqn = "ZibStack.NET.Dto.DtoIgnoreAttribute";
     private const string DtoOnlyAttributeFqn = "ZibStack.NET.Dto.DtoOnlyAttribute";
     private const string DtoNameAttributeFqn = "ZibStack.NET.Dto.DtoNameAttribute";
-    private const string ImmutableAttributeFqn = "ZibStack.NET.Dto.ImmutableAttribute";
     private const string FlattenAttributeFqn = "ZibStack.NET.Dto.FlattenAttribute";
     private const string RenamePropertyAttributeFqn = "ZibStack.NET.Dto.RenamePropertyAttribute";
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
@@ -37,7 +36,6 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("DtoIgnoreAttribute.g.cs", DtoIgnoreAttributeSource);
             ctx.AddSource("DtoOnlyAttribute.g.cs", DtoOnlyAttributeSource);
             ctx.AddSource("DtoNameAttribute.g.cs", DtoNameAttributeSource);
-            ctx.AddSource("ImmutableAttribute.g.cs", ImmutableAttributeSource);
             ctx.AddSource("FlattenAttribute.g.cs", FlattenAttributeSource);
             ctx.AddSource("RenamePropertyAttribute.g.cs", RenamePropertyAttributeSource);
             ctx.AddSource("ResponseDtoAttribute.g.cs", ResponseDtoAttributeSource);

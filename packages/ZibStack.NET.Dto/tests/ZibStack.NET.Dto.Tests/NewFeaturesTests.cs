@@ -14,34 +14,30 @@ public class Article
     public required string Title { get; set; }
     public string? Body { get; set; }
 
-    [Immutable]
+    [DtoIgnore(DtoTarget.Update)]
     public required string Slug { get; set; }
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────
 
-public class ImmutableTests
+public class DtoIgnoreUpdateTests
 {
     [Fact]
-    public void Immutable_VisibleInUpdateDto()
+    public void DtoIgnoreUpdate_ExcludedFromUpdateDto()
     {
         var type = typeof(UpdateArticleRequest);
+        Assert.Null(type.GetProperty("Slug"));
+    }
+
+    [Fact]
+    public void DtoIgnoreUpdate_IncludedInCreateDto()
+    {
+        var type = typeof(CreateArticleRequest);
         Assert.NotNull(type.GetProperty("Slug"));
     }
 
     [Fact]
-    public void Immutable_SkippedInApplyTo()
-    {
-        var article = new Article { Title = "Old", Slug = "old-slug" };
-        var request = new UpdateArticleRequest { Title = "New", Slug = "new-slug" };
-        request.ApplyTo(article);
-
-        Assert.Equal("New", article.Title);
-        Assert.Equal("old-slug", article.Slug);  // unchanged!
-    }
-
-    [Fact]
-    public void Immutable_IncludedInCreateToEntity()
+    public void DtoIgnoreUpdate_IncludedInCreateToEntity()
     {
         var request = new CreateArticleRequest { Title = "Hello", Slug = "hello" };
         var entity = request.ToEntity();

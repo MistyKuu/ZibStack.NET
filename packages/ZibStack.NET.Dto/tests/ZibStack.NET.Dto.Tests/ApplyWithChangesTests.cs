@@ -44,14 +44,18 @@ public class ApplyWithChangesTests
     }
 
     [Fact]
-    public void ApplyWithChanges_SkipsImmutableProperties()
+    public void ApplyWithChanges_SetOnceFieldNotInUpdateDto()
     {
+        // Slug has [DtoIgnore(DtoTarget.Update)] — it's not in UpdateArticleRequest at all
+        var type = typeof(UpdateArticleRequest);
+        Assert.Null(type.GetProperty("Slug"));
+
+        // ApplyWithChanges only touches fields that exist on the DTO
         var article = new Article { Title = "Old", Slug = "old-slug" };
-        var request = new UpdateArticleRequest { Title = "New", Slug = "new-slug" };
+        var request = new UpdateArticleRequest { Title = "New" };
         var (changed, _) = request.ApplyWithChanges(article);
 
         Assert.Contains("title", changed);
-        Assert.DoesNotContain("slug", changed);  // immutable — skipped
-        Assert.Equal("old-slug", article.Slug);   // not changed
+        Assert.Equal("old-slug", article.Slug);  // untouched — field not in update DTO
     }
 }

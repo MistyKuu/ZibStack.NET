@@ -238,8 +238,9 @@ public IActionResult HandleCreate<T>(ICanCreate<T> request) where T : class
 | `[DtoIgnore(DtoTarget.X)]` | Excludes from specific DTO targets: `Create`, `Update`, `Response`, `Query`, `List` (combinable with `\|`) |
 | `[DtoOnly(DtoTarget.X)]` | Includes **only** in the specified DTO target(s): e.g. `DtoTarget.Create`, `DtoTarget.Update` |
 | `[DtoName("json_name")]` | Overrides the JSON property name (works on all DTOs including Response) |
-| `[Immutable]` | Visible in Update DTO but skipped in `ApplyTo()` |
 | `[Flatten]` | Expands nested object properties into parent DTO (Response only) |
+
+> **Set-once fields:** Use `[DtoIgnore(DtoTarget.Update)]` for properties that can be set at creation but never changed — the property won't appear in the PATCH DTO at all.
 
 **`[DtoName]` on Response DTO:**
 
@@ -761,7 +762,6 @@ Per-operation policies override the default `AuthorizePolicy` for specific opera
 | `[DtoIgnore]` | Excluded from **all** request and response DTOs |
 | `[DtoIgnore(DtoTarget.X)]` | Excluded from specific DTO targets (e.g. `DtoTarget.Response`, `DtoTarget.Query`, `DtoTarget.List`) |
 | `[DtoOnly(DtoTarget.X)]` | Included **only** in the specified target (e.g. `DtoTarget.Create` for POST-only, `DtoTarget.Update` for PATCH-only) |
-| `[Immutable]` | Visible in PATCH DTO but `ApplyTo()` skips it |
 | `[Flatten]` | Nested object properties flattened into response |
 | `required` | Validated as mandatory in POST, optional in PATCH |
 | `[ZRequired]`, `[ZMinLength]`, `[ZMaxLength]`, `[ZRange]`, `[ZEmail]`, `[ZMatch]` | Propagated to generated validation |
@@ -1173,9 +1173,9 @@ public class User
 // Generated CreateUserRequest.Email has [ZMaxLength(100)] and [ZEmail]
 ```
 
-### `[Immutable]` properties
+### Set-once (immutable) fields
 
-Properties marked `[Immutable]` are included in the Update DTO but skipped in `ApplyTo()`:
+> **Migration note:** The `[Immutable]` attribute has been removed. Use `[DtoIgnore(DtoTarget.Update)]` instead — the property won't appear in the PATCH DTO at all, which is cleaner than silently ignoring changes.
 
 ```csharp
 [CreateDto]
@@ -1184,8 +1184,8 @@ public class Article
 {
     public required string Title { get; set; }
     
-    [Immutable]
-    public required string Slug { get; set; }  // can set at creation, never changed
+    [DtoIgnore(DtoTarget.Update)]
+    public required string Slug { get; set; }  // set at creation, never changed
 }
 ```
 

@@ -272,18 +272,6 @@ public partial class DtoGenerator
             }
         }
 
-        // Read Immutable array (for UpdateDtoFor)
-        var immutableArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Immutable");
-        var immutableSet = new HashSet<string>();
-        if (!immutableArg.Value.IsNull && immutableArg.Value.Values.Length > 0)
-        {
-            foreach (var val in immutableArg.Value.Values)
-            {
-                if (val.Value is string s)
-                    immutableSet.Add(s);
-            }
-        }
-
         // Read [RenameProperty] attributes
         var renameMap = new Dictionary<string, string>();
         foreach (var a in symbol.GetAttributes())
@@ -330,13 +318,11 @@ public partial class DtoGenerator
             var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
             var isValueType = prop.Type.IsValueType;
             var isRequired = requiredSet.Contains(prop.Name) || prop.IsRequired;
-            var isImmutable = immutableSet.Contains(prop.Name);
 
             var (validationAttrs, validationRules) = GetValidationAttributes(prop);
             var propInfo = new DtoPropertyInfo(
                 dtoName, jsonName, displayType, isNullable,
                 isRequired, isValueType, 0, 0,
-                isImmutable,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
                 validationAttributes: validationAttrs,
                 validationRules: validationRules);
@@ -628,8 +614,6 @@ public partial class DtoGenerator
             var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
             var isValueType = prop.Type.IsValueType;
             var isRequired = prop.IsRequired;
-            var isImmutable = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == ImmutableAttributeFqn);
             var (validationAttrs, validationRules) = GetValidationAttributes(prop);
 
             // Check for [Flatten] — expand child properties
@@ -662,7 +646,6 @@ public partial class DtoGenerator
                 isValueType,
                 ignoreTargets,
                 onlyTargets,
-                isImmutable,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
                 validationAttributes: validationAttrs,
                 validationRules: validationRules);
