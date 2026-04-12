@@ -95,6 +95,23 @@ ZibStack.NET.Log is designed to be a **quiet guest** in consumer projects — no
 | `ZibLogEmitGlobalUsing` | `false` | When `true`, the source generator emits `global using ZibStack.NET.Log;` so the interpolated-string handler overload is available everywhere without per-file `using`. |
 | `ZibLogStrict` | `false` | When `true`, turns on the opinionated experience: `ZibLogEmitGlobalUsing=true` **and** the `ZLOG002` analyzer is raised from `Info` (IDE hint) to `Warning` (visible in build output). |
 
+The assembly-level `[ZibLogDefaults]` attribute controls property name casing:
+
+| Property | Default | Effect |
+|---|---|---|
+| `PropertyNameCasing` | `PascalCase` (0) | `$"{userId}"` → template `{UserId}`. Matches Serilog/Seq/Elastic convention. |
+| | `CamelCase` (1) | `$"{userId}"` → template `{userId}`. Keeps the variable name as-is. |
+
+```csharp
+// Default (PascalCase — no attribute needed):
+_logger.LogInformation($"User {userId} bought {product}");
+// Template: "User {UserId} bought {Product}"
+
+// Opt into camelCase:
+[assembly: ZibLogDefaults(PropertyNameCasing = (int)ZibLogPropertyCasing.CamelCase)]
+// Template: "User {userId} bought {product}"
+```
+
 ### Examples
 
 **New project / greenfield — you want the full experience:**
@@ -499,7 +516,7 @@ public void AppendFormatted(int v, [CallerArgumentExpression(nameof(v))] string 
 Three things to notice:
 
 1. **Zero boxing for primitives.** `int` is stored as `long` in `L0..L5`, not as `object` in an array. Compare with Microsoft's `LogInformation("Hey {user}", int)` which wraps `int` in `object[]` → one boxing per argument.
-2. **`CallerArgumentExpression` captures the variable name.** `$"Hey {userId}"` → `AppendFormatted` receives `name = "userId"` for free. That's how the handler knows the structured property name without any runtime reflection — the C# compiler bakes the expression text into the call site.
+2. **`CallerArgumentExpression` captures the variable name.** `$"Hey {UserId}"` → `AppendFormatted` receives `name = "userId"` for free. That's how the handler knows the structured property name without any runtime reflection — the C# compiler bakes the expression text into the call site.
 3. **Format specifiers are preserved.** Each `AppendFormatted` has a `string? format` overload that receives `"C"` for `$"{total:C}"`, `"P2"` for `$"{ratio:P2}"`, etc. — keeping the full template round-trippable.
 
 `AppendLiteral(string s)` is a no-op: we don't need to accumulate the literal text because we're never building a flat string. The literals are re-assembled later from a compile-time template, not from handler state.
@@ -533,7 +550,7 @@ file static class __Interceptors_MyFile
         LoggerMessage.Define<int>(
             LogLevel.Information,
             new EventId(1, "Hey"),
-            "Hey {userId}");   // ← literal template, parsed once by LoggerMessage.Define
+            "Hey {UserId}");   // ← literal template, parsed once by LoggerMessage.Define
 
     [InterceptsLocation(version: 1, "…base64 hash of file+line+column…")]
     public static void __LogInformation_0(
@@ -546,11 +563,11 @@ file static class __Interceptors_MyFile
 }
 ```
 
-`[InterceptsLocation]` tells the compiler: "every time you see a call at the original source location, rewrite it to call this method instead". Your original `logger.LogInformation($"Hey {userId}")` compiles **as if you wrote** `__Interceptors_MyFile.__LogInformation_0(logger, ref handler)`.
+`[InterceptsLocation]` tells the compiler: "every time you see a call at the original source location, rewrite it to call this method instead". Your original `logger.LogInformation($"Hey {UserId}")` compiles **as if you wrote** `__Interceptors_MyFile.__LogInformation_0(logger, ref handler)`.
 
 What the interceptor adds beyond what the handler already had:
 
-- **Cached `LoggerMessage.Define<T>` delegate** — the template `"Hey {userId}"` is parsed exactly once (at static init) instead of on every call. Microsoft's internal `FormattedLogValues` parses the template on every call into a fresh `LogValuesFormatter` — that's where most of the legacy overhead lives.
+- **Cached `LoggerMessage.Define<T>` delegate** — the template `"Hey {UserId}"` is parsed exactly once (at static init) instead of on every call. Microsoft's internal `FormattedLogValues` parses the template on every call into a fresh `LogValuesFormatter` — that's where most of the legacy overhead lives.
 - **Typed dispatch** — `__logger_0(logger, (int)handler.L0, null)` is a direct strongly-typed call. No `object[]`, no boxing, no allocation.
 - **One delegate per call site**, not per call — the cost is paid once at static init, amortized across every invocation for the process lifetime.
 
@@ -574,7 +591,7 @@ The natural instinct is "the handler already has the typed values — why do we 
 
 It can, but each of the three natural shapes sacrifices something:
 
-1. **Build a flat string and call `logger.Log(level, eventId, formatted, null, (s, _) => s)`** — structured properties are lost. The logger sees `"Hey 42"`, not `{ Template: "Hey {userId}", userId: 42 }`. This is the failure mode the whole library exists to avoid.
+1. **Build a flat string and call `logger.Log(level, eventId, formatted, null, (s, _) => s)`** — structured properties are lost. The logger sees `"Hey 42"`, not `{ Template: "Hey {UserId}", userId: 42 }`. This is the failure mode the whole library exists to avoid.
 2. **Build an `object?[]` from the slots and call `logger.Log(level, eventId, new FormattedLogValues(template, args), …)`** — boxing comes back. The typed-slot win vanishes. Also: `FormattedLogValues` is internal to Microsoft.Extensions.Logging; you can't construct it directly, so you'd call `logger.LogInformation(template, args)` which goes back through the same parse-every-time code path.
 3. **Call `LoggerMessage.Define<T>(level, eventId, template)(logger, value, null)` in the extension method body** — this works, but `LoggerMessage.Define` is expensive (it parses the template and builds a `LogValuesFormatter` internally). Doing it on every call is worse than the Microsoft flat path.
 

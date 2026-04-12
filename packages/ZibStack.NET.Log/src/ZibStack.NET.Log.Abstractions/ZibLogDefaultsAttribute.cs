@@ -3,7 +3,19 @@ using ZibStack.NET.Aop;
 namespace ZibStack.NET.Log;
 
 /// <summary>
-/// Sets default values for all <see cref="LogAttribute"/> instances in the assembly.
+/// Casing convention for structured property names in interpolated log messages.
+/// </summary>
+public enum ZibLogPropertyCasing
+{
+    /// <summary>PascalCase: <c>userId</c> → <c>UserId</c>. Matches Serilog/Seq/Elastic convention. This is the default.</summary>
+    PascalCase = 0,
+    /// <summary>camelCase: <c>userId</c> stays <c>userId</c>. Matches the C# variable name as-is.</summary>
+    CamelCase = 1,
+}
+
+/// <summary>
+/// Sets default values for all <see cref="LogAttribute"/> instances in the assembly,
+/// and controls interpolated-string logging conventions (property name casing).
 /// Per-method [Log] properties override these defaults.
 /// </summary>
 /// <example>
@@ -40,4 +52,11 @@ public sealed class ZibLogDefaultsAttribute : Attribute
 
     /// <summary>Default object logging mode. Default: Destructure (1).</summary>
     public int ObjectLogging { get; set; } = -1;
+
+    /// <summary>
+    /// Casing convention for structured property names in <c>LogInformation($"...")</c> calls.
+    /// Default: PascalCase (0) — <c>userId</c> becomes <c>UserId</c> in the log template.
+    /// Set to CamelCase (1) to keep variable names as-is.
+    /// </summary>
+    public int PropertyNameCasing { get; set; } = 0;
 }

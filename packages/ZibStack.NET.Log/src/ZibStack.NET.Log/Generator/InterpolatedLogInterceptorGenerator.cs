@@ -39,10 +39,28 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
             .Select(static (cs, _) => cs!)
             .Collect();
 
-        context.RegisterSourceOutput(callSites, (spc, sites) =>
+        // Read [assembly: ZibLogDefaults(PropertyNameCasing = ...)]
+        var casing = context.CompilationProvider.Select(static (compilation, _) =>
         {
+            foreach (var attr in compilation.Assembly.GetAttributes())
+            {
+                if (attr.AttributeClass?.ToDisplayString() != "ZibStack.NET.Log.ZibLogDefaultsAttribute")
+                    continue;
+                foreach (var arg in attr.NamedArguments)
+                {
+                    if (arg.Key == "PropertyNameCasing" && arg.Value.Value is int v)
+                        return v; // 0 = PascalCase (default), 1 = CamelCase
+                }
+            }
+            return 0;
+        });
+
+        context.RegisterSourceOutput(callSites.Combine(casing), (spc, pair) =>
+        {
+            var (sites, casingValue) = pair;
             if (sites.Length == 0) return;
-            var source = Emit(sites);
+            bool usePascalCase = casingValue != 1;
+            var source = Emit(sites, usePascalCase);
             spc.AddSource("ZibLogStructuredInterceptors.g.cs", source);
         });
     }
@@ -117,24 +135,20 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
                 case InterpolationSyntax interp:
                     var typeInfo = context.SemanticModel.GetTypeInfo(interp.Expression, ct);
                     var type = typeInfo.Type;
-                    if (type is null) return null;
+                    if (type is null || type is IErrorTypeSymbol) return null;
 
-                    var rawFormat = interp.FormatClause?.FormatStringToken.ValueText;
+                    var sanitized = SanitizeName(interp.Expression.ToString());
+                    var format = interp.FormatClause?.FormatStringToken.ValueText;
 
-                    // Parse #name override: "C#orderTotal" → format="C", name="orderTotal"
-                    //                       "#orderTotal"  → format=null, name="orderTotal"
-                    //                       "C"            → format="C", name from expression
-                    string sanitized;
-                    string? format;
-                    if (rawFormat != null && rawFormat.IndexOf('#') is var hashIdx && hashIdx >= 0)
+                    // Parse #name override in format specifier
+                    if (format != null)
                     {
-                        sanitized = rawFormat.Substring(hashIdx + 1);
-                        format = hashIdx > 0 ? rawFormat.Substring(0, hashIdx) : null;
-                    }
-                    else
-                    {
-                        sanitized = SanitizeName(interp.Expression.ToString());
-                        format = rawFormat;
+                        var hi = format.IndexOf('#');
+                        if (hi >= 0)
+                        {
+                            sanitized = format.Substring(hi + 1);
+                            format = hi > 0 ? format.Substring(0, hi) : null;
+                        }
                     }
 
                     template.Append('{').Append(sanitized);
@@ -245,7 +259,50 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
 
     // ── Emission ─────────────────────────────────────────────────────────
 
-    private static string Emit(ImmutableArray<InterceptedCallSite> sites)
+    private static string ToPascalCase(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        return char.ToUpperInvariant(name[0]) + name.Substring(1);
+    }
+
+    private static string ApplyPascalCaseToTemplate(string template)
+    {
+        // Transform property names inside {name} and {name:format} placeholders
+        var sb = new StringBuilder(template.Length);
+        int i = 0;
+        while (i < template.Length)
+        {
+            if (template[i] == '{' && i + 1 < template.Length && template[i + 1] == '{')
+            {
+                sb.Append("{{");
+                i += 2;
+                continue;
+            }
+            if (template[i] == '{')
+            {
+                int close = template.IndexOf('}', i + 1);
+                if (close < 0) { sb.Append(template[i]); i++; continue; }
+                var inner = template.Substring(i + 1, close - i - 1);
+                var colonIdx = inner.IndexOf(':');
+                var name = colonIdx >= 0 ? inner.Substring(0, colonIdx) : inner;
+                var format = colonIdx >= 0 ? inner.Substring(colonIdx) : "";
+                sb.Append('{').Append(ToPascalCase(name)).Append(format).Append('}');
+                i = close + 1;
+                continue;
+            }
+            if (template[i] == '}' && i + 1 < template.Length && template[i + 1] == '}')
+            {
+                sb.Append("}}");
+                i += 2;
+                continue;
+            }
+            sb.Append(template[i]);
+            i++;
+        }
+        return sb.ToString();
+    }
+
+    private static string Emit(ImmutableArray<InterceptedCallSite> sites, bool usePascalCase = true)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -275,7 +332,7 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
         int eventId = 1;
         for (int i = 0; i < sites.Length; i++)
         {
-            EmitOne(sb, sites[i], i, ref eventId);
+            EmitOne(sb, sites[i], i, ref eventId, usePascalCase);
             sb.AppendLine();
         }
 
@@ -284,9 +341,10 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static void EmitOne(StringBuilder sb, InterceptedCallSite site, int index, ref int eventId)
+    private static void EmitOne(StringBuilder sb, InterceptedCallSite site, int index, ref int eventId, bool usePascalCase = true)
     {
         var args = site.Args;
+        var template = usePascalCase ? ApplyPascalCaseToTemplate(site.Template) : site.Template;
 
         // Map args to typed slot accessors. We need to know the slot index per type.
         var slotIdxByKind = new Dictionary<SlotKind, int>();
@@ -316,7 +374,7 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
         sb.AppendLine($"            global::Microsoft.Extensions.Logging.LoggerMessage.Define{defineGenericArgs}(");
         sb.AppendLine($"                {levelEnum},");
         sb.AppendLine($"                new global::Microsoft.Extensions.Logging.EventId({ev}, \"{eventName}\"),");
-        sb.AppendLine($"                {EscapeStringLiteral(site.Template)});");
+        sb.AppendLine($"                {EscapeStringLiteral(template)});");
         sb.AppendLine();
 
         // Interceptor method

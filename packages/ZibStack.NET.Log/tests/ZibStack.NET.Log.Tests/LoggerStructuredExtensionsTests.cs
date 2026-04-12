@@ -17,7 +17,7 @@ public class LoggerStructuredExtensionsTests
 
         Assert.Single(_logger.Entries);
         Assert.Equal(LogLevel.Information, _logger.Entries[0].Level);
-        Assert.Equal("User {user} bought {count} items", _logger.Entries[0].Template);
+        Assert.Equal("User {User} bought {Count} items", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { "Alice", 5 }, _logger.Entries[0].Args);
     }
 
@@ -29,7 +29,7 @@ public class LoggerStructuredExtensionsTests
 
         Assert.Single(_logger.Entries);
         Assert.Equal(LogLevel.Warning, _logger.Entries[0].Level);
-        Assert.Equal("Order {id} not found", _logger.Entries[0].Template);
+        Assert.Equal("Order {Id} not found", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 42 }, _logger.Entries[0].Args);
     }
 
@@ -43,7 +43,7 @@ public class LoggerStructuredExtensionsTests
 
         Assert.Single(_logger.Entries);
         Assert.Equal(LogLevel.Error, _logger.Entries[0].Level);
-        Assert.Equal("Failed at {step}", _logger.Entries[0].Template);
+        Assert.Equal("Failed at {Step}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { "validation" }, _logger.Entries[0].Args);
         Assert.Same(ex, _logger.Entries[0].Exception);
     }
@@ -55,7 +55,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogDebug($"Total: {total:C}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Total: {total:C}", _logger.Entries[0].Template);
+        Assert.Equal("Total: {Total:C}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 29.97m }, _logger.Entries[0].Args);
     }
 
@@ -68,7 +68,7 @@ public class LoggerStructuredExtensionsTests
         Assert.Single(_logger.Entries);
         Assert.Equal(LogLevel.Trace, _logger.Entries[0].Level);
         // "order.Name" → "orderName" via SanitizeName
-        Assert.Equal("Product: {orderName}", _logger.Entries[0].Template);
+        Assert.Equal("Product: {OrderName}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { "Widget" }, _logger.Entries[0].Args);
     }
 
@@ -96,7 +96,7 @@ public class LoggerStructuredExtensionsTests
         // C# parses $"Result: {x} in {{braces}}" as:
         //   AppendLiteral("Result: "), AppendFormatted(x), AppendLiteral(" in {braces}")
         // The literal " in {braces}" gets escaped to " in {{braces}}"
-        Assert.Equal("Result: {x} in {{braces}}", _logger.Entries[0].Template);
+        Assert.Equal("Result: {X} in {{braces}}", _logger.Entries[0].Template);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Order {result:#orderId} processed");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Order {orderId} processed", _logger.Entries[0].Template);
+        Assert.Equal("Order {OrderId} processed", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 42 }, _logger.Entries[0].Args);
     }
 
@@ -150,7 +150,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Total: {total:C#orderTotal}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Total: {orderTotal:C}", _logger.Entries[0].Template);
+        Assert.Equal("Total: {OrderTotal:C}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 29.97m }, _logger.Entries[0].Args);
     }
 
@@ -161,7 +161,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"User {userId}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("User {userId}", _logger.Entries[0].Template);
+        Assert.Equal("User {UserId}", _logger.Entries[0].Template);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Got {x:#count} and {y}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Got {count} and {y}", _logger.Entries[0].Template);
+        Assert.Equal("Got {Count} and {Y}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 1, "hello" }, _logger.Entries[0].Args);
     }
 
@@ -185,7 +185,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Values: {a:#alpha} {b:#beta} {c:#gamma}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Values: {alpha} {beta} {gamma}", _logger.Entries[0].Template);
+        Assert.Equal("Values: {Alpha} {Beta} {Gamma}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 1, "test", 3.14m }, _logger.Entries[0].Args);
     }
 
@@ -196,7 +196,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Product: {order.Name:#productName}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Product: {productName}", _logger.Entries[0].Template);
+        Assert.Equal("Product: {ProductName}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { "Widget" }, _logger.Entries[0].Args);
     }
 
@@ -207,7 +207,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Items: {count:N0#itemCount}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Items: {itemCount:N0}", _logger.Entries[0].Template);
+        Assert.Equal("Items: {ItemCount:N0}", _logger.Entries[0].Template);
         Assert.Equal(new object?[] { 1000 }, _logger.Entries[0].Args);
     }
 
@@ -219,8 +219,8 @@ public class LoggerStructuredExtensionsTests
         _logger.LogError($"Error {id:#errorId}");
 
         Assert.Equal(2, _logger.Entries.Count);
-        Assert.Equal("Warn {warningId}", _logger.Entries[0].Template);
-        Assert.Equal("Error {errorId}", _logger.Entries[1].Template);
+        Assert.Equal("Warn {WarningId}", _logger.Entries[0].Template);
+        Assert.Equal("Error {ErrorId}", _logger.Entries[1].Template);
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public class LoggerStructuredExtensionsTests
         _logger.LogError(ex, $"Failed at {step:#stage}");
 
         Assert.Single(_logger.Entries);
-        Assert.Equal("Failed at {stage}", _logger.Entries[0].Template);
+        Assert.Equal("Failed at {Stage}", _logger.Entries[0].Template);
         Assert.Same(ex, _logger.Entries[0].Exception);
     }
 
@@ -243,8 +243,8 @@ public class LoggerStructuredExtensionsTests
         _logger.LogInformation($"Output: {result:#outputValue}");
 
         Assert.Equal(2, _logger.Entries.Count);
-        Assert.Equal("Input: {inputValue}", _logger.Entries[0].Template);
-        Assert.Equal("Output: {outputValue}", _logger.Entries[1].Template);
+        Assert.Equal("Input: {InputValue}", _logger.Entries[0].Template);
+        Assert.Equal("Output: {OutputValue}", _logger.Entries[1].Template);
     }
 
     // ── Test infrastructure ─────────────────────────────────────────────
