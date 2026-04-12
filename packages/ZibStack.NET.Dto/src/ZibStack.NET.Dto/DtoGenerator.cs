@@ -15,17 +15,13 @@ public partial class DtoGenerator : IIncrementalGenerator
     private const string CreateDtoForAttributeFqn = "ZibStack.NET.Dto.CreateDtoForAttribute";
     private const string UpdateDtoForAttributeFqn = "ZibStack.NET.Dto.UpdateDtoForAttribute";
     private const string DtoIgnoreAttributeFqn = "ZibStack.NET.Dto.DtoIgnoreAttribute";
+    private const string DtoOnlyAttributeFqn = "ZibStack.NET.Dto.DtoOnlyAttribute";
     private const string DtoNameAttributeFqn = "ZibStack.NET.Dto.DtoNameAttribute";
-    private const string CreateOnlyAttributeFqn = "ZibStack.NET.Dto.CreateOnlyAttribute";
-    private const string UpdateOnlyAttributeFqn = "ZibStack.NET.Dto.UpdateOnlyAttribute";
     private const string ImmutableAttributeFqn = "ZibStack.NET.Dto.ImmutableAttribute";
     private const string FlattenAttributeFqn = "ZibStack.NET.Dto.FlattenAttribute";
     private const string RenamePropertyAttributeFqn = "ZibStack.NET.Dto.RenamePropertyAttribute";
     private const string QueryDtoAttributeFqn = "ZibStack.NET.Dto.QueryDtoAttribute";
     private const string ResponseDtoAttributeFqn = "ZibStack.NET.Dto.ResponseDtoAttribute";
-    private const string ResponseIgnoreAttributeFqn = "ZibStack.NET.Dto.ResponseIgnoreAttribute";
-    private const string QueryIgnoreAttributeFqn = "ZibStack.NET.Dto.QueryIgnoreAttribute";
-    private const string ListIgnoreAttributeFqn = "ZibStack.NET.Dto.ListIgnoreAttribute";
     private const string UiImTiredOfCrudAttributeFqn = "ZibStack.NET.UI.ImTiredOfCrudAttribute";
     private const string CrudApiAttributeFqn = "ZibStack.NET.Dto.CrudApiAttribute";
 
@@ -34,19 +30,18 @@ public partial class DtoGenerator : IIncrementalGenerator
         // Attributes + IDtoValidator in PostInit
         context.RegisterPostInitializationOutput(static ctx =>
         {
+            ctx.AddSource("DtoTarget.g.cs", DtoTargetSource);
             ctx.AddSource("CreateDtoAttribute.g.cs", CreateDtoAttributeSource);
             ctx.AddSource("UpdateDtoAttribute.g.cs", UpdateDtoAttributeSource);
             ctx.AddSource("CreateOrUpdateDtoAttribute.g.cs", CreateOrUpdateDtoAttributeSource);
             ctx.AddSource("DtoIgnoreAttribute.g.cs", DtoIgnoreAttributeSource);
+            ctx.AddSource("DtoOnlyAttribute.g.cs", DtoOnlyAttributeSource);
             ctx.AddSource("DtoNameAttribute.g.cs", DtoNameAttributeSource);
-            ctx.AddSource("CreateOnlyAttribute.g.cs", CreateOnlyAttributeSource);
-            ctx.AddSource("UpdateOnlyAttribute.g.cs", UpdateOnlyAttributeSource);
             ctx.AddSource("ImmutableAttribute.g.cs", ImmutableAttributeSource);
             ctx.AddSource("FlattenAttribute.g.cs", FlattenAttributeSource);
             ctx.AddSource("RenamePropertyAttribute.g.cs", RenamePropertyAttributeSource);
             ctx.AddSource("ResponseDtoAttribute.g.cs", ResponseDtoAttributeSource);
             ctx.AddSource("QueryDtoAttribute.g.cs", QueryDtoAttributeSource);
-            ctx.AddSource("ResponseIgnoreAttribute.g.cs", ResponseIgnoreAttributeSource);
             ctx.AddSource("PaginatedResponse.g.cs", PaginatedResponseSource);
             ctx.AddSource("SortDirection.g.cs", SortDirectionSource);
             ctx.AddSource("IDtoValidator.g.cs", DtoValidatorInterfaceSource);
@@ -55,8 +50,6 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("CrudOperations.g.cs", CrudOperationsSource);
             ctx.AddSource("ApiStyle.g.cs", ApiStyleSource);
             ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
-            ctx.AddSource("QueryIgnoreAttribute.g.cs", QueryIgnoreAttributeSource);
-            ctx.AddSource("ListIgnoreAttribute.g.cs", ListIgnoreAttributeSource);
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
         });
 

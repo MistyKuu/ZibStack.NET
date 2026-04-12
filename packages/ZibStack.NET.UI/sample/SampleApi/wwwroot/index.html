@@ -178,7 +178,7 @@ public partial class Order
     [DtoName("Customer")]  // → "Customer" in response DTO
     public string CustomerName { get; set; } = "";
 
-    [CreateOnly]  // only in create request
+    [DtoOnly(DtoTarget.Create)]  // only in create request
     public string OrderNumber { get; set; } = "";
 
     [Immutable]   // visible in update but not changeable
@@ -188,13 +188,13 @@ public partial class Order
     [DtoName("Total")]  // → "Total" in response DTO
     public decimal TotalAmount { get; set; }
 
-    [ResponseIgnore]  // exclude from response
+    [DtoIgnore(DtoTarget.Response)]  // exclude from response
     public string InternalNotes { get; set; } = "";
 
-    [ListIgnore]  // exclude from list, include in get-by-id
+    [DtoIgnore(DtoTarget.List)]  // exclude from list, include in get-by-id
     public string ShippingAddress { get; set; } = "";
 
-    [QueryIgnore]  // exclude from filtering
+    [DtoIgnore(DtoTarget.Query)]  // exclude from filtering
     public byte[]? Signature { get; set; }
 }`,
 

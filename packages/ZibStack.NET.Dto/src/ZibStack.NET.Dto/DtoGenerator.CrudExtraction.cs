@@ -131,9 +131,13 @@ public partial class DtoGenerator
             }
         }
 
-        // Detect [ListIgnore] on any property → separate list response DTO
+        // Detect [DtoIgnore(DtoTarget.List)] on any property → separate list response DTO
         var hasListIgnore = GetAllProperties(symbol).Any(p =>
-            p.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn));
+        {
+            var (ig, on) = GetDtoTargetFlags(p);
+            // DtoTarget.List = 16 — if specifically ignored from list (but not from everything)
+            return ig != 31 && ((ig & 16) != 0 || (on != 0 && (on & 16) == 0));
+        });
         var listResponseName = hasListIgnore ? $"{symbol.Name}ListItem" : (string?)null;
 
         var ns = symbol.ContainingNamespace.IsGlobalNamespace
@@ -222,8 +226,9 @@ public partial class DtoGenerator
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
                 if (prop.GetMethod is null) continue;
 
-                var hasResponseIgnore = prop.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString() == ResponseIgnoreAttributeFqn);
+                var (crIg, crOn) = GetDtoTargetFlags(prop);
+                // DtoTarget.Response = 4
+                var hasResponseIgnore = crIg == 31 || (crIg & 4) != 0 || (crOn != 0 && (crOn & 4) == 0);
                 if (hasResponseIgnore) continue;
 
                 var hasFlatten = prop.GetAttributes().Any(a =>
@@ -284,11 +289,12 @@ public partial class DtoGenerator
                         sourceTypeName: propType2.ToDisplayString(), nestedResponseName: fqResponseName));
                 }
             }
-            // Check for [ListIgnore] → separate list DTO
+            // Check for [DtoIgnore(DtoTarget.List)] → separate list DTO
             var listIgnoreSet = new HashSet<string>();
             foreach (var prop in GetAllProperties(symbol))
             {
-                if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn))
+                var (ig, on) = GetDtoTargetFlags(prop);
+                if (ig != 31 && ((ig & 16) != 0 || (on != 0 && (on & 16) == 0)))
                     listIgnoreSet.Add(prop.Name);
             }
 
@@ -318,8 +324,9 @@ public partial class DtoGenerator
             {
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
                 if (prop.GetMethod is null) continue;
-                if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn)) continue;
-                if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn)) continue;
+                var (cqIg, cqOn) = GetDtoTargetFlags(prop);
+                // DtoTarget.Query = 8, All = 31
+                if (cqIg == 31 || (cqIg & 8) != 0 || (cqOn != 0 && (cqOn & 8) == 0)) continue;
 
                 // Bridge: [UiTableColumn(Filterable = false)] → skip from query
                 // If [UiTableColumn] exists and Filterable is explicitly false, exclude

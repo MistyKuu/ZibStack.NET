@@ -39,14 +39,14 @@ public partial class Player
     [UiTableColumn(Sortable = true, Filterable = false)]  // not filterable in query
     public decimal Salary { get; set; }
 
-    [ListIgnore]  // only in GET /api/players/{id}, not in list
+    [DtoIgnore(DtoTarget.List)]  // only in GET /api/players/{id}, not in list
     [UiFormField(Label = "Bio", Group = "basic")]
     [TextArea(Rows = 5)]
     [UiTableIgnore]
     public string? Bio { get; set; }
 
-    [CreateOnly]
-    [ResponseIgnore]
+    [DtoOnly(DtoTarget.Create)]
+    [DtoIgnore(DtoTarget.Response)]
     [ZMinLength(8)]
     [UiFormField(Label = "Password", Group = "contact")]
     [PasswordInput]

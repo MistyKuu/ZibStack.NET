@@ -76,7 +76,7 @@ public partial class DtoGenerator
 
                 properties.Add(new DtoPropertyInfo(
                     prop.Name, jsonName, displayType, isNullable,
-                    false, isValueType, false, false));
+                    false, isValueType, 0, 0));
             }
         }
 
@@ -131,9 +131,10 @@ public partial class DtoGenerator
             if (prop.DeclaredAccessibility != Accessibility.Public) continue;
             if (prop.GetMethod is null) continue;
 
-            var hasResponseIgnore = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == ResponseIgnoreAttributeFqn);
-            if (hasResponseIgnore) continue;
+            var (riIgnore, riOnly) = GetDtoTargetFlags(prop);
+            // DtoTarget.Response = 4
+            var isIgnoredFromResponse = riIgnore == 31 || (riIgnore & 4) != 0 || (riOnly != 0 && (riOnly & 4) == 0);
+            if (isIgnoredFromResponse) continue;
 
             // Check for [Flatten]
             var hasFlatten = prop.GetAttributes().Any(a =>
@@ -197,11 +198,14 @@ public partial class DtoGenerator
             ? null
             : symbol.ContainingNamespace.ToDisplayString();
 
-        // Check if any property has [ListIgnore] — if so, generate a separate list DTO
+        // Check if any property has [DtoIgnore(DtoTarget.List)] or [DtoOnly] without List — generate separate list DTO
         var listIgnoreProps = new HashSet<string>();
         foreach (var prop in GetAllProperties(symbol))
         {
-            if (prop.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ListIgnoreAttributeFqn))
+            var (ig, on) = GetDtoTargetFlags(prop);
+            // DtoTarget.List = 16
+            var ignoredFromList = ig == 31 || (ig & 16) != 0 || (on != 0 && (on & 16) == 0);
+            if (ignoredFromList && !(ig == 31)) // only collect props that are specifically list-ignored, not globally ignored
                 listIgnoreProps.Add(prop.Name);
         }
 
@@ -331,7 +335,7 @@ public partial class DtoGenerator
             var (validationAttrs, validationRules) = GetValidationAttributes(prop);
             var propInfo = new DtoPropertyInfo(
                 dtoName, jsonName, displayType, isNullable,
-                isRequired, isValueType, false, false,
+                isRequired, isValueType, 0, 0,
                 isImmutable,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
                 validationAttributes: validationAttrs,
@@ -411,13 +415,10 @@ public partial class DtoGenerator
             if (prop.DeclaredAccessibility != Accessibility.Public) continue;
             if (prop.GetMethod is null) continue;
 
-            var hasIgnore = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn);
-            if (hasIgnore) continue;
-
-            var hasQueryIgnore = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == QueryIgnoreAttributeFqn);
-            if (hasQueryIgnore) continue;
+            var (qiIgnore, qiOnly) = GetDtoTargetFlags(prop);
+            // DtoTarget.Query = 8
+            var ignoredFromQuery = qiIgnore == 31 || (qiIgnore & 8) != 0 || (qiOnly != 0 && (qiOnly & 8) == 0);
+            if (ignoredFromQuery) continue;
 
             // Bridge: [UiTableColumn(Filterable = false)] → skip from query
             var tableColAttr = prop.GetAttributes().FirstOrDefault(a =>
@@ -617,9 +618,11 @@ public partial class DtoGenerator
             if (prop.DeclaredAccessibility != Accessibility.Public) continue;
             if (prop.SetMethod is null || prop.GetMethod is null) continue;
 
-            var hasIgnore = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == DtoIgnoreAttributeFqn);
-            if (hasIgnore) continue;
+            var (ignoreTargets, onlyTargets) = GetDtoTargetFlags(prop);
+            // [DtoIgnore] without args → ignoreTargets = 11 (Create|Update|Query).
+            // In the create/update DTO extraction context, that means "skip this property".
+            // Also skip if both Create(1) and Update(2) are explicitly ignored.
+            if ((ignoreTargets & 3) == 3) continue;
 
             var dtoName = renameMap.TryGetValue(prop.Name, out var renamed) ? renamed : prop.Name;
             var jsonName = renameMap.ContainsKey(prop.Name) ? CamelCase(dtoName) : GetJsonName(prop);
@@ -627,10 +630,6 @@ public partial class DtoGenerator
             var isNullable = prop.Type.NullableAnnotation == NullableAnnotation.Annotated;
             var isValueType = prop.Type.IsValueType;
             var isRequired = prop.IsRequired;
-            var isCreateOnly = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == CreateOnlyAttributeFqn);
-            var isUpdateOnly = prop.GetAttributes().Any(a =>
-                a.AttributeClass?.ToDisplayString() == UpdateOnlyAttributeFqn);
             var isImmutable = prop.GetAttributes().Any(a =>
                 a.AttributeClass?.ToDisplayString() == ImmutableAttributeFqn);
             var (validationAttrs, validationRules) = GetValidationAttributes(prop);
@@ -651,7 +650,7 @@ public partial class DtoGenerator
                 {
                     var seenTypes = new HashSet<string>();
                     FlattenForDto(properties, flatType, prop.Name, prop.Name,
-                        isNullableRef, seenTypes, 5, isCreateOnly, isUpdateOnly);
+                        isNullableRef, seenTypes, 5, ignoreTargets, onlyTargets);
                 }
                 continue;
             }
@@ -663,8 +662,8 @@ public partial class DtoGenerator
                 isNullable,
                 isRequired,
                 isValueType,
-                isCreateOnly,
-                isUpdateOnly,
+                ignoreTargets,
+                onlyTargets,
                 isImmutable,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
                 validationAttributes: validationAttrs,
@@ -823,8 +822,8 @@ public partial class DtoGenerator
         bool parentNullable,
         HashSet<string> seenTypes,
         int maxDepth,
-        bool isCreateOnly,
-        bool isUpdateOnly)
+        int ignoreTargets,
+        int onlyTargets)
     {
         if (maxDepth <= 0) return;
         var typeFqn = type.ToDisplayString();
@@ -848,7 +847,7 @@ public partial class DtoGenerator
             if (unwrappedChild is INamedTypeSymbol namedChild && IsComplexType(namedChild))
             {
                 FlattenForDto(properties, namedChild, flatName, childEntityPath,
-                    parentNullable || childNullable, seenTypes, maxDepth - 1, isCreateOnly, isUpdateOnly);
+                    parentNullable || childNullable, seenTypes, maxDepth - 1, ignoreTargets, onlyTargets);
                 continue;
             }
 
@@ -867,7 +866,7 @@ public partial class DtoGenerator
             var pi = new DtoPropertyInfo(
                 flatName, flatJsonName, childDisplayType,
                 childIsNullable, false, childIsValueType,
-                isCreateOnly, isUpdateOnly,
+                ignoreTargets, onlyTargets,
                 validationAttributes: childValidationAttrs,
                 validationRules: childValidationRules);
             pi.FlattenEntityPath = childEntityPath;
@@ -1075,5 +1074,36 @@ public partial class DtoGenerator
     {
         if (string.IsNullOrEmpty(name)) return name;
         return char.ToLowerInvariant(name[0]) + name.Substring(1);
+    }
+
+    /// <summary>
+    /// Reads [DtoIgnore] and [DtoOnly] from a property and returns the flags.
+    /// DtoTarget: Create=1, Update=2, Response=4, Query=8, List=16, All=31.
+    /// Returns (ignoreTargets, onlyTargets). At most one is non-zero.
+    /// [DtoIgnore] without args → ignoreTargets=31 (All).
+    /// </summary>
+    private static (int ignoreTargets, int onlyTargets) GetDtoTargetFlags(IPropertySymbol prop)
+    {
+        int ignoreTargets = 0;
+        int onlyTargets = 0;
+
+        foreach (var attr in prop.GetAttributes())
+        {
+            var fqn = attr.AttributeClass?.ToDisplayString();
+            if (fqn == DtoIgnoreAttributeFqn)
+            {
+                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int target)
+                    ignoreTargets |= target;
+                else
+                    ignoreTargets |= 11; // DtoTarget.Create | Update | Query (not Response, not List)
+            }
+            else if (fqn == DtoOnlyAttributeFqn)
+            {
+                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int only)
+                    onlyTargets |= only;
+            }
+        }
+
+        return (ignoreTargets, onlyTargets);
     }
 }

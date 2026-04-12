@@ -26,13 +26,13 @@ public partial class DtoGenerator
             "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
 
         public static readonly DiagnosticDescriptor CreateOnlyWithoutCreateDto = new(
-            "SDTO004", "CreateOnly without CreateDto",
-            "Property '{0}' has [CreateOnly] but type '{1}' has no [CreateDto] — attribute has no effect",
+            "SDTO004", "DtoOnly(Create) without CreateDto",
+            "Property '{0}' has [DtoOnly(DtoTarget.Create)] but type '{1}' has no [CreateDto] — attribute has no effect",
             "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
 
         public static readonly DiagnosticDescriptor UpdateOnlyWithoutUpdateDto = new(
-            "SDTO005", "UpdateOnly without UpdateDto",
-            "Property '{0}' has [UpdateOnly] but type '{1}' has no [UpdateDto] — attribute has no effect",
+            "SDTO005", "DtoOnly(Update) without UpdateDto",
+            "Property '{0}' has [DtoOnly(DtoTarget.Update)] but type '{1}' has no [UpdateDto] — attribute has no effect",
             "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
 
         public static readonly DiagnosticDescriptor FlattenOnPrimitive = new(
@@ -242,18 +242,21 @@ public partial class DtoGenerator
 
             var propAttrs = prop.GetAttributes();
 
-            // SDTO004: CreateOnly without CreateDto (skip if [CrudApi] auto-implies it)
+            // SDTO004: DtoOnly(Create) without CreateDto (skip if [CrudApi] auto-implies it)
+            var (diagIg, diagOn) = GetDtoTargetFlags(prop);
+            // DtoTarget.Create = 1
             if (!hasCreateDto && !hasCombined && !hasCrudApi &&
-                propAttrs.Any(a => a.AttributeClass?.ToDisplayString() == CreateOnlyAttributeFqn))
+                diagOn != 0 && (diagOn & 1) != 0 && (diagOn & ~1) == 0)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.CreateOnlyWithoutCreateDto,
                     prop.Locations.FirstOrDefault() ?? syntax.Identifier.GetLocation(),
                     prop.Name, symbol.Name));
             }
 
-            // SDTO005: UpdateOnly without UpdateDto (skip if [CrudApi] auto-implies it)
+            // SDTO005: DtoOnly(Update) without UpdateDto (skip if [CrudApi] auto-implies it)
+            // DtoTarget.Update = 2
             if (!hasUpdateDto && !hasCombined && !hasCrudApi &&
-                propAttrs.Any(a => a.AttributeClass?.ToDisplayString() == UpdateOnlyAttributeFqn))
+                diagOn != 0 && (diagOn & 2) != 0 && (diagOn & ~2) == 0)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.UpdateOnlyWithoutUpdateDto,
                     prop.Locations.FirstOrDefault() ?? syntax.Identifier.GetLocation(),

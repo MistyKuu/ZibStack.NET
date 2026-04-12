@@ -66,7 +66,7 @@ public partial class DtoGenerator
 
     private static void GenerateCreateRequestClass(StringBuilder sb, DtoClassInfo classInfo)
     {
-        var props = classInfo.Properties.Where(p => !p.IsUpdateOnly).ToList();
+        var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1)).ToList();
 
         sb.AppendLine($"/// <summary>Auto-generated Create request DTO for <see cref=\"{classInfo.ClassName}\"/>. Contains ToEntity() and Validate().</summary>");
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanCreate<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanValidate");
@@ -126,7 +126,7 @@ public partial class DtoGenerator
 
     private static void GenerateUpdateRequestClass(StringBuilder sb, DtoClassInfo classInfo)
     {
-        var props = classInfo.Properties.Where(p => !p.IsCreateOnly).ToList();
+        var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(2)).ToList();
 
         sb.AppendLine($"/// <summary>Auto-generated Update request DTO for <see cref=\"{classInfo.ClassName}\"/>. Contains ApplyTo() and Validate(). Uses PatchField for partial updates.</summary>");
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanApply<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanValidate");
@@ -197,7 +197,7 @@ public partial class DtoGenerator
         sb.AppendLine();
 
         // ValidateForCreate()
-        var createProps = allProps.Where(p => !p.IsUpdateOnly).ToList();
+        var createProps = allProps.Where(p => !p.IsIgnoredFrom(1)).ToList();
         sb.AppendLine("    public DtoValidationResult ValidateForCreate()");
         sb.AppendLine("    {");
 
@@ -234,7 +234,7 @@ public partial class DtoGenerator
         sb.AppendLine();
 
         // ValidateForUpdate()
-        var updateProps = allProps.Where(p => !p.IsCreateOnly).ToList();
+        var updateProps = allProps.Where(p => !p.IsIgnoredFrom(2)).ToList();
         sb.AppendLine("    public DtoValidationResult ValidateForUpdate()");
         sb.AppendLine("    {");
 
@@ -965,8 +965,8 @@ public partial class DtoGenerator
             : (isCreate ? classInfo.RequestName : classInfo.RequestName);
         var validatorSuffix = isCreate ? "CreateBaseValidator" : "UpdateBaseValidator";
         var props = isCreate
-            ? classInfo.Properties.Where(p => !p.IsUpdateOnly).ToList()
-            : classInfo.Properties.Where(p => !p.IsCreateOnly).ToList();
+            ? classInfo.Properties.Where(p => !p.IsIgnoredFrom(1)).ToList()
+            : classInfo.Properties.Where(p => !p.IsIgnoredFrom(2)).ToList();
 
         sb.AppendLine($"public class {requestName}{validatorSuffix} : ZibStack.NET.Dto.FluentDtoValidator<{requestName}>");
         sb.AppendLine("{");

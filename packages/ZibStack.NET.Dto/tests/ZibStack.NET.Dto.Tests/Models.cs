@@ -18,10 +18,10 @@ public class Product
     public string? Description { get; set; }
     public int Stock { get; set; }
 
-    [CreateOnly]
+    [DtoIgnore(DtoTarget.Update)]
     public required string Sku { get; set; }
 
-    [UpdateOnly]
+    [DtoIgnore(DtoTarget.Create)]
     public string? DiscontinuedReason { get; set; }
 
     [DtoIgnore]

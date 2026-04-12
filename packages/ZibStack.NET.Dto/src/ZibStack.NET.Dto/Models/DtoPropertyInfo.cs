@@ -11,8 +11,6 @@ internal sealed class DtoPropertyInfo
     public bool IsNullable { get; }
     public bool IsRequired { get; }
     public bool IsValueType { get; }
-    public bool IsCreateOnly { get; }
-    public bool IsUpdateOnly { get; }
     public bool IsImmutable { get; }
     public List<string> ValidationAttributes { get; }
     public List<ValidationRule> ValidationRules { get; }
@@ -21,7 +19,32 @@ internal sealed class DtoPropertyInfo
     public string? FlattenEntityPath { get; set; }
     public bool IsFlattened => FlattenEntityPath is not null;
 
-    public DtoPropertyInfo(string propertyName, string jsonName, string displayTypeName, bool isNullable, bool isRequired, bool isValueType, bool isCreateOnly, bool isUpdateOnly, bool isImmutable = false, string? sourcePropertyName = null, List<string>? validationAttributes = null, List<ValidationRule>? validationRules = null)
+    /// <summary>
+    /// Which DTO targets this property is excluded from (via [DtoIgnore(target)]).
+    /// DtoTarget.All means excluded from everything (the old [DtoIgnore] behavior).
+    /// 0 means no ignoring.
+    /// </summary>
+    public int IgnoreTargets { get; }
+
+    /// <summary>
+    /// When non-zero, property is included ONLY in these targets (via [DtoOnly(target)]).
+    /// 0 means "include in all targets" (default). Mutually exclusive with IgnoreTargets.
+    /// </summary>
+    public int OnlyTargets { get; }
+
+    // Compat shims used by Generation.cs — derived from IgnoreTargets / OnlyTargets.
+    // DtoTarget flags: Create=1, Update=2, Response=4, Query=8, List=16
+    public bool IsCreateOnly => OnlyTargets != 0 && (OnlyTargets & 1) != 0 && (OnlyTargets & ~1) == 0;
+    public bool IsUpdateOnly => OnlyTargets != 0 && (OnlyTargets & 2) != 0 && (OnlyTargets & ~2) == 0;
+    public bool IsIgnoredFrom(int target) => IgnoreTargets != 0
+        ? (IgnoreTargets & target) != 0
+        : OnlyTargets != 0 && (OnlyTargets & target) == 0;
+
+    public DtoPropertyInfo(string propertyName, string jsonName, string displayTypeName,
+        bool isNullable, bool isRequired, bool isValueType,
+        int ignoreTargets, int onlyTargets,
+        bool isImmutable = false, string? sourcePropertyName = null,
+        List<string>? validationAttributes = null, List<ValidationRule>? validationRules = null)
     {
         PropertyName = propertyName;
         SourcePropertyName = sourcePropertyName ?? propertyName;
@@ -30,9 +53,9 @@ internal sealed class DtoPropertyInfo
         IsNullable = isNullable;
         IsRequired = isRequired;
         IsValueType = isValueType;
-        IsCreateOnly = isCreateOnly;
-        IsUpdateOnly = isUpdateOnly;
         IsImmutable = isImmutable;
+        IgnoreTargets = ignoreTargets;
+        OnlyTargets = onlyTargets;
         ValidationAttributes = validationAttributes ?? new List<string>();
         ValidationRules = validationRules ?? new List<ValidationRule>();
     }

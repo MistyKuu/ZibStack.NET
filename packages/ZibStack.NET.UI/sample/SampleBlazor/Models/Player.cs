@@ -47,7 +47,7 @@ public partial class Player
 
     [ZRequired]
     [ZMinLength(6)]
-    [CreateOnly]
+    [DtoOnly(DtoTarget.Create)]
     [PasswordInput]
     [UiTableIgnore]
     public required string Password { get; set; }
@@ -57,7 +57,7 @@ public partial class Player
     [UiTableIgnore]
     public string? AdminNotes { get; set; }
 
-    [CreateOnly]
+    [DtoOnly(DtoTarget.Create)]
     [DatePicker]
     [UiFormField(Group = "basic")]
     [UiTableColumn(Sortable = true, Format = "yyyy-MM-dd")]
