@@ -33,7 +33,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 **Logging is tedious.** In enterprise systems you need logs everywhere. Wrapping every method in try-catch just for entry/exit logging is boilerplate hell. `[Log]` on a class adds structured logging to every public method — automatic entry, exit, exception, and timing. One attribute, done.
 
-**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. With ZibStack.NET.Log, standard `_logger.LogInformation($"User {user}")` just works — a source generator emits compile-time interceptors that dispatch via cached `LoggerMessage.Define<T>` delegates. Zero code changes, ~40x faster when the level is disabled.
+**Structured logging fights you.** `ILogger.LogInformation` requires message templates: `_logger.LogInformation("User {User} bought {Product}", user, product)` — you can't use interpolated strings because they bypass structured logging. With ZibStack.NET.Log, standard `_logger.LogInformation($"User {user}")` just works — a source generator emits compile-time interceptors that dispatch via cached `LoggerMessage.Define<T>` delegates. **~5× faster than Microsoft's standard API, zero allocation** (3.8 ns / 0 B vs 19.1 ns / 104 B).
 
 **Tracing is boilerplate hell.** Instrumenting a method with OpenTelemetry means wrapping every call in `using var activity = ...` + try/catch + `SetStatus` + tag wiring. Do it once, you've tripled the size of the method. With `[Trace]` it's one attribute, and you get consistent parameter tags, status, elapsed time, and exception reporting for free.
 
@@ -79,9 +79,11 @@ public class OrderService { ... }
 using ZibStack.NET.Log;
 
 logger.LogInformation($"User {userId} bought {product} for {total:C}");
-// Source generator emits compile-time interceptor:
-// → cached LoggerMessage.Define<int, string, decimal> with literal template
-// → ~40x faster when level is disabled (one IsEnabled check)
+// Intercepted at compile time → cached LoggerMessage.Define<int, string, decimal>
+// ~5× faster than Microsoft's LogInformation("template", args), zero allocation:
+//
+//   $"..." (level OFF):  3.2 ns, 0 B    vs  Microsoft: 15.7 ns, 104 B
+//   $"..." (level ON):   3.8 ns, 0 B    vs  Microsoft: 19.1 ns, 104 B
 
 // Optional: override assembly-level defaults (default: Information level, Destructure mode)
 [assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]

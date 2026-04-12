@@ -159,7 +159,7 @@ That looks like a plain flat string, but it isn't. The mechanism is two layers s
    __logProcessingOrder(logger, (int)handler.L0, null);
    ```
 
-   The template is parsed exactly once by `LoggerMessage.Define` at static init — not once per call like Microsoft's default path. That's where the ~40× disabled-level speedup and the zero-per-call-allocation win come from.
+   The template is parsed exactly once by `LoggerMessage.Define` at static init — not once per call like Microsoft's default path. Combined with the handler's typed slots (zero boxing) and `shouldAppend` (lazy eval), the result is ~5× faster than Microsoft's `LogInformation("template", args)` with zero allocation in both enabled and disabled paths.
 
 Result: structured properties (`customerId=42` as an indexed field in Seq / Elastic / App Insights), lazy evaluation when the level is disabled (~0.4 ns for disabled `LogDebug`), and zero allocation per call.
 

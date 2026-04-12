@@ -195,7 +195,7 @@ _logger.LogInformation("User {Name}", name);
 //      ^^^^^^^^^^^^^^
 // ⚠ ZLOG002: Replace 'LogInformation("template", args)' with 'LogInformation($"template")'
 //   — the ZibStack.NET.Log generator emits a typed LoggerMessage.Define interceptor
-//     (same alloc, ~40x faster when level is disabled)
+//     (~5x faster, zero allocation vs Microsoft's 104 B)
 ```
 
 ## Features
@@ -358,7 +358,7 @@ Available methods: `LogTrace`, `LogDebug`, `LogInformation`, `LogWarning`, `LogE
 
 > Expressions like `user.Name` are sanitized to valid property names: `userName`.
 
-**How it works (short):** see the [In-depth mechanism](#in-depth-how-loginformation-actually-works) section below. Two layers work together — the interpolated-string handler does the argument capture and lazy `IsEnabled` check, the source-generated interceptor rewrites the dispatch to use a cached `LoggerMessage.Define` delegate. Disabled log calls cost ~0.4 ns (one `IsEnabled` check via the handler's `out bool shouldAppend`), enabled calls are comparable to hand-written `LoggerMessage.Define`.
+**How it works (short):** see the [In-depth mechanism](#in-depth-how-loginformation-actually-works) section below. Two layers work together — the interpolated-string handler does the argument capture and lazy `IsEnabled` check, the source-generated interceptor rewrites the dispatch to use a cached `LoggerMessage.Define` delegate. Disabled log calls cost ~3.2 ns (one `IsEnabled` check via the handler's `out bool shouldAppend`), enabled calls are comparable to hand-written `LoggerMessage.Define`.
 
 ### Structured Exceptions
 
@@ -412,7 +412,7 @@ public async Task<List<Order>> GetOrdersAsync(int customerId)
 There are **two independent questions** about interpolated-string structured logging with ZibStack.NET.Log, and the answer to each one is different:
 
 1. **Why does `logger.LogInformation($"Hey {user}")` preserve structured properties instead of flattening to a string?** → Handled by a C# 11 interpolated-string handler + extension-method shadowing. This is the primary mechanism.
-2. **Why is it zero-allocation and ~40× faster than `LogInformation("Hey {user}", user)` when the level is disabled?** → Handled by a source-generated interceptor that emits a cached `LoggerMessage.Define<T>` delegate per call site.
+2. **Why is it zero-allocation and ~5× faster than `LogInformation("Hey {user}", user)`?** → Handled by a source-generated interceptor that emits a cached `LoggerMessage.Define<T>` delegate per call site.
 
 You can have the first without the second. You can't have the second without the first. Let's walk through both.
 
@@ -453,7 +453,7 @@ public ZibLogInformationHandler(
 }
 ```
 
-If `shouldAppend` is `false`, **the compiler skips every `AppendFormatted` call**. That's a built-in feature of C# 11 interpolated string handlers, not something we wrote. So for a disabled-level call like `logger.LogDebug($"slow string {ExpensiveToString()}")`, `ExpensiveToString()` **is never evaluated** — the compiler emits an `if (shouldAppend) { … }` guard around the whole append block. This is where the ~0.4 ns "disabled path" comes from.
+If `shouldAppend` is `false`, **the compiler skips every `AppendFormatted` call**. That's a built-in feature of C# 11 interpolated string handlers, not something we wrote. So for a disabled-level call like `logger.LogDebug($"slow string {ExpensiveToString()}")`, `ExpensiveToString()` **is never evaluated** — the compiler emits an `if (shouldAppend) { … }` guard around the whole append block. This is where the ~3.2 ns "disabled path" comes from.
 
 If `shouldAppend` is `true`, the compiler emits one `AppendFormatted` call per interpolation hole. Our handler stores each argument into a **typed slot** matched to its static type:
 
@@ -493,7 +493,7 @@ public static void LogInformation(
 }
 ```
 
-> **Known caveat.** This means that today, if you reference only `ZibStack.NET.Log.Abstractions` **without** the source-generator half (`ZibStack.NET.Log`), interpolated-string log calls are silently dropped. In practice the Abstractions package is only referenced transitively by other ZibStack generators — end users always install `ZibStack.NET.Log` which ships both halves — so this doesn't bite real consumers. A fail-safe slow-path fallback is on the backlog.
+> **Safety net.** If someone references only `ZibStack.NET.Log.Abstractions` without the generator, the extension method body throws `InvalidOperationException("Install the full ZibStack.NET.Log package")` at the first enabled log call — no silent data loss. In practice the Abstractions package is only referenced transitively by other ZibStack generators; end users always install `ZibStack.NET.Log` which ships both halves.
 
 At compile time, the source generator in `ZibStack.NET.Log` scans every `logger.LogXxx($"...")` call site in your project and emits one interceptor per call site:
 
@@ -535,11 +535,11 @@ What the interceptor adds beyond what the handler already had:
 | Lazy evaluation when disabled | ✓ via `IsEnabled` | ✓ via `shouldAppend` (skips `AppendFormatted`) | ✓ |
 | Zero boxing for primitives | ✗ (`object[]`) | ✓ (typed slots) | ✓ |
 | Template parsed once, then cached | ✗ (runtime per call) | ✗ | ✓ (`LoggerMessage.Define` at static init) |
-| Dispatch allocation per call | `FormattedLogValues` + `object[]` | would need slow-path rebuild (currently no-op) | zero |
-| Disabled-level cost | ~16 ns | ~0.4 ns (`IsEnabled` check only) | ~0.4 ns |
-| Enabled-level cost (real sink) | ~924 ns | — | ~989 ns |
+| Dispatch allocation per call | `FormattedLogValues` + `object[]` | throws (generator required) | zero |
+| Disabled-level cost | ~16 ns | ~3.2 ns (`shouldAppend` check only) | ~3.2 ns |
+| Enabled-level cost (NullLogger) | ~19 ns | throws | ~3.8 ns |
 
-Layers 1 and 2 are independent in principle. The **handler alone** already gives you structured + lazy + zero-boxing — the interceptor "only" adds the cached-template / zero-dispatch-alloc pieces that matter on hot paths. That's why the enabled-level cost difference vs Microsoft is only ~7% (~+65 ns in a real Serilog sink) — most of the time is already spent in the sink, and the handler-level win isn't huge in isolation. The **disabled-level** gap is where the full win lives: ~40× faster because the interceptor + handler combine to skip both argument evaluation **and** the `FormattedLogValues` construction entirely.
+Combined result: **~5× faster than Microsoft in both enabled and disabled paths, with zero allocation.** The handler's `shouldAppend` gives us the lazy-eval win; the interceptor's cached delegate gives us the zero-alloc-dispatch win. Microsoft's `LogInformation("template", args)` allocates 104 B (the `params object[]`) even when the level is disabled.
 
 ### Why not just use `IFormattedMessage` / handler alone?
 

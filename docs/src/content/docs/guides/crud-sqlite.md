@@ -389,7 +389,7 @@ app.MapGet("/api/players/{id}", async (int id, ILogger<Program> logger, ICrudSto
 });
 ```
 
-No more `logger.LogInformation("Looking up player {Id}", id)` boilerplate — the source generator rewrites the interpolated call into a cached `LoggerMessage.Define<int>` at compile time, so structured properties survive **and** the call is ~40× faster when the log level is disabled.
+No more `logger.LogInformation("Looking up player {Id}", id)` boilerplate — the source generator rewrites the interpolated call into a cached `LoggerMessage.Define<int>` at compile time, so structured properties survive **and** the call is ~5× faster with zero allocation (3.8 ns / 0 B vs Microsoft's 19.1 ns / 104 B).
 
 > ZibStack.NET.Log is **quiet by default** — no forced global usings, no warnings on your existing logging call sites. To opt into strict mode (global using + warnings telling you to migrate legacy calls), set `<ZibLogStrict>true</ZibLogStrict>` in the `.csproj`. See the [Log Configuration reference](/ZibStack.NET/packages/log/#configuration) for the full list of toggles.
 
