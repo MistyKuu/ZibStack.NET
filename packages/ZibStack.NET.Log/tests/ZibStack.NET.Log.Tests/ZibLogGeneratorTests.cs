@@ -560,15 +560,30 @@ public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
+            // Generated interceptors touch Stopwatch, IServiceProvider, EditorBrowsable,
+            // etc. Reference the assembly for each so the test compilation can bind them.
+            MetadataReference.CreateFromFile(typeof(System.Diagnostics.Stopwatch).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.IServiceProvider).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.ComponentModel.EditorBrowsableAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.LogAttribute).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
         };
 
         var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var dll in new[] { "System.Runtime.dll", "netstandard.dll", "System.Threading.Tasks.dll", "System.Collections.dll", "System.Linq.dll" })
+        foreach (var dll in new[]
+        {
+            "System.Runtime.dll", "netstandard.dll",
+            "System.Threading.Tasks.dll", "System.Collections.dll", "System.Linq.dll",
+            // net10 runtime: Stopwatch lives in System.Runtime.Extensions on netstandard2.0
+            // and in System.Runtime.dll on modern .NET, but we already typeof-reference it
+            // above so these adds are just belt-and-braces for any edge assemblies.
+            "System.Runtime.Extensions.dll", "System.ObjectModel.dll",
+            "System.Private.CoreLib.dll",
+        })
         {
             var path = Path.Combine(runtimeDir, dll);
-            if (File.Exists(path))
+            if (File.Exists(path) && !references.Any(r => r is PortableExecutableReference per && per.FilePath == path))
                 references.Add(MetadataReference.CreateFromFile(path));
         }
 
