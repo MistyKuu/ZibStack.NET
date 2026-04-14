@@ -75,7 +75,16 @@ public sealed class LogAttributeValidityAnalyzer : DiagnosticAnalyzer
         bool typeHasLog = method.ContainingType is { } ct && HasLogAttribute(ct);
         if (!methodHasLog && !typeHasLog) return;
 
-        // Static methods are diagnosed by the source generator (SL0005); do not duplicate.
+        // Extension methods are always static, but flagging the static-aware SL0005 for
+        // them is misleading — the actual reason [Log] doesn't work is the extension-on-
+        // extension signature clash. Check this BEFORE the IsStatic early-return below.
+        if (method.IsExtensionMethod)
+        {
+            Report(ctx, ExtensionMethodRule, method, method.Name);
+            return;
+        }
+
+        // Static (non-extension) methods are diagnosed by the source generator (SL0005); do not duplicate.
         if (method.IsStatic) return;
 
         // Class-level [Log] only applies to PUBLIC instance members, so a private member
@@ -89,11 +98,6 @@ public sealed class LogAttributeValidityAnalyzer : DiagnosticAnalyzer
         if (method.ReturnsByRef || method.ReturnsByRefReadonly)
         {
             Report(ctx, RefReturnRule, method, method.Name);
-        }
-
-        if (method.IsExtensionMethod)
-        {
-            Report(ctx, ExtensionMethodRule, method, method.Name);
         }
 
         // Walk up containing types — if any are private, the interceptor in the separate
