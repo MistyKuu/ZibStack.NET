@@ -420,7 +420,10 @@ public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2
 
         var c1 = CSharpCompilation.Create("T", new[] { src1 }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-        var driver = CSharpGeneratorDriver.Create(new[] { new ZibLogGenerator().AsSourceGenerator() }, parseOptions: parseOptions);
+        // Typed as base GeneratorDriver because RunGeneratorsAndUpdateCompilation
+        // returns the base type — assigning its result back into a CSharpGeneratorDriver
+        // local fails with CS0266.
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new[] { new ZibLogGenerator().AsSourceGenerator() }, parseOptions: parseOptions);
 
         driver = driver.RunGeneratorsAndUpdateCompilation(c1, out var outC1, out _);
         var errs1 = outC1.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
