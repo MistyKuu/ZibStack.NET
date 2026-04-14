@@ -24,8 +24,13 @@ public static class AopParser
         if (context.Node is not InvocationExpressionSyntax invocation)
             return null;
 
-        var filePath = invocation.SyntaxTree.FilePath;
-        if (string.IsNullOrEmpty(filePath) || filePath.EndsWith(".g.cs"))
+        // Skip our own generated output (always ends in `.g.cs`) so we don't try to
+        // intercept calls inside the interceptor wrappers themselves. Empty FilePath is
+        // legitimate (in-memory test compilations, scripting, generators that don't set
+        // it) — those should still be intercepted, otherwise the integration tests
+        // silently no-op and "no codegen" looks indistinguishable from "no errors".
+        var filePath = invocation.SyntaxTree.FilePath ?? "";
+        if (filePath.EndsWith(".g.cs"))
             return null;
 
         ct.ThrowIfCancellationRequested();

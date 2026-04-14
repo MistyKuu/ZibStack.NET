@@ -500,12 +500,12 @@ public class Caller
 using ZibStack.NET.Log;
 public class Svc { [Log] public int A(int x) => x; }
 public class Caller1 { public int R() => new Svc().A(1); }
-", parseOptions);
+", parseOptions, path: "Src1.cs");
         var src2 = CSharpSyntaxTree.ParseText(@"
 using ZibStack.NET.Log;
 public class Svc { [Log] public int A(int x) => x; [Log] public int B(int x) => x; }
 public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2); } }
-", parseOptions);
+", parseOptions, path: "Src2.cs");
 
         var references = new List<MetadataReference>
         {
@@ -554,7 +554,7 @@ public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2
                 new KeyValuePair<string, string>("InterceptorsNamespaces", "ZibStack.Generated"),
                 new KeyValuePair<string, string>("InterceptorsPreviewNamespaces", "ZibStack.Generated"),
             });
-        var syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
+        var syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions, path: "TestSource.cs");
 
         var references = new List<MetadataReference>
         {
@@ -595,8 +595,8 @@ namespace Microsoft.Extensions.Logging
         public static System.Action<ILogger, T1, T2, T3, System.Exception?> Define<T1, T2, T3>(LogLevel level, EventId id, string message) => (_,_,_,_,_)=>{};
     }
 }
-", parseOptions);
-            syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions);
+", parseOptions, path: "LoggerStub.cs");
+            syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions, path: "TestSource.cs");
             return RunGeneratorWithTrees(new[] { syntaxTree, loggerStub }, references);
         }
 
