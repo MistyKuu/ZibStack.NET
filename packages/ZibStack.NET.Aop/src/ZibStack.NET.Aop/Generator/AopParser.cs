@@ -180,6 +180,9 @@ public static class AopParser
         if (hasComplexReturnType)
             sanitizedReturnType = ParseTypeProperties(actualReturnType);
 
+        // Method-level type parameters (distinct from the enclosing class's).
+        var methodTypeParameters = ExtractMethodTypeParameters(method);
+
         return new InterceptedMethodModel(
             method.Name,
             returnTypeStr,
@@ -189,7 +192,37 @@ public static class AopParser
             parameters,
             aspects,
             hasComplexReturnType,
-            sanitizedReturnType);
+            sanitizedReturnType,
+            methodTypeParameters);
+    }
+
+    private static IReadOnlyList<TypeParameterModel> ExtractMethodTypeParameters(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return System.Array.Empty<TypeParameterModel>();
+
+        var result = new List<TypeParameterModel>(method.TypeParameters.Length);
+        foreach (var tp in method.TypeParameters)
+        {
+            var constraints = new List<string>();
+            if (tp.HasReferenceTypeConstraint)
+                constraints.Add(tp.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+            else if (tp.HasValueTypeConstraint && !tp.HasUnmanagedTypeConstraint)
+                constraints.Add("struct");
+            else if (tp.HasUnmanagedTypeConstraint)
+                constraints.Add("unmanaged");
+            else if (tp.HasNotNullConstraint)
+                constraints.Add("notnull");
+
+            foreach (var ct in tp.ConstraintTypes)
+                constraints.Add(ct.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+
+            if (tp.HasConstructorConstraint)
+                constraints.Add("new()");
+
+            result.Add(new TypeParameterModel(tp.Name, constraints));
+        }
+        return result;
     }
 
     /// <summary>
