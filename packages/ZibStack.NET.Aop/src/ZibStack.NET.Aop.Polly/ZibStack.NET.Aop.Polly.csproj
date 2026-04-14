@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <PackageId>ZibStack.NET.Aop.Polly</PackageId>
+    <Description>Polly-based resilience aspects for ZibStack.NET.Aop — [PollyRetry] and [HttpRetry] with exponential backoff, exception filtering, named pipelines, and transient HTTP error handling.</Description>
+    <Authors>$(Authors)</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
+    <PackageTags>aop;polly;retry;resilience;http;transient;source-generator</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
+    <PackageReference Include="Polly.Core" Version="8.5.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

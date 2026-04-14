@@ -18,10 +18,16 @@ namespace ZibStack.NET.Aop;
 public static class AspectServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the built-in ZibStack.NET aspect handlers in DI. Currently:
+    /// Registers the built-in ZibStack.NET aspect handlers in DI:
     /// <list type="bullet">
-    ///   <item><see cref="TraceHandler"/> — for <see cref="TraceAttribute"/>.</item>
+    ///   <item><see cref="TraceHandler"/> — OpenTelemetry spans (<see cref="TraceAttribute"/>)</item>
+    ///   <item><see cref="RetryHandler"/> — retry with backoff (<see cref="RetryAttribute"/>)</item>
+    ///   <item><see cref="CacheHandler"/> — in-memory caching (<see cref="CacheAttribute"/>)</item>
+    ///   <item><see cref="MetricsHandler"/> — call count / duration / error counters (<see cref="MetricsAttribute"/>)</item>
+    ///   <item><see cref="TimeoutHandler"/> — execution time limit (<see cref="TimeoutAttribute"/>)</item>
     /// </list>
+    /// <see cref="AuthorizeHandler"/> is also registered but requires an
+    /// <see cref="IAuthorizationProvider"/> implementation in DI to function.
     /// Custom handlers (your own <see cref="IAspectHandler"/> implementations) still need to
     /// be registered explicitly — this method only wires the built-ins shipped by the package.
     /// Pairs with <c>app.Services.UseAop()</c> which bridges DI into the aspect runtime.
@@ -31,6 +37,19 @@ public static class AspectServiceCollectionExtensions
         if (services is null) throw new ArgumentNullException(nameof(services));
 
         services.TryAddSingleton<TraceHandler>();
+        services.TryAddSingleton<RetryHandler>();
+        services.TryAddSingleton<CacheHandler>();
+        services.TryAddSingleton<MetricsHandler>(sp =>
+        {
+            var factory = sp.GetService<System.Diagnostics.Metrics.IMeterFactory>();
+            return factory is not null ? new MetricsHandler(factory) : new MetricsHandler();
+        });
+        services.TryAddSingleton<TimeoutHandler>();
+
+        // AuthorizeHandler requires IAuthorizationProvider — only register if
+        // the provider is already in DI (otherwise users get a clear DI error
+        // when they first use [Authorize]).
+        services.TryAddSingleton<AuthorizeHandler>();
 
         return services;
     }

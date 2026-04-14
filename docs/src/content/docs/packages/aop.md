@@ -87,7 +87,28 @@ public class TimingHandler : IAspectHandler
 
 > **Fallback:** If DI is not configured, the generator falls back to `new TimingHandler()` — which requires a parameterless constructor. To use injected dependencies, always set `AspectServiceProvider.ServiceProvider`.
 
-## Built-in: `[Trace]` — OpenTelemetry spans, one attribute
+## Built-in Aspects
+
+`AddAop()` registers all built-in aspect handlers. No extra DI registration needed — just apply the attribute.
+
+| Attribute | Handler | Description |
+|---|---|---|
+| `[Trace]` | `TraceHandler` | OpenTelemetry `Activity` spans with parameter tags, timing, status |
+| `[Retry]` | `RetryHandler` | Retry with backoff, exception filtering (`Handle`/`Ignore`) |
+| `[Cache]` | `CacheHandler` | In-memory cache with TTL and `KeyTemplate` support |
+| `[Metrics]` | `MetricsHandler` | `System.Diagnostics.Metrics` counters + duration histogram |
+| `[Timeout]` | `TimeoutHandler` | Async execution time limit, throws `TimeoutException` |
+| `[Authorize]` | `AuthorizeHandler` | Policy/role-based authorization via `IAuthorizationProvider` |
+
+Optional (separate packages):
+
+| Attribute | Package | Description |
+|---|---|---|
+| `[PollyRetry]` | `ZibStack.NET.Aop.Polly` | Polly retry — named pipelines, backoff strategies, exception filtering |
+| `[PollyHttpRetry]` | `ZibStack.NET.Aop.Polly` | Transient HTTP error retry (408/429/5xx, `HttpRequestException`, timeouts) |
+| `[HybridCache]` | `ZibStack.NET.Aop.HybridCache` | L1/L2 caching via `Microsoft.Extensions.Caching.Hybrid` |
+
+### `[Trace]` — OpenTelemetry spans
 
 `[Trace]` wraps the decorated method in a `System.Diagnostics.Activity` span, compatible with **OpenTelemetry, Jaeger, Zipkin, Application Insights, and any OTLP exporter**. It ships with `ZibStack.NET.Aop.Abstractions` — no extra package, no handwritten instrumentation.
 
@@ -145,6 +166,193 @@ builder.Services.AddOpenTelemetry()
 ```
 
 If you used `SourceName = "..."` overrides, add them explicitly instead of `"*"`.
+
+### `[Retry]` — automatic retry with backoff
+
+```csharp
+// Simple retry — 3 attempts, no delay:
+[Retry]
+public string FetchData(string url) { ... }
+
+// With exponential backoff:
+[Retry(MaxAttempts = 3, DelayMs = 200, BackoffMultiplier = 2.0)]
+public async Task<Order> GetOrderFromApiAsync(int id) { ... }
+
+// Exception filtering — opt-in (only retry these):
+[Retry(MaxAttempts = 3, Handle = new[] { typeof(HttpRequestException), typeof(TimeoutException) })]
+public string CallExternalService() { ... }
+
+// Exception filtering — opt-out (retry everything except these):
+[Retry(MaxAttempts = 3, Ignore = new[] { typeof(ArgumentException) })]
+public void ProcessRequest(Request req) { ... }
+```
+
+Properties: `MaxAttempts` (default 3, includes initial call), `DelayMs` (default 0), `BackoffMultiplier` (default 1.0), `Handle` (`Type[]`, opt-in filter), `Ignore` (`Type[]`, opt-out filter).
+
+Exception matching uses `IsAssignableFrom` — `Handle = new[] { typeof(IOException) }` catches `HttpIOException` too.
+
+Works on both sync and async methods (`IAroundAspectHandler` + `IAsyncAroundAspectHandler`).
+
+### `[Cache]` — in-memory caching
+
+```csharp
+// Default: 5 min TTL, key from class + method + parameters
+[Cache]
+public Product GetProduct(int id) { ... }
+
+// Custom TTL:
+[Cache(DurationSeconds = 60)]
+public List<Country> GetCountries() { ... }
+
+// Custom cache key with parameter placeholders (nested properties supported):
+[Cache(KeyTemplate = "product:{id}")]
+public Product GetProduct(int id, bool includeArchived) { ... }
+
+[Cache(KeyTemplate = "order:{order.Customer.Id}:{order.Status}")]
+public Invoice GetInvoice(Order order) { ... }
+
+// Infinite cache (until manual invalidation):
+[Cache(DurationSeconds = 0)]
+public IReadOnlyList<Currency> GetCurrencies() { ... }
+```
+
+Manual invalidation:
+
+```csharp
+CacheHandler.Invalidate("GetProduct");   // clears all entries containing "GetProduct"
+CacheHandler.ClearAll();                  // clears everything
+```
+
+**`KeyTemplate`** placeholders are expanded at compile time into C# interpolated strings — the generator emits `$"product:{id}"` directly. Invalid parameter references produce compiler errors.
+
+### `[Metrics]` — System.Diagnostics.Metrics
+
+Records call count, duration, and errors using the standard .NET metrics API. Three instruments, shared across all decorated methods, differentiated by tags:
+
+```
+Meter: "ZibStack.Aop"
+├── aop.method.call.count     (Counter<long>)
+├── aop.method.call.duration  (Histogram<double>, ms)
+└── aop.method.call.errors    (Counter<long>)
+```
+
+Tags per measurement: `aop.class`, `aop.method`, and optionally `aop.metric` (from `MetricName`).
+
+```csharp
+[Metrics]
+public Order GetOrder(int id) { ... }
+
+// Custom grouping tag:
+[Metrics(MetricName = "checkout.orders")]
+public Order PlaceOrder(OrderRequest req) { ... }
+```
+
+Exporter wiring:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(m => m.AddMeter("ZibStack.Aop"));
+```
+
+Or `dotnet-counters monitor --counters ZibStack.Aop`.
+
+When `IMeterFactory` is available in DI (standard in ASP.NET Core 8+), the handler uses it. Otherwise falls back to `new Meter(...)`.
+
+### `[Timeout]` — async execution time limit
+
+```csharp
+[Timeout(TimeoutMs = 5000)]
+public async Task<Report> GenerateReportAsync(int id) { ... }
+```
+
+Throws `TimeoutException` if the method doesn't complete in time. **Async methods only** (`IAsyncAroundAspectHandler`).
+
+### `[Authorize]` — policy/role-based authorization
+
+```csharp
+// Role-based:
+[Authorize(Roles = "Admin,Manager")]
+public async Task DeleteOrderAsync(int id) { ... }
+
+// Policy-based:
+[Authorize(Policy = "CanEditProducts")]
+public async Task<Product> UpdateProductAsync(int id, ProductDto dto) { ... }
+
+// Authentication only (no specific role/policy):
+[Authorize]
+public async Task<UserProfile> GetProfileAsync() { ... }
+```
+
+Requires an `IAuthorizationProvider` implementation registered in DI:
+
+```csharp
+builder.Services.AddSingleton<IAuthorizationProvider, MyAuthProvider>();
+```
+
+```csharp
+public class MyAuthProvider : IAuthorizationProvider
+{
+    private readonly IHttpContextAccessor _accessor;
+    public MyAuthProvider(IHttpContextAccessor accessor) => _accessor = accessor;
+
+    public ValueTask<bool> IsAuthorizedAsync(string policy)
+    {
+        var user = _accessor.HttpContext?.User;
+        if (policy == "__authenticated") return new(user?.Identity?.IsAuthenticated == true);
+        return new(user?.HasClaim("policy", policy) == true);
+    }
+
+    public ValueTask<bool> IsInRoleAsync(string role)
+        => new(_accessor.HttpContext?.User?.IsInRole(role) == true);
+}
+```
+
+Throws `UnauthorizedAccessException` on failure. **Async methods only** (`IAsyncAspectHandler`).
+
+### `[PollyRetry]` — Polly integration (optional)
+
+Requires `Polly.Core` NuGet package. Two modes:
+
+```csharp
+// Inline — builds pipeline from attribute properties:
+[PollyRetry(MaxRetryAttempts = 3, DelayMs = 200, BackoffType = RetryBackoffType.Exponential)]
+public async Task<Order> GetOrderAsync(int id) { ... }
+
+// Named pipeline — references a pre-configured Polly pipeline from DI:
+[PollyRetry(PipelineName = "external-api")]
+public async Task<string> CallExternalAsync(string url) { ... }
+
+// Exception filtering (same Type[] API as [Retry]):
+[PollyRetry(Handle = new[] { typeof(HttpRequestException) })]
+public async Task<string> FetchAsync() { ... }
+```
+
+Named pipeline setup:
+
+```csharp
+builder.Services.AddResiliencePipeline("external-api", builder =>
+{
+    builder.AddRetry(new() { MaxRetryAttempts = 5, Delay = TimeSpan.FromSeconds(1) });
+    builder.AddCircuitBreaker(new() { FailureRatio = 0.5 });
+    builder.AddTimeout(TimeSpan.FromSeconds(30));
+});
+```
+
+### `[HybridCache]` — distributed caching (optional)
+
+Requires `Microsoft.Extensions.Caching.Hybrid` NuGet package. L1 memory + L2 distributed (Redis, etc.):
+
+```csharp
+[HybridCache(DurationSeconds = 120)]
+public async Task<Product> GetProductAsync(int id) { ... }
+
+[HybridCache(KeyTemplate = "user:{userId}:orders")]
+public async Task<List<Order>> GetOrdersAsync(int userId) { ... }
+```
+
+Setup: `builder.Services.AddHybridCache();`
+
+**Async methods only** (`IAsyncAroundAspectHandler`).
 
 ### When to use `[Trace]` vs manual `using var activity = ...`
 
@@ -330,14 +538,16 @@ Simple C# classes. The generator creates handler instances and `AspectContext` a
 
 | Interface | Use case |
 |-----------|----------|
-| `IAspectHandler` | Before/After/OnException — sync methods |
-| `IAsyncAspectHandler` | Before/After/OnException — async methods |
-| `IAroundAspectHandler` | Full control over execution — `object?` return |
-| `IAroundAspectHandler<T>` | Full control — **strongly-typed** return `T?` |
+| `IAspectHandler` | Before/After/OnException — sync methods (also works on async as fallback) |
+| `IAsyncAspectHandler` | Before/After/OnException — async methods only |
+| `IAroundAspectHandler` | Full control over execution — `object?` return, sync methods |
+| `IAroundAspectHandler<T>` | Full control — **strongly-typed** return `T?`, sync methods |
 | `IAsyncAroundAspectHandler` | Async full control — `object?` return |
 | `IAsyncAroundAspectHandler<T>` | Async full control — **strongly-typed** return `T?` |
 
 The generic `<T>` variants are preferred — the generator matches `T` against the intercepted method's return type and generates typed `Func<T?>` instead of `Func<object?>`. Use non-generic for void methods or handlers applied across different return types.
+
+**Dual interface support:** A handler can implement both sync and async interfaces (e.g. `IAroundAspectHandler` + `IAsyncAroundAspectHandler`). The generator picks the right one based on the target method — async path for async methods, sync path for sync methods. The built-in `RetryHandler` uses this pattern.
 
 **Example:**
 

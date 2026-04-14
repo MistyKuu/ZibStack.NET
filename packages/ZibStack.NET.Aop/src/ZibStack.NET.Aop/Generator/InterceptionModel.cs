@@ -197,8 +197,11 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
     /// </summary>
     public string? HandlerTypeName { get; }
 
-    /// <summary>Whether the handler implements IAsyncAspectHandler (vs IAspectHandler).</summary>
+    /// <summary>Whether the handler implements IAsyncAspectHandler.</summary>
     public bool IsAsyncHandler { get; }
+
+    /// <summary>Whether the handler implements IAspectHandler (sync before/after).</summary>
+    public bool HasSyncHandler { get; }
 
     /// <summary>Whether the handler implements IAroundAspectHandler or IAsyncAroundAspectHandler.</summary>
     public bool IsAroundHandler { get; }
@@ -225,13 +228,15 @@ public sealed class AspectInfo : IEquatable<AspectInfo>
         bool isAroundHandler = false,
         bool isAsyncAroundHandler = false,
         bool sensitiveReturn = false, bool noLogReturn = false,
-        string? genericAroundTypeArg = null)
+        string? genericAroundTypeArg = null,
+        bool hasSyncHandler = false)
     {
         AttributeFullName = attributeFullName;
         Order = order;
         Properties = properties;
         HandlerTypeName = handlerTypeName;
         IsAsyncHandler = isAsyncHandler;
+        HasSyncHandler = hasSyncHandler;
         IsAroundHandler = isAroundHandler;
         IsAsyncAroundHandler = isAsyncAroundHandler;
         SensitiveReturn = sensitiveReturn;

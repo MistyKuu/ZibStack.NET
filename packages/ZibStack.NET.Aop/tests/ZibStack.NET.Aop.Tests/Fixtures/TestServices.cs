@@ -110,3 +110,145 @@ public class MultiAspectService
     [RecordAround]
     public int Work(int x) => x + 1;
 }
+
+// ── Built-in [Retry] ───────────────────────────────────────────────────────────
+
+public class RetryTestService
+{
+    public int CallCount { get; private set; }
+
+    [Retry(MaxAttempts = 3)]
+    public int FailTwiceThenSucceed()
+    {
+        CallCount++;
+        if (CallCount < 3) throw new InvalidOperationException($"Attempt {CallCount}");
+        return 42;
+    }
+
+    [Retry(MaxAttempts = 2)]
+    public int AlwaysFails()
+    {
+        CallCount++;
+        throw new InvalidOperationException("always");
+    }
+
+    [Retry(MaxAttempts = 3, Handle = new[] { typeof(InvalidOperationException) })]
+    public int HandleOnly()
+    {
+        CallCount++;
+        if (CallCount == 1) throw new InvalidOperationException("retryable");
+        return 1;
+    }
+
+    [Retry(MaxAttempts = 3, Handle = new[] { typeof(InvalidOperationException) })]
+    public int HandleOnly_WrongException()
+    {
+        CallCount++;
+        throw new ArgumentException("not retryable");
+    }
+
+    [Retry(MaxAttempts = 3, Ignore = new[] { typeof(ArgumentException) })]
+    public int IgnoreArgException()
+    {
+        CallCount++;
+        if (CallCount == 1) throw new InvalidOperationException("retryable");
+        return 2;
+    }
+
+    [Retry(MaxAttempts = 3, Ignore = new[] { typeof(ArgumentException) })]
+    public int IgnoreArgException_Throws()
+    {
+        CallCount++;
+        throw new ArgumentException("ignored, no retry");
+    }
+}
+
+// ── Built-in [Cache] ────────────────────────────────────────────────────────────
+
+public class CacheTestService
+{
+    public int CallCount { get; private set; }
+
+    [Cache(DurationSeconds = 60)]
+    public string GetValue(int id)
+    {
+        CallCount++;
+        return $"value-{id}-call-{CallCount}";
+    }
+
+    [Cache(DurationSeconds = 60, KeyTemplate = "product:{id}")]
+    public string GetWithTemplate(int id, bool includeArchived)
+    {
+        CallCount++;
+        return $"tmpl-{id}-{includeArchived}-call-{CallCount}";
+    }
+
+    [Cache(DurationSeconds = 60, KeyTemplate = "nested:{req.CustomerId}:{req.Region}")]
+    public string GetWithNestedTemplate(CacheRequest req)
+    {
+        CallCount++;
+        return $"nested-{req.CustomerId}-{req.Region}-call-{CallCount}";
+    }
+}
+
+public class CacheRequest
+{
+    public int CustomerId { get; set; }
+    public string Region { get; set; } = "";
+}
+
+// ── Built-in [Metrics] ──────────────────────────────────────────────────────────
+
+public class MetricsTestService
+{
+    [Metrics(MetricName = "test.operation")]
+    public int Compute(int x) => x * 2;
+
+    [Metrics(MetricName = "test.failing")]
+    public int Fail() => throw new InvalidOperationException("boom");
+}
+
+// ── Built-in [Timeout] ──────────────────────────────────────────────────────────
+
+public class TimeoutTestService
+{
+    [Timeout(TimeoutMs = 500)]
+    public async Task<int> FastAsync()
+    {
+        await Task.Delay(1);
+        return 42;
+    }
+
+    [Timeout(TimeoutMs = 50)]
+    public async Task<int> SlowAsync()
+    {
+        await Task.Delay(10_000);
+        return 0;
+    }
+}
+
+// ── Built-in [Authorize] ────────────────────────────────────────────────────────
+
+public class AuthorizeTestService
+{
+    [Authorize(Roles = "Admin")]
+    public async Task<int> AdminOnlyAsync()
+    {
+        await Task.CompletedTask;
+        return 42;
+    }
+
+    [Authorize(Policy = "CanEdit")]
+    public async Task<int> PolicyProtectedAsync()
+    {
+        await Task.CompletedTask;
+        return 99;
+    }
+
+    [Authorize]
+    public async Task<int> AuthenticatedOnlyAsync()
+    {
+        await Task.CompletedTask;
+        return 1;
+    }
+}

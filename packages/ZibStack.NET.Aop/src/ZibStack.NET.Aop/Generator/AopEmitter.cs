@@ -225,16 +225,18 @@ public static class AopEmitter
                         var t = aspect.GenericAroundTypeArg;
                         sb.AppendLine($"{indent}__proceed = async () => await {handlerVar}.AroundAsync({ctxVar}, async () => ({t}?)await __prevProceed_{handlerVar}());");
                     }
-                    else if (aspect.GenericAroundTypeArg is not null)
+                    else if (aspect.GenericAroundTypeArg is not null && !aspect.IsAsyncAroundHandler)
                     {
-                        // Generic sync: IAroundAspectHandler<T>
-                        var t = aspect.GenericAroundTypeArg;
-                        sb.AppendLine($"{indent}__proceed = () => new global::System.Threading.Tasks.ValueTask<object?>({handlerVar}.Around({ctxVar}, () => ({t}?)__prevProceed_{handlerVar}().GetAwaiter().GetResult()));");
+                        // Generic sync-only around handler on async method — not supported
+                        sb.AppendLine($"{indent}#error IAroundAspectHandler<T> cannot be used on async methods. Implement IAsyncAroundAspectHandler<T> on the handler, or add IAsyncAroundAspectHandler.");
                     }
                     else if (aspect.IsAsyncAroundHandler)
                         sb.AppendLine($"{indent}__proceed = () => {handlerVar}.AroundAsync({ctxVar}, __prevProceed_{handlerVar});");
                     else
-                        sb.AppendLine($"{indent}__proceed = () => new global::System.Threading.Tasks.ValueTask<object?>({handlerVar}.Around({ctxVar}, () => __prevProceed_{handlerVar}().GetAwaiter().GetResult()));");
+                    {
+                        // Sync-only around handler on async method — not supported
+                        sb.AppendLine($"{indent}#error IAroundAspectHandler cannot be used on async methods. Implement IAsyncAroundAspectHandler on the handler.");
+                    }
                 }
 
                 // Execute the chain
@@ -243,7 +245,12 @@ public static class AopEmitter
                 if (method.ReturnsVoid)
                     sb.AppendLine($"{indent}    await __proceed().ConfigureAwait(false);");
                 else
-                    sb.AppendLine($"{indent}    var __result = ({method.ReturnType})await __proceed().ConfigureAwait(false);");
+                {
+                    // await on ValueTask<object?> yields object? — cast to the *unwrapped* return type,
+                    // not the full Task<T>/ValueTask<T> wrapper.
+                    var castType = GetUnwrappedReturnType(method);
+                    sb.AppendLine($"{indent}    var __result = ({castType})(await __proceed().ConfigureAwait(false))!;");
+                }
             }
             else
             {
@@ -337,6 +344,81 @@ public static class AopEmitter
 
     // === Runtime handler emission (for [AspectHandler]-based aspects) ===
 
+    /// <summary>
+    /// Expands a KeyTemplate string like <c>"order:{order.Customer.Id}:{status}"</c> into
+    /// a C# interpolated string <c>$"order:{order.Customer.Id}:{status}"</c>.
+    /// Literal braces in the template are escaped for interpolation.
+    /// </summary>
+    private static string ExpandKeyTemplate(string template, InterceptedMethodModel method)
+    {
+        // The template uses {expr} placeholders that map directly to C# expressions.
+        // We need to:
+        // 1. Escape any literal {{ or }} (user wants a literal brace in the key)
+        //    — these are already doubled in the attribute string, leave as-is
+        // 2. Pass {expr} through as-is — C# interpolation handles them
+        //
+        // The result is just $"<template>" — the C# compiler validates expressions.
+        // We only need to ensure the template is safe as an interpolated string.
+
+        return $"$\"{template}\"";
+    }
+
+    /// <summary>
+    /// For async methods, extracts the inner type from Task&lt;T&gt; / ValueTask&lt;T&gt;.
+    /// For sync methods, returns ReturnType as-is.
+    /// </summary>
+    private static string GetUnwrappedReturnType(InterceptedMethodModel method)
+    {
+        if (!method.IsAsync) return method.ReturnType;
+
+        var rt = method.ReturnType;
+        // Matches: global::System.Threading.Tasks.Task<X> or Task<X> or ValueTask<X>
+        var openIdx = rt.IndexOf('<');
+        var closeIdx = rt.LastIndexOf('>');
+        if (openIdx >= 0 && closeIdx > openIdx)
+            return rt.Substring(openIdx + 1, closeIdx - openIdx - 1);
+
+        return method.ReturnType;
+    }
+
+    private static string? FormatPropertyValue(object? value)
+    {
+        switch (value)
+        {
+            case null: return "null";
+            case string s: return $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+            case bool b: return b ? "true" : "false";
+            case int i: return $"{i}";
+            case long l: return $"{l}L";
+            case double d: return $"{d.ToString(System.Globalization.CultureInfo.InvariantCulture)}d";
+            case float f: return $"{f.ToString(System.Globalization.CultureInfo.InvariantCulture)}f";
+            case decimal m: return $"{m.ToString(System.Globalization.CultureInfo.InvariantCulture)}m";
+            case Microsoft.CodeAnalysis.ITypeSymbol ts:
+                return $"typeof({ts.ToDisplayString(Microsoft.CodeAnalysis.SymbolDisplayFormat.FullyQualifiedFormat)})";
+            case System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.TypedConstant> arr:
+                return FormatTypedConstantArray(arr);
+            default: return null;
+        }
+    }
+
+    private static string? FormatTypedConstantArray(System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.TypedConstant> arr)
+    {
+        if (arr.IsDefaultOrEmpty) return "null";
+
+        // Check if it's a Type[] array
+        if (arr[0].Kind == Microsoft.CodeAnalysis.TypedConstantKind.Type)
+        {
+            var types = arr.Select(tc => tc.Value as Microsoft.CodeAnalysis.ITypeSymbol)
+                .Where(t => t is not null)
+                .Select(t => $"typeof({t!.ToDisplayString(Microsoft.CodeAnalysis.SymbolDisplayFormat.FullyQualifiedFormat)})");
+            return $"new global::System.Type[] {{ {string.Join(", ", types)} }}";
+        }
+
+        // Fallback: primitive array
+        var elements = arr.Select(tc => FormatPropertyValue(tc.Value)).Where(v => v is not null);
+        return $"new object[] {{ {string.Join(", ", elements)} }}";
+    }
+
     private static string SafeName(AspectInfo aspect) =>
         aspect.AttributeFullName.Replace(".", "_").Replace("+", "_");
 
@@ -373,18 +455,49 @@ public static class AopEmitter
             sb.AppendLine($"{indent}    }}");
         }
         sb.AppendLine($"{indent}}};");
+
+        // Populate context.Properties with attribute named arguments (e.g. DurationSeconds, MaxAttempts, Roles)
+        foreach (var kvp in aspect.Properties)
+        {
+            if (kvp.Key == "Order") continue; // Order is a base AspectAttribute property, not a user property
+            if (kvp.Key == "KeyTemplate") continue; // handled below — expanded to interpolated string
+            var valueExpr = FormatPropertyValue(kvp.Value);
+            if (valueExpr != null)
+                sb.AppendLine($"{indent}{ctxVar}.Properties[\"{kvp.Key}\"] = {valueExpr};");
+        }
+
+        // KeyTemplate → compile-time expansion to interpolated string cache key.
+        // Template "{order.Customer.Id}:{status}" → $"{order.Customer.Id}:{status}"
+        // Invalid parameter references are caught by the C# compiler (CS1061 / CS0103).
+        if (aspect.Properties.TryGetValue("KeyTemplate", out var ktObj) && ktObj is string keyTemplate && keyTemplate.Length > 0)
+        {
+            var interpolated = ExpandKeyTemplate(keyTemplate, method);
+            sb.AppendLine($"{indent}{ctxVar}.Properties[\"__cacheKey\"] = {interpolated};");
+        }
+
         // Around handlers don't have OnBefore — they wrap via Around/AroundAsync
         if (!aspect.IsAroundHandler)
         {
-            if (aspect.IsAsyncHandler)
+            if (method.IsAsync && aspect.IsAsyncHandler)
             {
-                if (method.IsAsync)
-                    sb.AppendLine($"{indent}await {handlerVar}.OnBeforeAsync({ctxVar}).ConfigureAwait(false);");
-                else
-                    sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method.");
+                // Async method + handler has IAsyncAspectHandler → use async path
+                sb.AppendLine($"{indent}await {handlerVar}.OnBeforeAsync({ctxVar}).ConfigureAwait(false);");
             }
-            else
+            else if (!method.IsAsync && aspect.HasSyncHandler)
+            {
+                // Sync method + handler has IAspectHandler → use sync path
                 sb.AppendLine($"{indent}{handlerVar}.OnBefore({ctxVar});");
+            }
+            else if (!method.IsAsync && aspect.IsAsyncHandler && !aspect.HasSyncHandler)
+            {
+                // Sync method + handler is async-only → error
+                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method. Add IAspectHandler to the handler.");
+            }
+            else if (aspect.HasSyncHandler)
+            {
+                // Fallback: sync handler on async method (works, just not async-optimized)
+                sb.AppendLine($"{indent}{handlerVar}.OnBefore({ctxVar});");
+            }
         }
     }
 
@@ -396,15 +509,9 @@ public static class AopEmitter
         sb.AppendLine($"{indent}{ctxVar}.ElapsedMilliseconds = __sw.ElapsedMilliseconds;");
         if (!method.ReturnsVoid)
             sb.AppendLine($"{indent}{ctxVar}.ReturnValue = __result;");
-        if (aspect.IsAsyncHandler)
-        {
-            if (method.IsAsync)
-                sb.AppendLine($"{indent}await {handlerVar}.OnAfterAsync({ctxVar}).ConfigureAwait(false);");
-            else
-                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method.");
-        }
-        else
-            sb.AppendLine($"{indent}{handlerVar}.OnAfter({ctxVar});");
+        EmitHandlerCall(sb, method, aspect, handlerVar, ctxVar, indent,
+            asyncCall: $"await {handlerVar}.OnAfterAsync({ctxVar}).ConfigureAwait(false);",
+            syncCall: $"{handlerVar}.OnAfter({ctxVar});");
     }
 
     private static void EmitRuntimeHandlerOnException(StringBuilder sb, InterceptedMethodModel method, AspectInfo aspect, string indent)
@@ -413,14 +520,26 @@ public static class AopEmitter
         var ctxVar = GetContextVarName(aspect);
 
         sb.AppendLine($"{indent}{ctxVar}.ElapsedMilliseconds = __sw.ElapsedMilliseconds;");
-        if (aspect.IsAsyncHandler)
-        {
-            if (method.IsAsync)
-                sb.AppendLine($"{indent}await {handlerVar}.OnExceptionAsync({ctxVar}, __ex).ConfigureAwait(false);");
-            else
-                sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method.");
-        }
+        EmitHandlerCall(sb, method, aspect, handlerVar, ctxVar, indent,
+            asyncCall: $"await {handlerVar}.OnExceptionAsync({ctxVar}, __ex).ConfigureAwait(false);",
+            syncCall: $"{handlerVar}.OnException({ctxVar}, __ex);");
+    }
+
+    /// <summary>
+    /// Picks async or sync call based on method context and handler capabilities.
+    /// Handlers implementing both IAspectHandler and IAsyncAspectHandler get the right one
+    /// depending on whether the target method is async.
+    /// </summary>
+    private static void EmitHandlerCall(StringBuilder sb, InterceptedMethodModel method, AspectInfo aspect,
+        string handlerVar, string ctxVar, string indent, string asyncCall, string syncCall)
+    {
+        if (method.IsAsync && aspect.IsAsyncHandler)
+            sb.AppendLine($"{indent}{asyncCall}");
+        else if (aspect.HasSyncHandler)
+            sb.AppendLine($"{indent}{syncCall}");
+        else if (method.IsAsync && !aspect.IsAsyncHandler && !aspect.HasSyncHandler)
+            sb.AppendLine($"{indent}// ERROR: handler implements neither IAspectHandler nor IAsyncAspectHandler.");
         else
-            sb.AppendLine($"{indent}{handlerVar}.OnException({ctxVar}, __ex);");
+            sb.AppendLine($"{indent}// ERROR: IAsyncAspectHandler cannot be used on sync method. Add IAspectHandler to the handler.");
     }
 }

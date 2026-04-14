@@ -12,7 +12,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 - **`[Log]`** — compile-time structured logging with zero boilerplate. Interpolated strings (`LogInformation($"...")`) just work.
 - **`[Trace]`** — OpenTelemetry spans on any method, with one attribute. Compatible with Jaeger / Zipkin / OTLP.
-- **ZibStack.NET.Aop** — write your own aspects (`IAspectHandler`) for metrics, retry, cache, auth, auditing — a few lines each.
+- **ZibStack.NET.Aop** — built-in `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]` aspects. Write your own with `IAspectHandler` — a few lines each.
 
 **Tier 2 — Ergonomics. Opt-in per file.** TypeScript-inspired utility types and helpers you reach for when you want them. No framework, no configuration.
 
@@ -48,7 +48,9 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 | Package | NuGet | Description |
 |---|---|---|
 | [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides structured interpolated string logging — `LogInformation($"...")` just works. |
-| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in `[Trace]` (OpenTelemetry spans). Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
+| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in aspects: `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`. Custom aspects via `IAspectHandler`/`IAroundAspectHandler`. |
+| [**ZibStack.NET.Aop.Polly**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/) | `dotnet add package ZibStack.NET.Aop.Polly` | Polly-based resilience aspects: `[PollyRetry]` (named pipelines, backoff, exception filtering) and `[PollyHttpRetry]` (transient HTTP errors). |
+| [**ZibStack.NET.Aop.HybridCache**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/) | `dotnet add package ZibStack.NET.Aop.HybridCache` | `[HybridCache]` — L1/L2 caching (memory + Redis) via `Microsoft.Extensions.Caching.Hybrid`. |
 | [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable` → `PickXxx()` methods). |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[ZRequired]`, `[ZEmail]`, `[ZRange]`, `[ZMatch]`). |
@@ -91,23 +93,21 @@ logger.LogInformation($"User {userId} bought {product} for {total:C}");
 
 > **Quiet by default.** ZibStack.NET.Log doesn't force a global using and the interpolated-logging suggestion (`ZLOG002`) is a hint, not a warning — your existing `LogInformation("...", arg)` call sites stay untouched. If you want the opinionated experience (global using + warnings on every legacy call site), opt in with `<ZibLogStrict>true</ZibLogStrict>` in your `.csproj`. See the [Log package docs](https://mistykuu.github.io/ZibStack.NET/packages/log/#configuration) for individual toggles.
 
-### ZibStack.NET.Aop — built-in `[Trace]` + custom aspects
+### ZibStack.NET.Aop — built-in aspects + custom aspects
 
 ```csharp
-// Built-in: OpenTelemetry-compatible tracing — one attribute, span per call:
-[Trace]
+// Built-in aspects — all registered by AddAop(), just apply:
+[Trace]                                                          // OpenTelemetry spans
+[Retry(MaxAttempts = 3, Handle = new[] { typeof(HttpRequestException) })]  // retry with filtering
+[Cache(KeyTemplate = "order:{id}", DurationSeconds = 60)]        // in-memory cache
+[Metrics]                                                        // call count + duration + errors
 public async Task<Order> GetOrderAsync(int id) { ... }
-// → Jaeger / Zipkin / OTLP see: OrderService.GetOrderAsync
-//   with parameters as tags, elapsed_ms, status, exception info — all automatic
 
-// Customize the source name, operation name, or skip parameter tags:
-[Trace(SourceName = "checkout.orders", IncludeParameters = false)]
-public Task PlaceOrderAsync(Order order) { ... }
+[Timeout(TimeoutMs = 5000)]                                      // async execution time limit
+public async Task<Report> GenerateReportAsync(int id) { ... }
 
-// Stack multiple aspects — all run in a single generated interceptor:
-[Log]
-[Trace]
-public async Task<Order> ProcessOrderAsync(int id) { ... }
+[Authorize(Roles = "Admin")]                                     // role/policy-based auth
+public async Task DeleteOrderAsync(int id) { ... }
 ```
 
 Write your own aspects — just a class + attribute:
@@ -125,32 +125,16 @@ public class TimingHandler : IAspectHandler
     public void OnException(AspectContext ctx, Exception ex)
         => Console.WriteLine($"Failed {ctx.MethodName}: {ex.Message}");
 }
-
-// Apply it:
-[Timing]
-public Order GetOrder(int id) { ... }
 ```
 
-Setup — one-liner for built-ins, standard DI for your own:
+Setup — one-liner:
 
 ```csharp
-builder.Services.AddAop();           // built-in handlers ([Trace], ...)
-builder.Services.AddTransient<TimingHandler>();
+builder.Services.AddAop();           // registers all built-in handlers
+builder.Services.AddTransient<TimingHandler>();  // your own
 
 var app = builder.Build();
-app.Services.UseAop();                        // bridges DI into the aspect runtime
-```
-
-Async handlers (for async methods only):
-
-```csharp
-public class MetricsHandler : IAsyncAspectHandler
-{
-    public ValueTask OnBeforeAsync(AspectContext ctx) => default;
-    public async ValueTask OnAfterAsync(AspectContext ctx)
-        => await _client.RecordAsync(ctx.MethodName, ctx.ElapsedMilliseconds);
-    public ValueTask OnExceptionAsync(AspectContext ctx, Exception ex) => default;
-}
+app.Services.UseAop();               // bridges DI into the aspect runtime
 ```
 
 ---
@@ -316,7 +300,8 @@ The capstone. One attribute on your model generates: CRUD API + DTOs + validatio
 ```
 ZibStack.NET/
 ├── packages/
-│   ├── ZibStack.NET.Aop/              → AOP framework (aspects, interceptors, [Trace])
+│   ├── ZibStack.NET.Aop/              → AOP framework (aspects, interceptors, built-in [Trace]/[Retry]/[Cache]/[Metrics]/...)
+│   │   └── ZibStack.NET.Aop.Polly/   → Polly-based resilience ([PollyRetry], [HttpRetry])
 │   ├── ZibStack.NET.Log/              → Logging source generator
 │   ├── ZibStack.NET.Core/             → Shared attributes (relations, utility types)
 │   ├── ZibStack.NET.Dto/              → DTO + CRUD API source generator

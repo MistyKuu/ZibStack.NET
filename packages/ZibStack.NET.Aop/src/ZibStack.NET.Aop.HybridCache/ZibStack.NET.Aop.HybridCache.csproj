@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <PackageId>ZibStack.NET.Aop.HybridCache</PackageId>
+    <Description>HybridCache aspect for ZibStack.NET.Aop — [HybridCache] with L1/L2 caching (memory + Redis/distributed) via Microsoft.Extensions.Caching.Hybrid.</Description>
+    <Authors>$(Authors)</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
+    <PackageTags>aop;cache;hybridcache;redis;distributed;source-generator</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="9.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

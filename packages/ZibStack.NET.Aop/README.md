@@ -8,27 +8,40 @@ AOP framework for .NET 8+ using **C# interceptors** — define aspects that run 
 dotnet add package ZibStack.NET.Aop
 ```
 
-## Built-in: `[Trace]` — OpenTelemetry spans, one attribute
+## Built-in Aspects
+
+All registered automatically by `AddAop()`:
+
+| Attribute | What it does |
+|---|---|
+| `[Trace]` | OpenTelemetry `Activity` spans with parameter tags, timing, status |
+| `[Retry]` | Retry with backoff + exception filtering (`Handle`/`Ignore` as `Type[]`) |
+| `[Cache]` | In-memory cache with TTL and compile-time `KeyTemplate` |
+| `[Metrics]` | `System.Diagnostics.Metrics` — call count, duration histogram, error count |
+| `[Timeout]` | Async execution time limit, throws `TimeoutException` |
+| `[Authorize]` | Policy/role-based auth via `IAuthorizationProvider` |
+
+Optional (require external packages): `[PollyRetry]` (Polly.Core), `[HybridCache]` (Microsoft.Extensions.Caching.Hybrid).
 
 ```csharp
-using ZibStack.NET.Aop;
-
+// One attribute per concern:
 [Trace]
-public async Task<Order> GetOrderAsync(int id) => await _repo.FindAsync(id);
+[Retry(MaxAttempts = 3, Handle = new[] { typeof(HttpRequestException) })]
+[Cache(KeyTemplate = "order:{id}", DurationSeconds = 60)]
+[Metrics]
+public async Task<Order> GetOrderAsync(int id) { ... }
 ```
-
-Automatic `Activity` span per call, parameters attached as tags (honoring `[Sensitive]` / `[NoLog]`), `elapsed_ms`, status, and exception tags. Works with any OpenTelemetry / Jaeger / Zipkin / OTLP exporter — see the [docs](https://mistykuu.github.io/ZibStack.NET/packages/aop/#built-in-trace--opentelemetry-spans-one-attribute) for options.
 
 ## Setup
 
 ```csharp
 using ZibStack.NET.Aop;
 
-builder.Services.AddAop();      // registers built-in handlers ([Trace], ...)
-builder.Services.AddTransient<MyHandler>();  // your own handlers
+builder.Services.AddAop();                       // registers all built-in handlers
+builder.Services.AddTransient<MyHandler>();       // your own handlers
 
 var app = builder.Build();
-app.Services.UseAop();                   // bridges DI into the aspect runtime — required
+app.Services.UseAop();                           // bridges DI into the aspect runtime — required
 ```
 
 ## Custom aspects
@@ -52,7 +65,7 @@ public class TimingHandler : IAspectHandler
 public Order GetOrder(int id) { ... }
 ```
 
-Also supported: `IAroundAspectHandler<T>` (strongly-typed full control), `IAsyncAspectHandler`, class-level aspects, multi-aspect stacking with `Order`.
+Also supported: `IAroundAspectHandler<T>` (strongly-typed), `IAsyncAspectHandler`, `IAsyncAroundAspectHandler`, dual sync+async interfaces, class-level aspects, multi-aspect stacking with `Order`.
 
 ## Documentation
 

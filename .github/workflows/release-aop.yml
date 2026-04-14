@@ -31,6 +31,12 @@ jobs:
       - name: Pack Generator
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop/ZibStack.NET.Aop.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
+      - name: Pack Polly
+        run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/ZibStack.NET.Aop.Polly.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack HybridCache
+        run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/ZibStack.NET.Aop.HybridCache.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
       - name: Push to NuGet
         run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 

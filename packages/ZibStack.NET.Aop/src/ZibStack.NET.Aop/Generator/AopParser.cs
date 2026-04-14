@@ -472,13 +472,15 @@ public static class AopParser
             {
                 if (namedArg.Key == "Order" && namedArg.Value.Value is int o)
                     order = o;
+                else if (namedArg.Value.Kind == TypedConstantKind.Array)
+                    props[namedArg.Key] = namedArg.Value.Values;
                 else
                     props[namedArg.Key] = namedArg.Value.Value;
             }
 
             string? handlerTypeName = null;
             string? genericAroundTypeArg = null;
-            bool isAsyncHandler = false, isAroundHandler = false, isAsyncAroundHandler = false;
+            bool isAsyncHandler = false, hasSyncHandler = false, isAroundHandler = false, isAsyncAroundHandler = false;
             foreach (var classAttr in attr.AttributeClass.GetAttributes())
             {
                 if (classAttr.AttributeClass?.ToDisplayString() == AspectHandlerAttributeFullName
@@ -488,6 +490,7 @@ public static class AopParser
                     handlerTypeName = handlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     var ifaces = handlerType.AllInterfaces;
                     var ifaceNames = ifaces.Select(i => i.ToDisplayString()).ToList();
+                    hasSyncHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAspectHandler");
                     isAsyncHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAspectHandler");
                     isAroundHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAroundAspectHandler");
                     isAsyncAroundHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler");
@@ -517,7 +520,7 @@ public static class AopParser
 
             aspects.Add(new AspectInfo(typeName, order, props, handlerTypeName, isAsyncHandler,
                 isAroundHandler || isAsyncAroundHandler, isAsyncAroundHandler, sensitiveReturn, noLogReturn,
-                genericAroundTypeArg));
+                genericAroundTypeArg, hasSyncHandler));
         }
     }
 

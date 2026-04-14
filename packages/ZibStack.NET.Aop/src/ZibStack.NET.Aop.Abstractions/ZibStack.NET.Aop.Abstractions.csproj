@@ -32,6 +32,17 @@
     <Compile Remove="IAsyncAroundAspectHandler.cs" />
     <Compile Remove="TraceAttribute.cs" />
     <Compile Remove="TraceHandler.cs" />
+    <Compile Remove="RetryAttribute.cs" />
+    <Compile Remove="RetryHandler.cs" />
+    <Compile Remove="CacheAttribute.cs" />
+    <Compile Remove="CacheHandler.cs" />
+    <Compile Remove="MetricsAttribute.cs" />
+    <Compile Remove="MetricsHandler.cs" />
+    <Compile Remove="TimeoutAttribute.cs" />
+    <Compile Remove="TimeoutHandler.cs" />
+    <Compile Remove="AuthorizeAttribute.cs" />
+    <Compile Remove="AuthorizeHandler.cs" />
+    <Compile Remove="IAuthorizationProvider.cs" />
     <Compile Remove="AspectServiceCollectionExtensions.cs" />
   </ItemGroup>
 

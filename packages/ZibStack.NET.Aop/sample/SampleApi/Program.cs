@@ -7,13 +7,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<OrderService>();
 builder.Services.AddSingleton<OrderService2>();
 
-// Built-in ZibStack aspects ([Trace], ...).
+// Built-in ZibStack aspects ([Trace], [Retry], [Cache], [Metrics], [Timeout], [Authorize]).
 builder.Services.AddAop();
 
 // Custom sample aspects.
 builder.Services.AddTransient<TimingHandler>();
-builder.Services.AddTransient<RetryHandler>();
-builder.Services.AddTransient<CacheHandler>();
 
 var app = builder.Build();
 

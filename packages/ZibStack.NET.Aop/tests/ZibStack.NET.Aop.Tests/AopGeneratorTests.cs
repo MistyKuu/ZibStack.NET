@@ -14,17 +14,53 @@ public class AopFixture : IDisposable
 {
     public RecordingHandler Handler { get; } = new();
     public AroundRecordingHandler AroundHandler { get; } = new();
+    public TestAuthorizationProvider AuthProvider { get; } = new();
 
     public AopFixture()
     {
         var services = new ServiceCollection();
         services.AddSingleton(Handler);
         services.AddSingleton(AroundHandler);
+
+        // Built-in handlers
+        services.AddSingleton<RetryHandler>();
+        services.AddSingleton<CacheHandler>();
+        services.AddSingleton<MetricsHandler>();
+        services.AddSingleton<TimeoutHandler>();
+        services.AddSingleton<IAuthorizationProvider>(AuthProvider);
+        services.AddSingleton<AuthorizeHandler>();
+
         var sp = services.BuildServiceProvider();
         AspectServiceProvider.ServiceProvider = sp;
     }
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+        CacheHandler.ClearAll();
+    }
+}
+
+public sealed class TestAuthorizationProvider : IAuthorizationProvider
+{
+    public HashSet<string> Roles { get; } = new();
+    public HashSet<string> Policies { get; } = new();
+    public bool IsAuthenticated { get; set; }
+
+    public ValueTask<bool> IsAuthorizedAsync(string policy)
+    {
+        if (policy == "__authenticated") return new ValueTask<bool>(IsAuthenticated);
+        return new ValueTask<bool>(Policies.Contains(policy));
+    }
+
+    public ValueTask<bool> IsInRoleAsync(string role) =>
+        new ValueTask<bool>(Roles.Contains(role));
+
+    public void Reset()
+    {
+        Roles.Clear();
+        Policies.Clear();
+        IsAuthenticated = false;
+    }
 }
 
 // ── Behavioral tests — verify aspects actually fire at runtime ──────────────

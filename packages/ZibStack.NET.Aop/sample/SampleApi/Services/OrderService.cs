@@ -1,3 +1,4 @@
+using ZibStack.NET.Aop;
 using ZibStack.NET.Aop.Sample.Aspects;
 
 namespace ZibStack.NET.Aop.Sample.Services;
@@ -26,12 +27,18 @@ public class OrderService
     }
 }
 
-[Timing]
-[Retry]
 [Trace]
+[Metrics]
+[Retry(MaxAttempts = 3, DelayMs = 100)]
 public class OrderService2
 {
     public void Debug(int a)
     {
     }
+
+    [Cache(DurationSeconds = 60)]
+    public string GetCachedData(int id) => $"data-{id}-{DateTime.UtcNow.Ticks}";
+
+    [Timeout(TimeoutMs = 5000)]
+    public async Task<string> SlowOperationAsync() { await Task.Delay(100); return "done"; }
 }

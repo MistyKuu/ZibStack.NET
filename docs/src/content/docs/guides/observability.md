@@ -31,7 +31,7 @@ using ZibStack.NET.Aop;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// (1) Register built-in aspect handlers (TraceHandler for [Trace]).
+// (1) Register built-in aspect handlers ([Trace], [Retry], [Cache], [Metrics], ...).
 builder.Services.AddAop();
 
 // (2) Wire OpenTelemetry tracing. '*' listens on every ActivitySource
@@ -310,50 +310,33 @@ public class OrderService
 
 Mix and match — `[Log]` and `[Trace]` are independent.
 
-### Custom aspect that mirrors `[Trace]` onto metrics
+### Built-in `[Metrics]` — RED metrics alongside traces
 
-`[Trace]` produces spans. If you want RED metrics (rate/errors/duration) on the same methods, write a tiny `IAspectHandler`:
-
-```csharp
-using System.Diagnostics.Metrics;
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(MetricsHandler))]
-public class MetricsAttribute : AspectAttribute { }
-
-public class MetricsHandler : IAspectHandler
-{
-    private static readonly Meter Meter = new("MyApp.Methods");
-    private static readonly Histogram<double> Duration =
-        Meter.CreateHistogram<double>("method_duration_ms");
-
-    public void OnBefore(AspectContext ctx) { }
-
-    public void OnAfter(AspectContext ctx)
-        => Duration.Record(ctx.ElapsedMilliseconds,
-            new("class", ctx.ClassName), new("method", ctx.MethodName), new("status", "ok"));
-
-    public void OnException(AspectContext ctx, Exception ex)
-        => Duration.Record(ctx.ElapsedMilliseconds,
-            new("class", ctx.ClassName), new("method", ctx.MethodName), new("status", "error"));
-}
-```
-
-Register once in `Program.cs`:
-
-```csharp
-builder.Services.AddAop();
-builder.Services.AddSingleton<MetricsHandler>();
-```
-
-Apply on any method:
+`[Trace]` produces spans. For RED metrics (rate/errors/duration), add the built-in `[Metrics]` — already registered by `AddAop()`:
 
 ```csharp
 [Log] [Trace] [Metrics]
-public Task<Order> PlaceOrderAsync(Order o) { … }
+public async Task<Order> PlaceOrderAsync(Order o) { ... }
 ```
 
-All three run in a single generated interceptor — no nesting overhead, no reflection.
+This emits three `System.Diagnostics.Metrics` instruments under the `ZibStack.Aop` meter:
+- `aop.method.call.count` (Counter) — with tags `aop.class`, `aop.method`
+- `aop.method.call.duration` (Histogram, ms) — same tags
+- `aop.method.call.errors` (Counter) — same tags
+
+Wire to OpenTelemetry:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing.AddSource("*").AddOtlpExporter())
+    .WithMetrics(metrics => metrics.AddMeter("ZibStack.Aop").AddOtlpExporter());
+```
+
+All three aspects (`[Log]`, `[Trace]`, `[Metrics]`) run in a single generated interceptor — no nesting overhead, no reflection.
+
+### Other built-in aspects
+
+`AddAop()` also registers `[Retry]`, `[Cache]`, `[Timeout]`, and `[Authorize]`. See [AOP — Built-in Aspects](/ZibStack.NET/packages/aop/#built-in-aspects) for full reference.
 
 ## Quiet by default, strict on opt-in
 
