@@ -487,6 +487,21 @@ public static class AopParser
                     && classAttr.ConstructorArguments.Length > 0
                     && classAttr.ConstructorArguments[0].Value is INamedTypeSymbol handlerType)
                 {
+                    // Open generic handler (e.g. HybridCacheHandler<>) → close with method's return type
+                    if (handlerType.IsUnboundGenericType && handlerType.TypeParameters.Length == 1)
+                    {
+                        var returnType = method.ReturnType;
+                        // Unwrap Task<T> / ValueTask<T> for async methods
+                        if (returnType is INamedTypeSymbol asyncRet && asyncRet.IsGenericType)
+                        {
+                            var defName = asyncRet.OriginalDefinition.ToDisplayString();
+                            if (defName == "System.Threading.Tasks.Task<TResult>" ||
+                                defName == "System.Threading.Tasks.ValueTask<TResult>")
+                                returnType = asyncRet.TypeArguments[0];
+                        }
+                        handlerType = handlerType.OriginalDefinition.Construct(returnType);
+                    }
+
                     handlerTypeName = handlerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     var ifaces = handlerType.AllInterfaces;
                     var ifaceNames = ifaces.Select(i => i.ToDisplayString()).ToList();

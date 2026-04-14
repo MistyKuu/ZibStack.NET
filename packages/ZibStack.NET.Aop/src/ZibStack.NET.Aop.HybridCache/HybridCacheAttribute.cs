@@ -23,7 +23,7 @@ namespace ZibStack.NET.Aop;
 /// public async Task&lt;Product&gt; GetProductAsync(int id) { ... }
 /// </code>
 /// </example>
-[AspectHandler(typeof(HybridCacheHandler))]
+[AspectHandler(typeof(HybridCacheHandler<>))]
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
 public sealed class HybridCacheAttribute : AspectAttribute
 {
