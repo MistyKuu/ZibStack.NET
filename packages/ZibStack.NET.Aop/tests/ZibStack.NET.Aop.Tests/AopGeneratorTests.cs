@@ -201,6 +201,53 @@ public class AopBehaviorTests
 
         Assert.Empty(_handler.Calls);
     }
+
+    // ── Generic class ──
+
+    [Fact]
+    public void GenericClass_ClassLevelAspect_InterceptsCall()
+    {
+        var svc = new GenericRepo<string>();
+        _ = svc.Get(1);
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "Get");
+    }
+
+    // ── Generic method ──
+
+    [Fact]
+    public void GenericMethod_MethodLevelAspect_InterceptsCall()
+    {
+        var svc = new GenericMethodService();
+        _ = svc.Fetch<string>(1);
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "Fetch");
+    }
+
+    // ── Inheritance ──
+
+    [Fact]
+    public void Inheritance_DerivedClass_InheritsAspect()
+    {
+        var svc = new DerivedAspectService();
+        var result = svc.Process(5);
+
+        Assert.Equal(10, result);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "Process");
+    }
+
+    // ── Multiple aspects ──
+
+    [Fact]
+    public void MultipleAspects_BothHandlersCalled()
+    {
+        var svc = new MultiAspectService();
+        var result = svc.Work(5);
+
+        Assert.Equal(6, result);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before");
+        Assert.True(_aroundHandler.Called);
+    }
 }
 
 // ── Pure runtime tests (no generator needed) ────────────────────────────────

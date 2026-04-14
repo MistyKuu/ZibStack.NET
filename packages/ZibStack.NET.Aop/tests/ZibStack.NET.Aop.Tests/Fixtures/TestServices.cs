@@ -75,3 +75,38 @@ public class SelectiveServiceImpl : ISelectiveService
 
     public int Untracked(int x) => x; // no aspect
 }
+
+// ── Generic class ───────────────────────────────────────────────────────────
+
+[Record]
+public class GenericRepo<T> where T : class
+{
+    public T? Get(int id) => default;
+}
+
+// ── Generic method ──────────────────────────────────────────────────────────
+
+public class GenericMethodService
+{
+    [Record]
+    public T? Fetch<T>(int id) where T : class => default;
+}
+
+// ── Inheritance ─────────────────────────────────────────────────────────────
+
+[Record]
+public class BaseAspectService
+{
+    public virtual int Process(int x) => x * 2;
+}
+
+public class DerivedAspectService : BaseAspectService { }
+
+// ── Multiple aspects on one method ──────────────────────────────────────────
+
+public class MultiAspectService
+{
+    [Record]
+    [RecordAround]
+    public int Work(int x) => x + 1;
+}

@@ -166,4 +166,64 @@ public class ZibLogBehaviorTests
         // The exit message contains elapsed ms (e.g., "in 0ms")
         Assert.Matches(@"\d+ms", exitLog.Message);
     }
+
+    // ── Method-level [Log] on impl, call through interface ──
+
+    [Fact]
+    public void InterfaceProxy_MethodLevelLog_InterceptsCall()
+    {
+        ISelectiveLogService svc = new SelectiveLogServiceImpl();
+        var result = svc.Tracked(5);
+
+        Assert.Equal(5, result);
+        var entries = _logProvider.AllEntries;
+        Assert.Contains(entries, e => e.Message.Contains("Tracked"));
+    }
+
+    [Fact]
+    public void InterfaceProxy_MethodWithoutLog_NotLogged()
+    {
+        _logProvider.Clear();
+        ISelectiveLogService svc = new SelectiveLogServiceImpl();
+        _ = svc.Untracked(5);
+
+        Assert.Empty(_logProvider.AllEntries);
+    }
+
+    // ── Generic class ──
+
+    [Fact]
+    public void GenericClass_ClassLevelLog_Logs()
+    {
+        var svc = new GenericLogRepo<string>();
+        _ = svc.Get(1);
+
+        var entries = _logProvider.AllEntries;
+        Assert.Contains(entries, e => e.Message.Contains("Get"));
+    }
+
+    // ── Generic method ──
+
+    [Fact]
+    public void GenericMethod_MethodLevelLog_Logs()
+    {
+        var svc = new GenericLogMethodService();
+        _ = svc.Fetch<string>(1);
+
+        var entries = _logProvider.AllEntries;
+        Assert.Contains(entries, e => e.Message.Contains("Fetch"));
+    }
+
+    // ── Inheritance ──
+
+    [Fact]
+    public void Inheritance_DerivedClass_InheritsLog()
+    {
+        var svc = new DerivedLogService();
+        var result = svc.Process(5);
+
+        Assert.Equal(10, result);
+        var entries = _logProvider.AllEntries;
+        Assert.Contains(entries, e => e.Message.Contains("Process"));
+    }
 }

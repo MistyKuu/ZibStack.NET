@@ -61,3 +61,45 @@ public class LoggedOrderServiceImpl : ILoggedOrderService
 {
     public int GetOrder(int id) => id;
 }
+
+// ── Interface + method-level [Log] on impl (not interface) ───────────────────
+
+public interface ISelectiveLogService
+{
+    int Tracked(int x);
+    int Untracked(int x);
+}
+
+public class SelectiveLogServiceImpl : ISelectiveLogService
+{
+    [Log]
+    public int Tracked(int x) => x;
+
+    public int Untracked(int x) => x; // no [Log]
+}
+
+// ── Generic class with [Log] ─────────────────────────────────────────────────
+
+[Log]
+public class GenericLogRepo<T> where T : class
+{
+    public T? Get(int id) => default;
+}
+
+// ── Generic method with [Log] ────────────────────────────────────────────────
+
+public class GenericLogMethodService
+{
+    [Log]
+    public T? Fetch<T>(int id) where T : class => default;
+}
+
+// ── Inheritance ──────────────────────────────────────────────────────────────
+
+[Log]
+public class BaseLogService
+{
+    public virtual int Process(int x) => x * 2;
+}
+
+public class DerivedLogService : BaseLogService { }
