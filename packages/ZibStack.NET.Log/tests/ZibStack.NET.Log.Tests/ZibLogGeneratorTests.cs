@@ -507,23 +507,7 @@ public class Svc { [Log] public int A(int x) => x; [Log] public int B(int x) => 
 public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2); } }
 ", parseOptions, path: "Src2.cs");
 
-        var references = new List<MetadataReference>
-        {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.LogAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
-        };
-        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var dll in new[] { "System.Runtime.dll", "netstandard.dll" })
-        {
-            var path = Path.Combine(runtimeDir, dll);
-            if (File.Exists(path)) references.Add(MetadataReference.CreateFromFile(path));
-        }
-        var loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
-        if (loggingAbstractions is not null)
-            references.Add(MetadataReference.CreateFromFile(loggingAbstractions.Location));
+        var references = BuildStandardReferences();
 
         var c1 = CSharpCompilation.Create("T", new[] { src1 }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
@@ -556,53 +540,8 @@ public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2
             });
         var syntaxTree = CSharpSyntaxTree.ParseText(source, parseOptions, path: "TestSource.cs");
 
-        var references = new List<MetadataReference>
-        {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
-            // Generated interceptors touch Stopwatch, IServiceProvider, EditorBrowsable,
-            // etc. Reference the assembly for each so the test compilation can bind them.
-            MetadataReference.CreateFromFile(typeof(System.Diagnostics.Stopwatch).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(System.IServiceProvider).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(System.ComponentModel.EditorBrowsableAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.LogAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
-        };
-
-        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var dll in new[]
-        {
-            "System.Runtime.dll", "netstandard.dll",
-            "System.Threading.Tasks.dll", "System.Collections.dll", "System.Linq.dll",
-            // net10 runtime: Stopwatch lives in System.Runtime.Extensions on netstandard2.0
-            // and in System.Runtime.dll on modern .NET, but we already typeof-reference it
-            // above so these adds are just belt-and-braces for any edge assemblies.
-            "System.Runtime.Extensions.dll", "System.ObjectModel.dll",
-            "System.Private.CoreLib.dll",
-        })
-        {
-            var path = Path.Combine(runtimeDir, dll);
-            if (File.Exists(path) && !references.Any(r => r is PortableExecutableReference per && per.FilePath == path))
-                references.Add(MetadataReference.CreateFromFile(path));
-        }
-
-        var loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
-        if (loggingAbstractions is null)
-        {
-            // Force-load the package referenced by the test csproj — otherwise the stub
-            // below gets used and misses higher-arity LoggerMessage.Define overloads,
-            // so every test with >3 loggable params fails to compile generated code.
-            try { _ = typeof(Microsoft.Extensions.Logging.ILogger); } catch { }
-            loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
-        }
-        if (loggingAbstractions is not null)
-        {
-            references.Add(MetadataReference.CreateFromFile(loggingAbstractions.Location));
-        }
-        else
+        var (references, hasRealLoggingAbstractions) = BuildStandardReferences();
+        if (!hasRealLoggingAbstractions)
         {
             var loggerStub = CSharpSyntaxTree.ParseText(@"
 namespace Microsoft.Extensions.Logging
@@ -625,6 +564,59 @@ namespace Microsoft.Extensions.Logging
         }
 
         return RunGeneratorWithTrees(new[] { syntaxTree }, references);
+    }
+
+    /// <summary>
+    /// Builds the metadata references required to compile both user test sources and
+    /// the generator's emitted interceptor files. Shared between the main RunGenerator
+    /// helper and the bespoke incremental-rerun test so every test uses the exact same
+    /// reference set (the incremental test was missing IServiceProvider / Stopwatch refs
+    /// before this helper existed, which produced CS0012 regressions).
+    /// </summary>
+    private static (List<MetadataReference> references, bool hasRealLoggingAbstractions) BuildStandardReferences()
+    {
+        var refs = new List<MetadataReference>
+        {
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
+            // Generated interceptors use these APIs — reference each by typeof to survive
+            // runtime split differences (netstandard2.0 vs net10).
+            MetadataReference.CreateFromFile(typeof(System.Diagnostics.Stopwatch).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.IServiceProvider).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.ComponentModel.EditorBrowsableAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.LogAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
+        };
+
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        foreach (var dll in new[]
+        {
+            "System.Runtime.dll", "netstandard.dll",
+            "System.Threading.Tasks.dll", "System.Collections.dll", "System.Linq.dll",
+            "System.Runtime.Extensions.dll", "System.ObjectModel.dll",
+        })
+        {
+            var path = Path.Combine(runtimeDir, dll);
+            if (File.Exists(path) && !refs.Any(r => r is PortableExecutableReference per && per.FilePath == path))
+                refs.Add(MetadataReference.CreateFromFile(path));
+        }
+
+        var loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
+        if (loggingAbstractions is null)
+        {
+            // Force-load the package referenced by the test csproj so the compilation gets
+            // the real LoggerMessage.Define<T1..T6> overloads instead of falling through to
+            // the minimal in-source stub (which maxes out at <T1,T2,T3>).
+            try { _ = typeof(Microsoft.Extensions.Logging.ILogger); } catch { }
+            loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
+        }
+        bool hasReal = loggingAbstractions is not null;
+        if (hasReal)
+            refs.Add(MetadataReference.CreateFromFile(loggingAbstractions!.Location));
+        return (refs, hasReal);
     }
 
     private static (Compilation compilation, ImmutableArray<Diagnostic> diagnostics, ImmutableArray<(string HintName, string Source)> generatedSources)

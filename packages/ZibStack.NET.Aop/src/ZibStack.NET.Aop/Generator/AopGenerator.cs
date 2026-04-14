@@ -151,12 +151,18 @@ public static class AopPipeline
                         if (!iface.Locations.Any(l => l.IsInSource))
                             continue;
 
-                        var ifaceFqn = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        // Use the ORIGINAL (open-generic) definition so the emitted extension
+                        // method reproduces the interface's type parameters verbatim (e.g.
+                        // `this IRepo<T>` with `return T?`) instead of a substituted closed
+                        // form (`this IRepo<T>` with `return string?` — which the compiler
+                        // rightly refuses as CS0029 since __result is typed as T).
+                        var ifaceOpen = iface.OriginalDefinition;
+                        var ifaceFqn = ifaceOpen.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                         if (interfaceOwner.ContainsKey(ifaceFqn))
                             continue; // first impl wins
 
                         var proxy = AopParser.ParseInterfaceProxy(
-                            iface, classSymbol,
+                            ifaceOpen, iface, classSymbol,
                             classData.Count > 0 ? classData : null,
                             ct);
                         if (proxy != null)
