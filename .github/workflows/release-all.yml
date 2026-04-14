@@ -44,6 +44,12 @@ jobs:
       - name: Pack 2 — Aop
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop/ZibStack.NET.Aop.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
+      - name: Pack 2a — Aop.Polly
+        run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/ZibStack.NET.Aop.Polly.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 2b — Aop.HybridCache
+        run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/ZibStack.NET.Aop.HybridCache.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
       - name: Pack 3 — Log.Abstractions
         run: dotnet pack packages/ZibStack.NET.Log/src/ZibStack.NET.Log.Abstractions/ZibStack.NET.Log.Abstractions.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
