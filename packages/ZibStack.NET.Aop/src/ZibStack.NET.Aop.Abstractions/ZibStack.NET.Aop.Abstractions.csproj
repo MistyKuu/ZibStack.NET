@@ -43,6 +43,10 @@
     <Compile Remove="AuthorizeAttribute.cs" />
     <Compile Remove="AuthorizeHandler.cs" />
     <Compile Remove="IAuthorizationProvider.cs" />
+    <Compile Remove="ValidateAttribute.cs" />
+    <Compile Remove="ValidateHandler.cs" />
+    <Compile Remove="TransactionAttribute.cs" />
+    <Compile Remove="TransactionHandler.cs" />
     <Compile Remove="AspectServiceCollectionExtensions.cs" />
   </ItemGroup>
 

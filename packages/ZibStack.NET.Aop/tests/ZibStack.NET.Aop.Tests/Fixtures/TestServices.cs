@@ -252,3 +252,40 @@ public class AuthorizeTestService
         return 1;
     }
 }
+
+// ── Built-in [Validate] ─────────────────────────────────────────────────────────
+
+public class ValidateRequest
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    public string? Name { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Range(1, 100)]
+    public int Age { get; set; }
+}
+
+public class ValidateTestService
+{
+    [Validate]
+    public string Process(ValidateRequest request) => $"ok:{request.Name}";
+
+    [Validate]
+    public string ProcessMulti(ValidateRequest request, int count) => $"ok:{count}";
+}
+
+// ── Built-in [Transaction] ──────────────────────────────────────────────────────
+
+public class TransactionTestService
+{
+    public bool Completed { get; private set; }
+
+    [Transaction]
+    public int DoWork(int x)
+    {
+        Completed = System.Transactions.Transaction.Current is not null;
+        return x * 2;
+    }
+
+    [Transaction]
+    public int DoWorkFailing(int x) => throw new InvalidOperationException("rollback");
+}

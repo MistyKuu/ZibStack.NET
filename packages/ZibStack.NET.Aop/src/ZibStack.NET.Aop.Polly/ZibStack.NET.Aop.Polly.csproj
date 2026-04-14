@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
     <PackageReference Include="Polly.Core" Version="8.5.2" />
+    <PackageReference Include="Polly.RateLimiting" Version="8.5.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -45,6 +45,8 @@ public static class AspectServiceCollectionExtensions
             return factory is not null ? new MetricsHandler(factory) : new MetricsHandler();
         });
         services.TryAddSingleton<TimeoutHandler>();
+        services.TryAddSingleton<ValidateHandler>();
+        services.TryAddSingleton<TransactionHandler>();
 
         // AuthorizeHandler requires IAuthorizationProvider — only register if
         // the provider is already in DI (otherwise users get a clear DI error

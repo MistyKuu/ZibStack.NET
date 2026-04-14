@@ -99,6 +99,8 @@ public class TimingHandler : IAspectHandler
 | `[Metrics]` | `MetricsHandler` | `System.Diagnostics.Metrics` counters + duration histogram |
 | `[Timeout]` | `TimeoutHandler` | Async execution time limit, throws `TimeoutException` |
 | `[Authorize]` | `AuthorizeHandler` | Policy/role-based authorization via `IAuthorizationProvider` |
+| `[Validate]` | `ValidateHandler` | Auto-validate parameters via `DataAnnotations` before execution |
+| `[Transaction]` | `TransactionHandler` | Wrap method in `TransactionScope` (commit/rollback) |
 
 Optional (separate packages):
 
@@ -106,6 +108,8 @@ Optional (separate packages):
 |---|---|---|
 | `[PollyRetry]` | `ZibStack.NET.Aop.Polly` | Polly retry — named pipelines, backoff strategies, exception filtering |
 | `[PollyHttpRetry]` | `ZibStack.NET.Aop.Polly` | Transient HTTP error retry (408/429/5xx, `HttpRequestException`, timeouts) |
+| `[PollyCircuitBreaker]` | `ZibStack.NET.Aop.Polly` | Circuit breaker — trips after failure threshold, fast-fails, half-open probe |
+| `[PollyRateLimiter]` | `ZibStack.NET.Aop.Polly` | Fixed window rate limiter — rejects excess calls |
 | `[HybridCache]` | `ZibStack.NET.Aop.HybridCache` | L1/L2 caching via `Microsoft.Extensions.Caching.Hybrid` |
 
 ### `[Trace]` — OpenTelemetry spans
@@ -353,6 +357,49 @@ public async Task<List<Order>> GetOrdersAsync(int userId) { ... }
 Setup: `builder.Services.AddHybridCache();`
 
 **Async methods only** (`IAsyncAroundAspectHandler`).
+
+### `[Validate]` — parameter validation
+
+```csharp
+[Validate]
+public Order CreateOrder(CreateOrderRequest request) { ... }
+// If request has [Required] Name = null → throws ArgumentException before method runs
+```
+
+Validates complex object parameters using `System.ComponentModel.DataAnnotations.Validator`. Primitives/strings are skipped. Works on sync and async methods.
+
+### `[Transaction]` — TransactionScope
+
+```csharp
+[Transaction]
+public void TransferFunds(int from, int to, decimal amount) { ... }
+
+[Transaction(IsolationLevel = IsolationLevel.ReadCommitted, TimeoutSeconds = 30)]
+public async Task<Order> PlaceOrderAsync(OrderRequest req) { ... }
+```
+
+Wraps method in `TransactionScope` with `TransactionScopeAsyncFlowOption.Enabled`. Commits on success, rolls back on exception. Properties: `IsolationLevel` (default `ReadCommitted`), `TimeoutSeconds` (default 30).
+
+### `[PollyCircuitBreaker]` — circuit breaker (optional)
+
+```csharp
+[PollyCircuitBreaker(FailureThreshold = 0.5, SamplingDurationSeconds = 30, BreakDurationSeconds = 15)]
+public async Task<string> CallExternalApiAsync() { ... }
+```
+
+After 50% failure rate (min 10 calls in 30s window), circuit opens — subsequent calls throw `BrokenCircuitException` for 15s. Then half-opens to probe. Each decorated method gets its own circuit.
+
+### `[PollyRateLimiter]` — rate limiting (optional)
+
+```csharp
+[PollyRateLimiter(PermitLimit = 100, WindowSeconds = 60)]
+public async Task<SearchResult> SearchAsync(string query) { ... }
+
+[PollyRateLimiter(PermitLimit = 5, WindowSeconds = 1)]
+public async Task SendNotificationAsync(int userId) { ... }
+```
+
+Fixed window rate limiter. Excess calls throw `RateLimiterRejectedException`. `QueueLimit` (default 0) controls how many excess calls queue instead of rejecting immediately.
 
 ### When to use `[Trace]` vs manual `using var activity = ...`
 

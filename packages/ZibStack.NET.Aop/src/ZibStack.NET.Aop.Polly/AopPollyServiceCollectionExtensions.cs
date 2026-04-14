@@ -31,6 +31,8 @@ public static class AopPollyServiceCollectionExtensions
         });
 
         services.TryAddSingleton<PollyHttpRetryHandler>();
+        services.TryAddSingleton<PollyCircuitBreakerHandler>();
+        services.TryAddSingleton<PollyRateLimiterHandler>();
 
         return services;
     }

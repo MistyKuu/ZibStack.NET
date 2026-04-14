@@ -13,7 +13,7 @@ dotnet add package ZibStack.NET.Aop.Polly
 
 ```csharp
 builder.Services.AddAop();        // built-in aspects ([Trace], [Retry], [Cache], ...)
-builder.Services.AddAopPolly();   // Polly aspects ([PollyRetry], [PollyHttpRetry])
+builder.Services.AddAopPolly();   // [PollyRetry], [PollyHttpRetry], [PollyCircuitBreaker], [PollyRateLimiter]
 
 var app = builder.Build();
 app.Services.UseAop();
@@ -25,7 +25,7 @@ app.Services.UseAop();
 [PollyHttpRetry]
 public async Task<string> CallApiAsync(string url) { ... }
 
-[HttpRetry(MaxRetryAttempts = 5, DelayMs = 500)]
+[PollyHttpRetry(MaxRetryAttempts = 5, DelayMs = 500)]
 public async Task<OrderResponse> PlaceOrderAsync(OrderRequest req) { ... }
 ```
 
@@ -57,6 +57,24 @@ builder.Services.AddResiliencePipeline("external-api", builder =>
     builder.AddTimeout(TimeSpan.FromSeconds(30));
 });
 ```
+
+## `[PollyCircuitBreaker]` — circuit breaker
+
+```csharp
+[PollyCircuitBreaker(FailureThreshold = 0.5, SamplingDurationSeconds = 30, BreakDurationSeconds = 15)]
+public async Task<string> CallExternalApiAsync() { ... }
+```
+
+Trips after failure threshold, fast-fails with `BrokenCircuitException`, half-opens after break duration.
+
+## `[PollyRateLimiter]` — rate limiting
+
+```csharp
+[PollyRateLimiter(PermitLimit = 100, WindowSeconds = 60)]
+public async Task<SearchResult> SearchAsync(string query) { ... }
+```
+
+Fixed window rate limiter. Excess calls throw `RateLimiterRejectedException`.
 
 ## Documentation
 

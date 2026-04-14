@@ -27,6 +27,8 @@ public class AopFixture : IDisposable
         services.AddSingleton<CacheHandler>();
         services.AddSingleton<MetricsHandler>();
         services.AddSingleton<TimeoutHandler>();
+        services.AddSingleton<ValidateHandler>();
+        services.AddSingleton<TransactionHandler>();
         services.AddSingleton<IAuthorizationProvider>(AuthProvider);
         services.AddSingleton<AuthorizeHandler>();
 

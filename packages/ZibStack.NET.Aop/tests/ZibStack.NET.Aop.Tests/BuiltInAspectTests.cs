@@ -402,3 +402,72 @@ public class AuthorizeTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AuthenticatedOnlyAsync());
     }
 }
+
+// ── Validate tests ───────────────────────────────────────────────────────────
+
+[Collection("Aop")]
+public class ValidateTests
+{
+    public ValidateTests(AopFixture _) { }
+
+    [Fact]
+    public void Validate_ValidRequest_Succeeds()
+    {
+        var svc = new ValidateTestService();
+        var result = svc.Process(new ValidateRequest { Name = "Alice", Age = 25 });
+        Assert.Equal("ok:Alice", result);
+    }
+
+    [Fact]
+    public void Validate_RequiredMissing_Throws()
+    {
+        var svc = new ValidateTestService();
+        var ex = Assert.Throws<ArgumentException>(() =>
+            svc.Process(new ValidateRequest { Age = 25 })); // Name is null
+        Assert.Contains("Name", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_RangeViolation_Throws()
+    {
+        var svc = new ValidateTestService();
+        var ex = Assert.Throws<ArgumentException>(() =>
+            svc.Process(new ValidateRequest { Name = "Bob", Age = 200 }));
+        Assert.Contains("Age", ex.Message);
+    }
+
+    [Fact]
+    public void Validate_PrimitiveParamsSkipped()
+    {
+        var svc = new ValidateTestService();
+        // count is int — not validated, only the request object is
+        var result = svc.ProcessMulti(new ValidateRequest { Name = "X", Age = 1 }, 42);
+        Assert.Equal("ok:42", result);
+    }
+}
+
+// ── Transaction tests ────────────────────────────────────────────────────────
+
+[Collection("Aop")]
+public class TransactionTests
+{
+    public TransactionTests(AopFixture _) { }
+
+    [Fact]
+    public void Transaction_WrapsInTransactionScope()
+    {
+        var svc = new TransactionTestService();
+        var result = svc.DoWork(5);
+
+        Assert.Equal(10, result);
+        Assert.True(svc.Completed); // Transaction.Current was not null inside the method
+    }
+
+    [Fact]
+    public void Transaction_RollsBackOnException()
+    {
+        var svc = new TransactionTestService();
+        Assert.Throws<InvalidOperationException>(() => svc.DoWorkFailing(5));
+        // TransactionScope disposes without Complete() → implicit rollback
+    }
+}
