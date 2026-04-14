@@ -1,569 +1,215 @@
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using ZibStack.NET.Aop.Generator;
+using Microsoft.Extensions.DependencyInjection;
+using ZibStack.NET.Aop;
+using ZibStack.NET.Aop.Tests.Fixtures;
 using Xunit;
 
 namespace ZibStack.NET.Aop.Tests;
 
-public class AopParserTests
-{
-    [Fact]
-    public void ParseMethod_ReturnsNull_WhenNoAspectAttribute()
-    {
-        var (method, _) = GetMethodSymbol(@"
-public class Svc { public void DoWork() { } }
-", "DoWork");
+// ── Serialize all tests that touch the static AspectServiceProvider ─────────
 
-        var result = AopParser.ParseMethod(method, default);
-        Assert.Null(result);
+[CollectionDefinition("Aop")]
+public class AopCollection : ICollectionFixture<AopFixture> { }
+
+public class AopFixture : IDisposable
+{
+    public RecordingHandler Handler { get; } = new();
+    public AroundRecordingHandler AroundHandler { get; } = new();
+
+    public AopFixture()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(Handler);
+        services.AddSingleton(AroundHandler);
+        var sp = services.BuildServiceProvider();
+        AspectServiceProvider.ServiceProvider = sp;
+    }
+
+    public void Dispose() { }
+}
+
+// ── Behavioral tests — verify aspects actually fire at runtime ──────────────
+
+[Collection("Aop")]
+public class AopBehaviorTests
+{
+    private readonly RecordingHandler _handler;
+    private readonly AroundRecordingHandler _aroundHandler;
+
+    public AopBehaviorTests(AopFixture fixture)
+    {
+        _handler = fixture.Handler;
+        _aroundHandler = fixture.AroundHandler;
+        _handler.Reset();
+        _aroundHandler.Reset();
+    }
+
+    // ── Method-level aspect ──
+
+    [Fact]
+    public void MethodLevelAspect_CallsOnBeforeAndOnAfter()
+    {
+        var svc = new MethodAspectService();
+        var result = svc.Add(2, 3);
+
+        Assert.Equal(5, result);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before");
+        Assert.Contains(_handler.Calls, c => c.Phase == "After");
     }
 
     [Fact]
-    public void ParseMethod_ReturnsModel_WhenHasAspect()
+    public void MethodWithoutAspect_DoesNotCallHandler()
     {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
+        _handler.Reset();
+        var svc = new MethodAspectService();
+        _ = svc.Plain(42);
 
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
+        Assert.Empty(_handler.Calls);
+    }
 
-public class Svc
-{
-    [MyAspect]
-    public int Add(int a, int b) => a + b;
-}
-", "Add");
+    // ── Class-level aspect ──
 
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Equal("Add", result!.MethodName);
-        Assert.Equal(2, result.Parameters.Count);
-        Assert.Single(result.Aspects);
-        Assert.Contains("MyAspectAttribute", result.Aspects[0].AttributeFullName);
+    [Fact]
+    public void ClassLevelAspect_InterceptsAllMethods()
+    {
+        var svc = new ClassAspectService();
+        _ = svc.Multiply(3, 4);
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "Multiply");
+        Assert.Contains(_handler.Calls, c => c.Phase == "After" && c.Context.MethodName == "Multiply");
+
+        _handler.Reset();
+        _ = svc.Echo("hi");
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "Echo");
+    }
+
+    // ── Async methods ──
+
+    [Fact]
+    public async Task AsyncMethod_CallsHandler()
+    {
+        var svc = new AsyncAspectService();
+        var result = await svc.ComputeAsync(5);
+
+        Assert.Equal(10, result);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before");
+        Assert.Contains(_handler.Calls, c => c.Phase == "After");
+    }
+
+    // ── Exception path ──
+
+    [Fact]
+    public void Exception_CallsOnException()
+    {
+        var svc = new ThrowingAspectService();
+        Assert.Throws<InvalidOperationException>(() => svc.Fail());
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before");
+        Assert.Contains(_handler.Calls, c => c.Phase == "Exception");
+        Assert.DoesNotContain(_handler.Calls, c => c.Phase == "After");
+    }
+
+    // ── Around handler ──
+
+    [Fact]
+    public void AroundHandler_WrapsExecution()
+    {
+        var svc = new AroundAspectService();
+        var result = svc.Double(7);
+
+        Assert.Equal(14, result);
+        Assert.True(_aroundHandler.Called);
+        Assert.True(_aroundHandler.ProceedCalled);
+    }
+
+    // ── Context carries correct metadata ──
+
+    [Fact]
+    public void Context_HasCorrectClassAndMethodName()
+    {
+        var svc = new MethodAspectService();
+        _ = svc.Add(1, 2);
+
+        var ctx = _handler.Calls.First(c => c.Phase == "Before").Context;
+        Assert.Equal("MethodAspectService", ctx.ClassName);
+        Assert.Equal("Add", ctx.MethodName);
     }
 
     [Fact]
-    public void ParseMethod_ReturnsNull_ForStaticMethod()
+    public void Context_HasParameterValues()
     {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
+        var svc = new MethodAspectService();
+        _ = svc.Add(10, 20);
 
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    public static void DoWork() { }
-}
-", "DoWork");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.Null(result);
+        var ctx = _handler.Calls.First(c => c.Phase == "Before").Context;
+        Assert.Equal(2, ctx.Parameters.Count);
+        Assert.Equal("a", ctx.Parameters[0].Name);
+        Assert.Equal(10, ctx.Parameters[0].Value);
+        Assert.Equal("b", ctx.Parameters[1].Name);
+        Assert.Equal(20, ctx.Parameters[1].Value);
     }
 
     [Fact]
-    public void ParseMethod_DetectsAsyncMethod()
+    public void Context_AfterHasReturnValue()
     {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using System.Threading.Tasks;
+        var svc = new MethodAspectService();
+        _ = svc.Add(3, 7);
 
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    public async Task<int> AddAsync(int a, int b) { await Task.CompletedTask; return a + b; }
-}
-", "AddAsync");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.IsAsync);
-        Assert.False(result.ReturnsVoid);
+        var ctx = _handler.Calls.First(c => c.Phase == "After").Context;
+        Assert.Equal(10, ctx.ReturnValue);
     }
 
     [Fact]
-    public void ParseMethod_DetectsVoidAsyncMethod()
+    public void Context_AfterHasElapsedMilliseconds()
     {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using System.Threading.Tasks;
+        var svc = new MethodAspectService();
+        _ = svc.Add(1, 1);
 
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
+        var ctx = _handler.Calls.First(c => c.Phase == "After").Context;
+        Assert.True(ctx.ElapsedMilliseconds >= 0);
+    }
 
-public class Svc
-{
-    [MyAspect]
-    public async Task DoWorkAsync() { await Task.CompletedTask; }
-}
-", "DoWorkAsync");
+    // ── Interface proxy ──
 
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.IsAsync);
-        Assert.True(result.ReturnsVoid); // Task without <T> = void for logging
+    [Fact]
+    public void InterfaceProxy_ClassLevelAspect_InterceptsCall()
+    {
+        IOrderAspectService svc = new OrderAspectServiceImpl();
+        var result = svc.GetOrder(42);
+
+        Assert.Equal(42, result);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before");
+        Assert.Contains(_handler.Calls, c => c.Phase == "After");
     }
 
     [Fact]
-    public void ParseMethod_DetectsMultipleAspects()
+    public void InterfaceProxy_MethodLevelAspect_InterceptsCall()
     {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
+        ISelectiveService svc = new SelectiveServiceImpl();
+        var result = svc.Tracked(5);
 
-[AspectHandler(typeof(H1))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class A1Attribute : AspectAttribute { }
-
-[AspectHandler(typeof(H2))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class A2Attribute : AspectAttribute { }
-
-public class H1 : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-public class H2 : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [A1] [A2]
-    public void DoWork() { }
-}
-", "DoWork");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Equal(2, result!.Aspects.Count);
+        Assert.Equal(5, result);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "Tracked");
     }
 
     [Fact]
-    public void ParseMethod_DetectsAroundHandler()
+    public void InterfaceProxy_MethodWithoutAspect_NotIntercepted()
     {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using System;
+        _handler.Reset();
+        ISelectiveService svc = new SelectiveServiceImpl();
+        _ = svc.Untracked(5);
 
-[AspectHandler(typeof(AH))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class AroundAttribute : AspectAttribute { }
-
-public class AH : IAroundAspectHandler
-{
-    public object? Around(AspectContext c, Func<object?> p) => p();
-}
-
-public class Svc
-{
-    [Around]
-    public int Add(int a, int b) => a + b;
-}
-", "Add");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.Aspects[0].IsAroundHandler);
+        Assert.Empty(_handler.Calls);
     }
-
-    [Fact]
-    public void ParseMethod_DetectsSensitiveParam()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using ZibStack.NET.Log;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
 }
 
-public class Svc
+// ── Pure runtime tests (no generator needed) ────────────────────────────────
+
+[Collection("Aop")]
+public class AspectContextTests
 {
-    [MyAspect]
-    public void Login(string user, [Sensitive] string pass) { }
-}
-", "Login");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.False(result!.Parameters[0].IsSensitive);
-        Assert.True(result.Parameters[1].IsSensitive);
-    }
-
     [Fact]
-    public void ParseMethod_DetectsNoLogParam()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using ZibStack.NET.Log;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    public void Upload(string name, [NoLog] byte[] data) { }
-}
-", "Upload");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.False(result!.Parameters[0].IsNoLog);
-        Assert.True(result.Parameters[1].IsNoLog);
-    }
-
-    [Fact]
-    public void ParseMethod_PicksUpClassLevelAspect()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-[MyAspect]
-public class Svc
-{
-    public void DoWork() { }
-}
-", "DoWork");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Single(result!.Aspects);
-    }
-
-    [Fact]
-    public void ParseMethod_MethodLevelOverridesClassLevel()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-[MyAspect]
-public class Svc
-{
-    [MyAspect]  // same aspect on method — should NOT duplicate
-    public void DoWork() { }
-}
-", "DoWork");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Single(result!.Aspects); // not 2
-    }
-
-    [Fact]
-    public void ParseMethod_RespectsAspectOrder()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method, AllowMultiple = true)]
-public class A1Attribute : AspectAttribute { }
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method, AllowMultiple = true)]
-public class A2Attribute : AspectAttribute { }
-
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [A2(Order = 10)]
-    [A1(Order = 1)]
-    public void DoWork() { }
-}
-", "DoWork");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Equal(2, result!.Aspects.Count);
-        Assert.Contains("A1", result.Aspects[0].AttributeFullName); // Order=1 first
-        Assert.Contains("A2", result.Aspects[1].AttributeFullName); // Order=10 second
-    }
-
-    // === Return attribute tests ===
-
-    [Fact]
-    public void ParseMethod_DetectsReturnSensitive()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using ZibStack.NET.Log;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    [return: Sensitive]
-    public string GetSecret() => ""secret"";
-}
-", "GetSecret");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.Aspects[0].SensitiveReturn);
-    }
-
-    [Fact]
-    public void ParseMethod_DetectsReturnNoLog()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using ZibStack.NET.Log;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    [return: NoLog]
-    public byte[] GetData() => new byte[0];
-}
-", "GetData");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.Aspects[0].NoLogReturn);
-    }
-
-    [Fact]
-    public void ParseMethod_VoidMethod()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    public void DoWork() { }
-}
-", "DoWork");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.ReturnsVoid);
-        Assert.False(result.IsAsync);
-    }
-
-    [Fact]
-    public void ParseMethod_NoParams_HasEmptyParameterList()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    public void Ping() { }
-}
-", "Ping");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Empty(result!.Parameters);
-    }
-
-    [Fact]
-    public void ParseMethod_MixedAroundAndBeforeAfter()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-using System;
-
-[AspectHandler(typeof(BeforeH))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class BeforeAspectAttribute : AspectAttribute { }
-
-[AspectHandler(typeof(AroundH))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class AroundAspectAttribute : AspectAttribute { }
-
-public class BeforeH : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, Exception e) {}
-}
-
-public class AroundH : IAroundAspectHandler {
-    public object? Around(AspectContext c, Func<object?> p) => p();
-}
-
-public class Svc
-{
-    [BeforeAspect]
-    [AroundAspect]
-    public int Add(int a, int b) => a + b;
-}
-", "Add");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Equal(2, result!.Aspects.Count);
-        var around = result.Aspects.First(a => a.IsAroundHandler);
-        var before = result.Aspects.First(a => !a.IsAroundHandler);
-        Assert.NotNull(around);
-        Assert.NotNull(before);
-    }
-
-    [Fact]
-    public void ParseMethod_DetectsComplexReturnType()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Order { public int Id { get; set; } }
-
-public class Svc
-{
-    [MyAspect]
-    public Order GetOrder(int id) => new Order { Id = id };
-}
-", "GetOrder");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.True(result!.HasComplexReturnType);
-    }
-
-    [Fact]
-    public void ParseMethod_PrimitiveReturnType_NotComplex()
-    {
-        var (method, _) = GetMethodSymbol(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public class Svc
-{
-    [MyAspect]
-    public int Add(int a, int b) => a + b;
-}
-", "Add");
-
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.False(result!.HasComplexReturnType);
-    }
-
-    // === Runtime tests ===
-
-    [Fact]
-    public void AspectContext_FormatParameters_MasksSensitive()
+    public void FormatParameters_MasksSensitive_SkipsNoLog()
     {
         var ctx = new AspectContext
         {
@@ -583,293 +229,17 @@ public class Svc
     }
 
     [Fact]
-    public void AspectServiceProvider_Resolve_ThrowsWhenNotConfigured()
+    public void Resolve_ThrowsWhenNotConfigured()
     {
-        AspectServiceProvider.ServiceProvider = null;
-        Assert.Throws<InvalidOperationException>(() => AspectServiceProvider.Resolve<object>());
-    }
-
-    // === Inheritance tests ===
-
-    private const string InheritanceSource = @"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class, Inherited = true)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-[MyAspect]
-public class BaseService
-{
-    public virtual void BaseMethod() { }
-}
-
-public class DerivedService : BaseService
-{
-    public override void BaseMethod() { }
-    public void DerivedMethod() { }
-}
-
-public class DerivedWithOwnAspect : BaseService
-{
-    [MyAspect]
-    public void OwnMethod() { }
-}
-";
-
-    [Fact]
-    public void Inheritance_BaseClassWithAspect_BaseMethodHasAspect()
-    {
-        var (method, _) = GetMethodSymbol(InheritanceSource, "BaseMethod", "BaseService");
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-        Assert.Single(result!.Aspects);
-    }
-
-    [Fact]
-    public void Inheritance_DerivedClass_OverriddenMethodInheritsAspect()
-    {
-        var (method, _) = GetMethodSymbol(InheritanceSource, "BaseMethod", "DerivedService");
-        var result = AopParser.ParseMethod(method, default);
-        // DerivedService does NOT have [MyAspect] on the class
-        // The override method itself doesn't have the attribute
-        // Question: does it inherit from base class?
-        // Answer depends on whether we check ContainingType's base types
-        if (result != null)
-            Assert.Single(result.Aspects);
-    }
-
-    [Fact]
-    public void Inheritance_DerivedClass_OwnMethodNoAspect()
-    {
-        var (method, _) = GetMethodSymbol(InheritanceSource, "DerivedMethod", "DerivedService");
-        var result = AopParser.ParseMethod(method, default);
-        // DerivedService has no [MyAspect] on class, DerivedMethod has no [MyAspect] on method
-        // Should be null — derived class doesn't inherit class-level attributes
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void Inheritance_DerivedWithOwnAspect_OwnMethodHasAspect()
-    {
-        var (method, _) = GetMethodSymbol(InheritanceSource, "OwnMethod", "DerivedWithOwnAspect");
-        var result = AopParser.ParseMethod(method, default);
-        Assert.NotNull(result);
-    }
-
-    // === Generic class support ===
-
-    [Fact]
-    public void ParseClass_GenericBaseClass_ExtractsTypeParameters()
-    {
-        var compilation = GetCompilation(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-[MyAspect]
-public abstract class BaseService<T> where T : class, new()
-{
-    public virtual T Produce() => new T();
-}
-");
-        var baseService = GetTypeByName(compilation, "BaseService");
-        Assert.NotNull(baseService);
-        var model = AopParser.ParseClass(baseService!, null, default);
-        Assert.NotNull(model);
-        Assert.Equal("BaseService", model!.ClassName);
-        Assert.Single(model.TypeParameters);
-        Assert.Equal("T", model.TypeParameters[0].Name);
-        Assert.Contains("class", model.TypeParameters[0].Constraints);
-        Assert.Contains("new()", model.TypeParameters[0].Constraints);
-    }
-
-    // === Interface-proxy synthesis ===
-
-    [Fact]
-    public void ParseInterfaceProxy_InheritsClassLevelAspectOntoInterfaceMethods()
-    {
-        var compilation = GetCompilation(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public interface IOrderService
-{
-    int GetOrder(int id);
-}
-
-[MyAspect]
-public class OrderService : IOrderService
-{
-    public int GetOrder(int id) => id;
-}
-");
-        var iface = GetTypeByName(compilation, "IOrderService");
-        var impl = GetTypeByName(compilation, "OrderService");
-        Assert.NotNull(iface);
-        Assert.NotNull(impl);
-
-        var proxy = AopParser.ParseInterfaceProxy(iface!.OriginalDefinition, iface!, impl!, null, default);
-        Assert.NotNull(proxy);
-        Assert.True(proxy!.IsInterfaceProxy);
-        Assert.Equal("IOrderService", proxy.ClassName);
-        Assert.Single(proxy.Methods);
-        Assert.Single(proxy.Methods[0].Aspects);
-        Assert.Contains("MyAspectAttribute", proxy.Methods[0].Aspects[0].AttributeFullName);
-    }
-
-    [Fact]
-    public void ParseInterfaceProxy_InheritsMethodLevelAspectFromImplMethod()
-    {
-        // Method-level aspects on the impl MUST propagate to the interface proxy so that
-        // calls via an interface reference (DI scenario) hit the aspect too. Only the
-        // specific interface method whose impl carries the attribute is included — not
-        // every method on the interface.
-        var compilation = GetCompilation(@"
-using ZibStack.NET.Aop;
-
-[AspectHandler(typeof(H))]
-[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
-public class MyAspectAttribute : AspectAttribute { }
-public class H : IAspectHandler {
-    public void OnBefore(AspectContext c) {}
-    public void OnAfter(AspectContext c) {}
-    public void OnException(AspectContext c, System.Exception e) {}
-}
-
-public interface IOrderService
-{
-    int GetOrder(int id);
-    int OtherMethod(int id);
-}
-
-public class OrderService : IOrderService
-{
-    [MyAspect]
-    public int GetOrder(int id) => id;
-    public int OtherMethod(int id) => id; // no aspect → not included in proxy
-}
-");
-        var iface = GetTypeByName(compilation, "IOrderService");
-        var impl = GetTypeByName(compilation, "OrderService");
-        var proxy = AopParser.ParseInterfaceProxy(iface!.OriginalDefinition, iface!, impl!, null, default);
-        Assert.NotNull(proxy);
-        Assert.True(proxy!.IsInterfaceProxy);
-        Assert.Single(proxy.Methods);
-        Assert.Equal("GetOrder", proxy.Methods[0].MethodName);
-    }
-
-    [Fact]
-    public void ParseInterfaceProxy_ReturnsNull_WhenNoAspectAnywhere()
-    {
-        var compilation = GetCompilation(@"
-using ZibStack.NET.Aop;
-
-public interface IOrderService { int GetOrder(int id); }
-public class OrderService : IOrderService
-{
-    public int GetOrder(int id) => id; // no aspect at all
-}
-");
-        var iface = GetTypeByName(compilation, "IOrderService");
-        var impl = GetTypeByName(compilation, "OrderService");
-        var proxy = AopParser.ParseInterfaceProxy(iface!.OriginalDefinition, iface!, impl!, null, default);
-        Assert.Null(proxy);
-    }
-
-    private static INamedTypeSymbol? GetTypeByName(Compilation compilation, string name)
-        => compilation.GlobalNamespace.GetTypeMembers(name).FirstOrDefault();
-
-    // === Helper ===
-
-    private static Compilation GetCompilation(string source)
-    {
-        var syntaxTree = CSharpSyntaxTree.ParseText(source);
-        var references = new List<MetadataReference>
+        var prev = AspectServiceProvider.ServiceProvider;
+        try
         {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
-        };
-        try { references.Add(MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.SensitiveAttribute).Assembly.Location)); } catch { }
-
-        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var dll in new[] { "System.Runtime.dll", "netstandard.dll", "System.Threading.Tasks.dll" })
-        {
-            var path = Path.Combine(runtimeDir, dll);
-            if (File.Exists(path))
-                references.Add(MetadataReference.CreateFromFile(path));
+            AspectServiceProvider.ServiceProvider = null;
+            Assert.Throws<InvalidOperationException>(() => AspectServiceProvider.Resolve<object>());
         }
-        return CSharpCompilation.Create("TestAsm",
-            new[] { syntaxTree }, references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-    }
-
-    private static (IMethodSymbol method, Compilation compilation) GetMethodSymbol(string source, string methodName, string? className = null)
-    {
-        var syntaxTree = CSharpSyntaxTree.ParseText(source);
-
-        var references = new List<MetadataReference>
+        finally
         {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
-        };
-
-        try { references.Add(MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.SensitiveAttribute).Assembly.Location)); } catch { }
-
-        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var dll in new[] { "System.Runtime.dll", "netstandard.dll", "System.Threading.Tasks.dll" })
-        {
-            var path = Path.Combine(runtimeDir, dll);
-            if (File.Exists(path))
-                references.Add(MetadataReference.CreateFromFile(path));
+            AspectServiceProvider.ServiceProvider = prev;
         }
-
-        var compilation = CSharpCompilation.Create("TestAsm",
-            new[] { syntaxTree }, references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
-        var model = compilation.GetSemanticModel(syntaxTree);
-
-        MethodDeclarationSyntax methodSyntax;
-        if (className != null)
-        {
-            var classSyntax = syntaxTree.GetRoot().DescendantNodes()
-                .OfType<ClassDeclarationSyntax>()
-                .First(c => c.Identifier.Text == className);
-            methodSyntax = classSyntax.DescendantNodes()
-                .OfType<MethodDeclarationSyntax>()
-                .First(m => m.Identifier.Text == methodName);
-        }
-        else
-        {
-            methodSyntax = syntaxTree.GetRoot().DescendantNodes()
-                .OfType<MethodDeclarationSyntax>()
-                .First(m => m.Identifier.Text == methodName);
-        }
-
-        var methodSymbol = model.GetDeclaredSymbol(methodSyntax)!;
-        return (methodSymbol, compilation);
     }
 }
