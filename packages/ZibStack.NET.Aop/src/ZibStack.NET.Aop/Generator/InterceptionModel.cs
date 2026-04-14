@@ -17,28 +17,75 @@ public sealed class InterceptedClassModel : IEquatable<InterceptedClassModel>
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> AspectClassData { get; }
 
+    /// <summary>
+    /// Open generic type parameters declared on the class (empty for non-generic classes).
+    /// E.g., <c>class BaseService&lt;T, TKey&gt;</c> → [T, TKey].
+    /// </summary>
+    public IReadOnlyList<TypeParameterModel> TypeParameters { get; }
+
+    /// <summary>
+    /// True when this model was synthesized to intercept calls made through an interface
+    /// that is implemented by a class carrying a class-level aspect (e.g. [Log] on the impl).
+    /// The emitted extension method has signature <c>this {Interface} @this</c>.
+    /// </summary>
+    public bool IsInterfaceProxy { get; }
+
     public InterceptedClassModel(
         string @namespace,
         string className,
         IReadOnlyList<InterceptedMethodModel> methods,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? aspectClassData = null,
-        bool isPartial = false)
+        bool isPartial = false,
+        IReadOnlyList<TypeParameterModel>? typeParameters = null,
+        bool isInterfaceProxy = false)
     {
         Namespace = @namespace;
         ClassName = className;
         Methods = methods;
         IsPartial = isPartial;
         AspectClassData = aspectClassData ?? new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+        TypeParameters = typeParameters ?? System.Array.Empty<TypeParameterModel>();
+        IsInterfaceProxy = isInterfaceProxy;
     }
 
     public bool Equals(InterceptedClassModel? other)
     {
         if (other is null) return false;
-        return Namespace == other.Namespace && ClassName == other.ClassName;
+        return Namespace == other.Namespace && ClassName == other.ClassName
+            && IsInterfaceProxy == other.IsInterfaceProxy;
     }
 
     public override bool Equals(object? obj) => Equals(obj as InterceptedClassModel);
-    public override int GetHashCode() => (Namespace, ClassName).GetHashCode();
+    public override int GetHashCode() => (Namespace, ClassName, IsInterfaceProxy).GetHashCode();
+}
+
+/// <summary>
+/// Open generic type parameter on a class (name + constraint clauses).
+/// Constraints are pre-rendered as C# snippets (e.g. "class", "new()", "global::MyNs.IFoo").
+/// </summary>
+public sealed class TypeParameterModel : IEquatable<TypeParameterModel>
+{
+    public string Name { get; }
+    public IReadOnlyList<string> Constraints { get; }
+
+    public TypeParameterModel(string name, IReadOnlyList<string> constraints)
+    {
+        Name = name;
+        Constraints = constraints;
+    }
+
+    public bool Equals(TypeParameterModel? other)
+    {
+        if (other is null) return false;
+        if (Name != other.Name) return false;
+        if (Constraints.Count != other.Constraints.Count) return false;
+        for (int i = 0; i < Constraints.Count; i++)
+            if (Constraints[i] != other.Constraints[i]) return false;
+        return true;
+    }
+
+    public override bool Equals(object? obj) => Equals(obj as TypeParameterModel);
+    public override int GetHashCode() => Name.GetHashCode();
 }
 
 public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>

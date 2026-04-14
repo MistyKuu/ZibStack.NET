@@ -108,15 +108,35 @@ public static class AopEmitter
         foreach (var cs in callSites)
             sb.AppendLine($"        {cs.InterceptsLocationAttributeSyntax}");
 
+        // Receiver type: for a generic class/interface we need to reproduce the open
+        // generic signature and attach the same type parameters to the extension method
+        // itself so the compiler can infer them from the `this` argument.
+        string receiverType = classModel.ClassName;
+        string methodTypeParamSuffix = "";
+        string whereClauses = "";
+        if (classModel.TypeParameters.Count > 0)
+        {
+            var tpNames = string.Join(", ", classModel.TypeParameters.Select(t => t.Name));
+            receiverType = $"{classModel.ClassName}<{tpNames}>";
+            methodTypeParamSuffix = $"<{tpNames}>";
+            var sbWhere = new StringBuilder();
+            foreach (var tp in classModel.TypeParameters)
+            {
+                if (tp.Constraints.Count == 0) continue;
+                sbWhere.Append($" where {tp.Name} : {string.Join(", ", tp.Constraints)}");
+            }
+            whereClauses = sbWhere.ToString();
+        }
+
         // Method signature
         var asyncKeyword = method.IsAsync ? "async " : "";
         var paramList = string.Join(", ",
             method.Parameters.Select(p => $"{p.FullyQualifiedType} {p.Name}"));
         var fullParamList = paramList.Length > 0
-            ? $"this {classModel.ClassName} @this, {paramList}"
-            : $"this {classModel.ClassName} @this";
+            ? $"this {receiverType} @this, {paramList}"
+            : $"this {receiverType} @this";
 
-        sb.AppendLine($"        internal static {asyncKeyword}{method.ReturnType} {method.MethodName}_Aop({fullParamList})");
+        sb.AppendLine($"        internal static {asyncKeyword}{method.ReturnType} {method.MethodName}_Aop{methodTypeParamSuffix}({fullParamList}){whereClauses}");
         sb.AppendLine("        {");
 
         var indent = "            ";

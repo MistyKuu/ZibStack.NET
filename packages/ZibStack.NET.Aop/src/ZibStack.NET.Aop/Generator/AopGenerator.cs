@@ -96,23 +96,75 @@ public static class AopPipeline
             }
         });
 
-        // Step 3: Parse classes with class-level data from providers
+        // Step 3: Parse classes with class-level data from providers, plus synthesize
+        // interface proxies so calls dispatched through interfaces (typical DI shape) hit
+        // the aspect even when [Log] is applied at class level on the implementation.
         var classModels = classSymbols
-            .Select((classSymbol, ct) =>
+            .Collect()
+            .SelectMany((symbols, ct) =>
             {
-                // Collect class data from all providers
-                var classData = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
-                foreach (var provider in providersCopy)
+                var models = new List<InterceptedClassModel>();
+                // Interface FQN → owning class FQN, for deterministic first-wins conflict
+                // resolution when multiple impls with class-level aspects share an interface.
+                var interfaceOwner = new Dictionary<string, string>();
+
+                // Process classes in a deterministic order to make the "first impl wins"
+                // rule reproducible across generator runs.
+                var ordered = symbols
+                    .OrderBy(s => s.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
+                    .ToList();
+
+                foreach (var classSymbol in ordered)
                 {
-                    var data = provider.ExtractClassData(classSymbol);
-                    if (data != null)
-                        classData[provider.AttributeFullName] = data;
+                    ct.ThrowIfCancellationRequested();
+
+                    // Collect class data from all providers
+                    var classData = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+                    foreach (var provider in providersCopy)
+                    {
+                        var data = provider.ExtractClassData(classSymbol);
+                        if (data != null)
+                            classData[provider.AttributeFullName] = data;
+                    }
+
+                    var model = AopParser.ParseClass(classSymbol, classData.Count > 0 ? classData : null, ct);
+                    if (model != null)
+                        models.Add(model);
+
+                    // Only propagate class-level aspects to interfaces — method-level [Log]
+                    // is a per-method opt-in and doesn't imply "intercept every call via
+                    // every interface this class implements".
+                    bool hasClassLevelAspect = classSymbol.GetAttributes()
+                        .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+                    if (!hasClassLevelAspect || classSymbol.TypeKind != TypeKind.Class)
+                        continue;
+
+                    var classFqn = classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    foreach (var iface in classSymbol.AllInterfaces)
+                    {
+                        // Skip framework/BCL interfaces (IDisposable, IEnumerable, …) — only
+                        // propagate to interfaces declared in the user's compilation.
+                        if (!iface.Locations.Any(l => l.IsInSource))
+                            continue;
+
+                        var ifaceFqn = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        if (interfaceOwner.ContainsKey(ifaceFqn))
+                            continue; // first impl wins
+
+                        var proxy = AopParser.ParseInterfaceProxy(
+                            iface, classSymbol,
+                            classData.Count > 0 ? classData : null,
+                            ct);
+                        if (proxy != null)
+                        {
+                            models.Add(proxy);
+                            interfaceOwner[ifaceFqn] = classFqn;
+                        }
+                    }
                 }
 
-                return AopParser.ParseClass(classSymbol, classData.Count > 0 ? classData : null, ct);
-            })
-            .Where(static m => m is not null)
-            .Select(static (m, _) => m!);
+                return models;
+            });
 
         // Step 4: Combine and emit
         var combined = classModels.Combine(callSiteCollection);
@@ -131,10 +183,17 @@ public static class AopPipeline
                 return;
 
             var source = AopEmitter.Emit(classModel, relevantCallSites, emittersCopy);
-            spc.AddSource($"{classModel.ClassName}_Aop.g.cs", source);
+            // Interface proxies use a distinct suffix so they don't collide with a real
+            // class named the same as the interface (and so both files can be emitted when
+            // a class has class-level [Log] + implements an interface of matching name).
+            var hintName = classModel.IsInterfaceProxy
+                ? $"{classModel.ClassName}_IfaceAop.g.cs"
+                : $"{classModel.ClassName}_Aop.g.cs";
+            spc.AddSource(hintName, source);
 
-            // Emit code map if source class is partial
-            if (classModel.IsPartial)
+            // Emit code map only for partial classes (never for interface proxies — they
+            // refer to an interface, not a class, so `partial class` wouldn't compile).
+            if (classModel.IsPartial && !classModel.IsInterfaceProxy)
             {
                 var codeMap = GenerateAopCodeMap(classModel);
                 spc.AddSource($"{classModel.ClassName}.Aop.CodeMap.g.cs", codeMap);
@@ -171,7 +230,16 @@ public static class AopPipeline
         }
         sb.AppendLine("/// </list>");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine($"partial class {classModel.ClassName} {{ }}");
+
+        // Preserve the original open-generic signature so the partial hook actually matches
+        // the user-declared type (`partial class BaseService` would NOT match `BaseService<T>`).
+        string classNameWithTypeParams = classModel.ClassName;
+        if (classModel.TypeParameters.Count > 0)
+        {
+            var tpNames = string.Join(", ", classModel.TypeParameters.Select(t => t.Name));
+            classNameWithTypeParams = $"{classModel.ClassName}<{tpNames}>";
+        }
+        sb.AppendLine($"partial class {classNameWithTypeParams} {{ }}");
 
         return sb.ToString();
     }
