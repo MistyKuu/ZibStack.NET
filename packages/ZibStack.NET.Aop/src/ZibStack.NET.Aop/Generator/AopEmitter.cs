@@ -62,8 +62,22 @@ public static class AopEmitter
         sb.AppendLine("{");
         sb.AppendLine();
         sb.AppendLine($"    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
-        sb.AppendLine($"    internal static class __{classModel.ClassName}_Aop");
+        // Wrapper name includes a hash segment for interface proxies so that a real class
+        // named the same as the interface can coexist with its interface-proxy in the same
+        // namespace without producing duplicate static-class definitions.
+        var wrapperName = classModel.IsInterfaceProxy
+            ? $"__{classModel.ClassName}_IfaceAop"
+            : $"__{classModel.ClassName}_Aop";
+        sb.AppendLine($"    internal static class {wrapperName}");
         sb.AppendLine("    {");
+
+        // Reset per-class state in each emitter before any emission. This is critical —
+        // the same emitter instance is reused across incremental generator runs and across
+        // different class-emissions within a single run; without this reset, state like
+        // "I already wrote __cachedLogger for this class" leaks across and produces
+        // generated files that reference undefined members.
+        foreach (var emitter in emitters.Values)
+            emitter.BeginClass(classModel);
 
         // Per-method: class members from emitters
         foreach (var method in classModel.Methods)
@@ -110,17 +124,24 @@ public static class AopEmitter
 
         // Receiver type: for a generic class/interface we need to reproduce the open
         // generic signature and attach the same type parameters to the extension method
-        // itself so the compiler can infer them from the `this` argument.
+        // itself so the compiler can infer them from the `this` argument. Method-level
+        // type parameters come after class-level ones.
         string receiverType = classModel.ClassName;
+        var allTypeParams = new List<TypeParameterModel>();
+        allTypeParams.AddRange(classModel.TypeParameters);
+        allTypeParams.AddRange(method.MethodTypeParameters);
         string methodTypeParamSuffix = "";
         string whereClauses = "";
         if (classModel.TypeParameters.Count > 0)
         {
             var tpNames = string.Join(", ", classModel.TypeParameters.Select(t => t.Name));
             receiverType = $"{classModel.ClassName}<{tpNames}>";
-            methodTypeParamSuffix = $"<{tpNames}>";
+        }
+        if (allTypeParams.Count > 0)
+        {
+            methodTypeParamSuffix = $"<{string.Join(", ", allTypeParams.Select(t => t.Name))}>";
             var sbWhere = new StringBuilder();
-            foreach (var tp in classModel.TypeParameters)
+            foreach (var tp in allTypeParams)
             {
                 if (tp.Constraints.Count == 0) continue;
                 sbWhere.Append($" where {tp.Name} : {string.Join(", ", tp.Constraints)}");
@@ -166,7 +187,14 @@ public static class AopEmitter
 
         // Build the proceed chain for around handlers
         var callArgs = string.Join(", ", method.Parameters.Select(p => p.Name));
-        var originalCall = $"@this.{method.MethodName}({callArgs})";
+        // Pass method-level type arguments explicitly. Inference usually works when a
+        // method type parameter appears in the parameter list, but fails when it only
+        // appears in the return type (e.g. `T Create<T>() where T : new()`), so we always
+        // spell them out to stay on the safe path.
+        var methodTypeArgs = method.MethodTypeParameters.Count > 0
+            ? $"<{string.Join(", ", method.MethodTypeParameters.Select(t => t.Name))}>"
+            : "";
+        var originalCall = $"@this.{method.MethodName}{methodTypeArgs}({callArgs})";
 
         if (aroundAspects.Count > 0)
         {

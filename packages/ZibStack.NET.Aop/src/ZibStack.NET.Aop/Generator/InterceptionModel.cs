@@ -100,6 +100,20 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
     public bool HasComplexReturnType { get; }
     public SanitizedTypeModel? SanitizedReturnType { get; }
 
+    /// <summary>
+    /// Type parameters declared on the method itself (e.g. <c>T DoWork&lt;T&gt;(T item)</c> → [T]).
+    /// These are distinct from the enclosing class's type parameters.
+    /// </summary>
+    public IReadOnlyList<TypeParameterModel> MethodTypeParameters { get; }
+
+    /// <summary>
+    /// True when the method declares its own type parameters (generic method). Consumers use
+    /// this to decide whether per-class cached <c>LoggerMessage.Define&lt;T&gt;</c> delegates
+    /// are safe to emit — they aren't, since those delegates live in a non-generic static
+    /// wrapper and can't reference method-level type parameters.
+    /// </summary>
+    public bool IsGenericMethod => MethodTypeParameters.Count > 0;
+
     public InterceptedMethodModel(
         string methodName,
         string returnType,
@@ -109,7 +123,8 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
         IReadOnlyList<InterceptedParameterModel> parameters,
         IReadOnlyList<AspectInfo> aspects,
         bool hasComplexReturnType = false,
-        SanitizedTypeModel? sanitizedReturnType = null)
+        SanitizedTypeModel? sanitizedReturnType = null,
+        IReadOnlyList<TypeParameterModel>? methodTypeParameters = null)
     {
         MethodName = methodName;
         ReturnType = returnType;
@@ -120,12 +135,14 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
         Aspects = aspects;
         HasComplexReturnType = hasComplexReturnType;
         SanitizedReturnType = sanitizedReturnType;
+        MethodTypeParameters = methodTypeParameters ?? System.Array.Empty<TypeParameterModel>();
     }
 
     public bool Equals(InterceptedMethodModel? other)
     {
         if (other is null) return false;
-        return MethodName == other.MethodName && ReturnType == other.ReturnType;
+        return MethodName == other.MethodName && ReturnType == other.ReturnType
+            && MethodTypeParameters.Count == other.MethodTypeParameters.Count;
     }
 
     public override bool Equals(object? obj) => Equals(obj as InterceptedMethodModel);
