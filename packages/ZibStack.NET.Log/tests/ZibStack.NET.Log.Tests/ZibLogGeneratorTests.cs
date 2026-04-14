@@ -121,7 +121,7 @@ using ZibStack.NET.Log;
 public class Repo
 {
     [Log]
-    public T Fetch<T>(int id) where T : class, new() => new T();
+    public T? Fetch<T>(int id) where T : class => default;
 }
 
 public class Caller
@@ -144,7 +144,7 @@ using ZibStack.NET.Log;
 public class MixedService
 {
     public int Plain(int id) => id;
-    public T Generic<T>(int id) where T : class, new() => new T();
+    public T? Generic<T>(int id) where T : class => default;
 }
 
 public class Caller
@@ -162,9 +162,9 @@ public class Caller
 using ZibStack.NET.Log;
 
 [Log]
-public class Repo<T> where T : class, new()
+public class Repo<T> where T : class
 {
-    public T Get(int id) => new T();
+    public T? Get(int id) => default;
 }
 
 public class Caller
