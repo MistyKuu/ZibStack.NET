@@ -574,6 +574,15 @@ public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2
 
         var loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
             .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
+        if (loggingAbstractions is null)
+        {
+            // Force-load the package referenced by the test csproj — otherwise the stub
+            // below gets used and misses higher-arity LoggerMessage.Define overloads,
+            // so every test with >3 loggable params fails to compile generated code.
+            try { _ = typeof(Microsoft.Extensions.Logging.ILogger); } catch { }
+            loggingAbstractions = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == "Microsoft.Extensions.Logging.Abstractions");
+        }
         if (loggingAbstractions is not null)
         {
             references.Add(MetadataReference.CreateFromFile(loggingAbstractions.Location));
@@ -676,17 +685,22 @@ namespace Microsoft.Extensions.Logging
             return;
 
         var dump = new System.Text.StringBuilder();
+        dump.AppendLine($"=== SUMMARY: interceptorOk={interceptorOk}, genErrors={generatorErrors.Count}, compileErrors={compileErrors.Count}, genFiles={generated.Length} ===");
         if (!interceptorOk) dump.AppendLine("=== Missing interceptor ===").AppendLine(interceptorMissingMsg);
         dump.AppendLine("=== Generator diagnostics ===");
         foreach (var d in generatorErrors) dump.AppendLine(d.ToString());
         dump.AppendLine("=== Compile diagnostics ===");
         foreach (var d in compileErrors) dump.AppendLine(d.ToString());
+        dump.AppendLine("=== Generated file hints ===");
+        foreach (var (name, _) in generated) dump.AppendLine(name);
         dump.AppendLine("=== Generated files ===");
         foreach (var (name, src) in generated)
         {
             dump.AppendLine($"--- {name} ---");
             dump.AppendLine(src);
         }
+        // Duplicate the summary at the end so it survives xUnit output truncation.
+        dump.AppendLine($"=== SUMMARY (repeat): interceptorOk={interceptorOk}, genErrors={generatorErrors.Count}, compileErrors={compileErrors.Count}, genFiles={generated.Length} ===");
         Assert.Fail(dump.ToString());
     }
 }
