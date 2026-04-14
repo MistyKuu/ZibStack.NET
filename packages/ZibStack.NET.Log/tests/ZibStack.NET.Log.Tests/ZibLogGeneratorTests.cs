@@ -242,6 +242,60 @@ public class Caller
     }
 
     [Fact]
+    public void Integration_MethodLevelLog_CallViaInterface_Compiles()
+    {
+        // User's follow-up bug: [Log] on a specific impl method (not the class) must
+        // intercept calls going through an interface reference too. Previously nothing
+        // was generated because interface-proxy synthesis only ran for class-level aspects.
+        AssertCompilesCleanly(@"
+using ZibStack.NET.Log;
+
+public interface IOrderService
+{
+    int GetOrder(int id);
+    int OtherMethod(int id);
+}
+
+public class OrderService : IOrderService
+{
+    [Log]
+    public int GetOrder(int id) => id;
+    public int OtherMethod(int id) => id;
+}
+
+public class Caller
+{
+    public int RunViaIface(IOrderService svc) => svc.GetOrder(42);
+    public int RunOtherViaIface(IOrderService svc) => svc.OtherMethod(42); // must stay un-intercepted
+}
+");
+    }
+
+    [Fact]
+    public void Integration_MethodLevelLog_OnGenericInterfaceImpl_CallViaInterface_Compiles()
+    {
+        AssertCompilesCleanly(@"
+using ZibStack.NET.Log;
+
+public interface IRepo<T> where T : class
+{
+    T? Get(int id);
+}
+
+public class StringRepo : IRepo<string>
+{
+    [Log]
+    public string? Get(int id) => id.ToString();
+}
+
+public class Caller
+{
+    public string? Run(IRepo<string> r) => r.Get(1);
+}
+");
+    }
+
+    [Fact]
     public void Integration_ClassLevelLog_CallViaInterface_Compiles()
     {
         // User's main complaint: [Log] on class + DI-style call via interface ref

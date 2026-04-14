@@ -739,8 +739,12 @@ public class OrderService : IOrderService
     }
 
     [Fact]
-    public void ParseInterfaceProxy_ReturnsNull_WhenImplHasNoClassLevelAspect()
+    public void ParseInterfaceProxy_InheritsMethodLevelAspectFromImplMethod()
     {
+        // Method-level aspects on the impl MUST propagate to the interface proxy so that
+        // calls via an interface reference (DI scenario) hit the aspect too. Only the
+        // specific interface method whose impl carries the attribute is included — not
+        // every method on the interface.
         var compilation = GetCompilation(@"
 using ZibStack.NET.Aop;
 
@@ -753,12 +757,38 @@ public class H : IAspectHandler {
     public void OnException(AspectContext c, System.Exception e) {}
 }
 
-public interface IOrderService { int GetOrder(int id); }
+public interface IOrderService
+{
+    int GetOrder(int id);
+    int OtherMethod(int id);
+}
 
 public class OrderService : IOrderService
 {
-    [MyAspect] // method-level only; should NOT propagate to the interface
+    [MyAspect]
     public int GetOrder(int id) => id;
+    public int OtherMethod(int id) => id; // no aspect → not included in proxy
+}
+");
+        var iface = GetTypeByName(compilation, "IOrderService");
+        var impl = GetTypeByName(compilation, "OrderService");
+        var proxy = AopParser.ParseInterfaceProxy(iface!, impl!, null, default);
+        Assert.NotNull(proxy);
+        Assert.True(proxy!.IsInterfaceProxy);
+        Assert.Single(proxy.Methods);
+        Assert.Equal("GetOrder", proxy.Methods[0].MethodName);
+    }
+
+    [Fact]
+    public void ParseInterfaceProxy_ReturnsNull_WhenNoAspectAnywhere()
+    {
+        var compilation = GetCompilation(@"
+using ZibStack.NET.Aop;
+
+public interface IOrderService { int GetOrder(int id); }
+public class OrderService : IOrderService
+{
+    public int GetOrder(int id) => id; // no aspect at all
 }
 ");
         var iface = GetTypeByName(compilation, "IOrderService");

@@ -131,12 +131,16 @@ public static class AopPipeline
                     if (model != null)
                         models.Add(model);
 
-                    // Only propagate class-level aspects to interfaces — method-level [Log]
-                    // is a per-method opt-in and doesn't imply "intercept every call via
-                    // every interface this class implements".
+                    // Propagate to interfaces whenever the class has ANY aspect — class-level
+                    // or method-level. A method-level [Log] on an impl must also intercept
+                    // calls made through an interface reference, otherwise the aspect
+                    // silently no-ops in DI scenarios.
                     bool hasClassLevelAspect = classSymbol.GetAttributes()
                         .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
-                    if (!hasClassLevelAspect || classSymbol.TypeKind != TypeKind.Class)
+                    bool hasMethodLevelAspect = classSymbol.GetMembers()
+                        .OfType<IMethodSymbol>()
+                        .Any(m => m.GetAttributes().Any(a => DerivesFromAspectAttribute(a.AttributeClass)));
+                    if ((!hasClassLevelAspect && !hasMethodLevelAspect) || classSymbol.TypeKind != TypeKind.Class)
                         continue;
 
                     var classFqn = classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);

@@ -272,10 +272,12 @@ public static class AopParser
     /// <summary>
     /// Synthesizes an interface class model so that call-sites going through an interface
     /// reference (e.g. via DI) still get intercepted when a concrete implementation class
-    /// carries a class-level aspect (e.g. <c>[Log]</c> on the impl class).
+    /// carries an aspect (class-level <c>[Log]</c> on the impl, OR method-level on the
+    /// specific impl method).
     ///
     /// The returned model uses the interface's name/namespace (so call-site matching works)
-    /// but its methods inherit the impl class's class-level aspects.
+    /// but its methods inherit whichever aspects apply: interface-member-level, impl-method-
+    /// level for the specific implementation, and impl-class-level.
     /// </summary>
     public static InterceptedClassModel? ParseInterfaceProxy(
         INamedTypeSymbol interfaceSymbol,
@@ -290,8 +292,6 @@ public static class AopParser
         var classLevelAspectAttrs = implAttrs
             .Where(a => DerivesFromAspectAttribute(a.AttributeClass))
             .ToImmutableArray();
-        if (classLevelAspectAttrs.Length == 0)
-            return null;
 
         var methods = new List<InterceptedMethodModel>();
 
@@ -310,8 +310,16 @@ public static class AopParser
 
             // Method-level aspects declared on the interface member itself (rare but valid).
             CollectAspects(methodSymbol.GetAttributes(), methodSymbol, aspects, seenAspectTypes);
-            // Class-level aspects from the impl are the whole reason this proxy exists.
-            CollectAspects(classLevelAspectAttrs, methodSymbol, aspects, seenAspectTypes);
+
+            // Method-level aspects on the concrete implementation of THIS interface member.
+            // This is what makes `[Log]` on an impl method intercept calls made via the
+            // interface reference too.
+            if (implClassSymbol.FindImplementationForInterfaceMember(methodSymbol) is IMethodSymbol implMethod)
+                CollectAspects(implMethod.GetAttributes(), methodSymbol, aspects, seenAspectTypes);
+
+            // Impl class-level aspects (e.g. `[Log]` on the class) apply to every public method.
+            if (classLevelAspectAttrs.Length > 0)
+                CollectAspects(classLevelAspectAttrs, methodSymbol, aspects, seenAspectTypes);
 
             if (aspects.Count == 0)
                 continue;
