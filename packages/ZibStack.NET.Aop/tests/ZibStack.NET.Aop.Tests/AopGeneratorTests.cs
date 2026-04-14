@@ -662,7 +662,138 @@ public class DerivedWithOwnAspect : BaseService
         Assert.NotNull(result);
     }
 
+    // === Generic class support ===
+
+    [Fact]
+    public void ParseClass_GenericBaseClass_ExtractsTypeParameters()
+    {
+        var compilation = GetCompilation(@"
+using ZibStack.NET.Aop;
+
+[AspectHandler(typeof(H))]
+[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+public class MyAspectAttribute : AspectAttribute { }
+public class H : IAspectHandler {
+    public void OnBefore(AspectContext c) {}
+    public void OnAfter(AspectContext c) {}
+    public void OnException(AspectContext c, System.Exception e) {}
+}
+
+[MyAspect]
+public abstract class BaseService<T> where T : class, new()
+{
+    public virtual T Produce() => new T();
+}
+");
+        var baseService = GetTypeByName(compilation, "BaseService");
+        Assert.NotNull(baseService);
+        var model = AopParser.ParseClass(baseService!, null, default);
+        Assert.NotNull(model);
+        Assert.Equal("BaseService", model!.ClassName);
+        Assert.Single(model.TypeParameters);
+        Assert.Equal("T", model.TypeParameters[0].Name);
+        Assert.Contains("class", model.TypeParameters[0].Constraints);
+        Assert.Contains("new()", model.TypeParameters[0].Constraints);
+    }
+
+    // === Interface-proxy synthesis ===
+
+    [Fact]
+    public void ParseInterfaceProxy_InheritsClassLevelAspectOntoInterfaceMethods()
+    {
+        var compilation = GetCompilation(@"
+using ZibStack.NET.Aop;
+
+[AspectHandler(typeof(H))]
+[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+public class MyAspectAttribute : AspectAttribute { }
+public class H : IAspectHandler {
+    public void OnBefore(AspectContext c) {}
+    public void OnAfter(AspectContext c) {}
+    public void OnException(AspectContext c, System.Exception e) {}
+}
+
+public interface IOrderService
+{
+    int GetOrder(int id);
+}
+
+[MyAspect]
+public class OrderService : IOrderService
+{
+    public int GetOrder(int id) => id;
+}
+");
+        var iface = GetTypeByName(compilation, "IOrderService");
+        var impl = GetTypeByName(compilation, "OrderService");
+        Assert.NotNull(iface);
+        Assert.NotNull(impl);
+
+        var proxy = AopParser.ParseInterfaceProxy(iface!, impl!, null, default);
+        Assert.NotNull(proxy);
+        Assert.True(proxy!.IsInterfaceProxy);
+        Assert.Equal("IOrderService", proxy.ClassName);
+        Assert.Single(proxy.Methods);
+        Assert.Single(proxy.Methods[0].Aspects);
+        Assert.Contains("MyAspectAttribute", proxy.Methods[0].Aspects[0].AttributeFullName);
+    }
+
+    [Fact]
+    public void ParseInterfaceProxy_ReturnsNull_WhenImplHasNoClassLevelAspect()
+    {
+        var compilation = GetCompilation(@"
+using ZibStack.NET.Aop;
+
+[AspectHandler(typeof(H))]
+[System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+public class MyAspectAttribute : AspectAttribute { }
+public class H : IAspectHandler {
+    public void OnBefore(AspectContext c) {}
+    public void OnAfter(AspectContext c) {}
+    public void OnException(AspectContext c, System.Exception e) {}
+}
+
+public interface IOrderService { int GetOrder(int id); }
+
+public class OrderService : IOrderService
+{
+    [MyAspect] // method-level only; should NOT propagate to the interface
+    public int GetOrder(int id) => id;
+}
+");
+        var iface = GetTypeByName(compilation, "IOrderService");
+        var impl = GetTypeByName(compilation, "OrderService");
+        var proxy = AopParser.ParseInterfaceProxy(iface!, impl!, null, default);
+        Assert.Null(proxy);
+    }
+
+    private static INamedTypeSymbol? GetTypeByName(Compilation compilation, string name)
+        => compilation.GlobalNamespace.GetTypeMembers(name).FirstOrDefault();
+
     // === Helper ===
+
+    private static Compilation GetCompilation(string source)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(source);
+        var references = new List<MetadataReference>
+        {
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(Attribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(ZibStack.NET.Aop.AspectAttribute).Assembly.Location),
+        };
+        try { references.Add(MetadataReference.CreateFromFile(typeof(ZibStack.NET.Log.SensitiveAttribute).Assembly.Location)); } catch { }
+
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        foreach (var dll in new[] { "System.Runtime.dll", "netstandard.dll", "System.Threading.Tasks.dll" })
+        {
+            var path = Path.Combine(runtimeDir, dll);
+            if (File.Exists(path))
+                references.Add(MetadataReference.CreateFromFile(path));
+        }
+        return CSharpCompilation.Create("TestAsm",
+            new[] { syntaxTree }, references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
 
     private static (IMethodSymbol method, Compilation compilation) GetMethodSymbol(string source, string methodName, string? className = null)
     {

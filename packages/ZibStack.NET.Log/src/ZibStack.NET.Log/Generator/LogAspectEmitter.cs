@@ -31,9 +31,15 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     {
         if (_emittedClasses.Add(cls.ClassName))
         {
-            // Cached DI-resolved logger — resolved once per class
-            sb.AppendLine($"{indent}private static global::Microsoft.Extensions.Logging.ILogger? __cachedLogger;");
-            sb.AppendLine();
+            // Cached DI-resolved logger — resolved once per class.
+            // Generic classes can't share a single ILogger<T> across different closed
+            // constructions (different T → different ILogger<T>), so we skip the cache
+            // and resolve inline for generic types.
+            if (cls.TypeParameters.Count == 0)
+            {
+                sb.AppendLine($"{indent}private static global::Microsoft.Extensions.Logging.ILogger? __cachedLogger;");
+                sb.AppendLine();
+            }
 
             // Emit sanitizer methods for types with [Sensitive]/[NoLog] properties
             var emittedSanitizers = new HashSet<string>();
@@ -100,7 +106,19 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         sb.AppendLine($"{indent}        \"ZibStack.NET.Aop.AspectServiceProvider.ServiceProvider is not set. \" +");
         sb.AppendLine($"{indent}        \"[Log] resolves ILogger<T> from DI; you must wire it once at app startup. \" +");
         sb.AppendLine($"{indent}        \"For ASP.NET Core: 'var app = builder.Build(); app.Services.UseAop();'\");");
-        sb.AppendLine($"{indent}var __logger = __cachedLogger ??= (global::Microsoft.Extensions.Logging.ILogger)__sp.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{cls.ClassName}>))!;");
+        // For generic classes we can't cache ILogger<T> in a static field (different T
+        // values must resolve to distinct ILogger<T> instances), so resolve inline.
+        var loggerCategory = cls.TypeParameters.Count > 0
+            ? $"{cls.ClassName}<{string.Join(", ", cls.TypeParameters.Select(t => t.Name))}>"
+            : cls.ClassName;
+        if (cls.TypeParameters.Count == 0)
+        {
+            sb.AppendLine($"{indent}var __logger = __cachedLogger ??= (global::Microsoft.Extensions.Logging.ILogger)__sp.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{loggerCategory}>))!;");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}var __logger = (global::Microsoft.Extensions.Logging.ILogger)__sp.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{loggerCategory}>))!;");
+        }
 
         if (loggable.Count <= 6)
         {

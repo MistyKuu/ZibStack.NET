@@ -40,6 +40,21 @@ public static class AopParser
         if (!hasAspect && methodSymbol.ContainingType != null)
             hasAspect = methodSymbol.ContainingType.GetAttributes()
                 .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+
+        // Interface-dispatch: a consumer calling through an interface reference sees
+        // ContainingType = interface, which often has no [aspect] attribute even when the
+        // concrete impl class carries [Log] at class level. We provisionally accept any
+        // invocation whose containing type is a source-declared interface; the downstream
+        // Combine step filters by existing class/interface-proxy models, so extra call-sites
+        // here produce zero extra codegen — only a matching (synthesized) interface model
+        // causes an interceptor to be emitted.
+        if (!hasAspect
+            && methodSymbol.ContainingType is { TypeKind: TypeKind.Interface } ifaceType
+            && ifaceType.Locations.Any(l => l.IsInSource))
+        {
+            hasAspect = true;
+        }
+
         if (!hasAspect)
             return null;
 
@@ -91,6 +106,15 @@ public static class AopParser
 
         aspects.Sort((a, b) => a.Order.CompareTo(b.Order));
 
+        return BuildMethodModel(method, aspects);
+    }
+
+    /// <summary>
+    /// Builds the parameter/return-type parts of the method model given a pre-resolved
+    /// set of aspects. Factored out so <see cref="ParseInterfaceProxy"/> can reuse it.
+    /// </summary>
+    private static InterceptedMethodModel? BuildMethodModel(IMethodSymbol method, List<AspectInfo> aspects)
+    {
         // Parse parameters
         var parameters = new List<InterceptedParameterModel>();
         foreach (var param in method.Parameters)
@@ -133,6 +157,9 @@ public static class AopParser
                 returnsVoid = true;
         }
 
+        // Interface members historically report Accessibility.NotApplicable via Roslyn even though
+        // they are implicitly public; emit 'public' in that case so the generated extension method
+        // signature stays valid.
         var accessibility = method.DeclaredAccessibility switch
         {
             Accessibility.Public => "public",
@@ -198,7 +225,119 @@ public static class AopParser
             .Any(r => r.GetSyntax(ct) is ClassDeclarationSyntax cds
                 && cds.Modifiers.Any(SyntaxKind.PartialKeyword));
 
-        return new InterceptedClassModel(ns, classSymbol.Name, methods, classData, isPartial);
+        var typeParameters = ExtractTypeParameters(classSymbol);
+
+        return new InterceptedClassModel(
+            ns,
+            classSymbol.Name,
+            methods,
+            classData,
+            isPartial,
+            typeParameters);
+    }
+
+    /// <summary>
+    /// Synthesizes an interface class model so that call-sites going through an interface
+    /// reference (e.g. via DI) still get intercepted when a concrete implementation class
+    /// carries a class-level aspect (e.g. <c>[Log]</c> on the impl class).
+    ///
+    /// The returned model uses the interface's name/namespace (so call-site matching works)
+    /// but its methods inherit the impl class's class-level aspects.
+    /// </summary>
+    public static InterceptedClassModel? ParseInterfaceProxy(
+        INamedTypeSymbol interfaceSymbol,
+        INamedTypeSymbol implClassSymbol,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? classData,
+        CancellationToken ct)
+    {
+        if (interfaceSymbol.TypeKind != TypeKind.Interface)
+            return null;
+
+        var implAttrs = implClassSymbol.GetAttributes();
+        var classLevelAspectAttrs = implAttrs
+            .Where(a => DerivesFromAspectAttribute(a.AttributeClass))
+            .ToImmutableArray();
+        if (classLevelAspectAttrs.Length == 0)
+            return null;
+
+        var methods = new List<InterceptedMethodModel>();
+
+        foreach (var member in interfaceSymbol.GetMembers())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (member is not IMethodSymbol methodSymbol)
+                continue;
+            if (methodSymbol.MethodKind != MethodKind.Ordinary)
+                continue;
+            if (methodSymbol.IsStatic)
+                continue;
+
+            var aspects = new List<AspectInfo>();
+            var seenAspectTypes = new HashSet<string>();
+
+            // Method-level aspects declared on the interface member itself (rare but valid).
+            CollectAspects(methodSymbol.GetAttributes(), methodSymbol, aspects, seenAspectTypes);
+            // Class-level aspects from the impl are the whole reason this proxy exists.
+            CollectAspects(classLevelAspectAttrs, methodSymbol, aspects, seenAspectTypes);
+
+            if (aspects.Count == 0)
+                continue;
+
+            aspects.Sort((a, b) => a.Order.CompareTo(b.Order));
+
+            var model = BuildMethodModel(methodSymbol, aspects);
+            if (model != null)
+                methods.Add(model);
+        }
+
+        if (methods.Count == 0)
+            return null;
+
+        var ns = interfaceSymbol.ContainingNamespace.IsGlobalNamespace
+            ? ""
+            : interfaceSymbol.ContainingNamespace.ToDisplayString();
+
+        var typeParameters = ExtractTypeParameters(interfaceSymbol);
+
+        return new InterceptedClassModel(
+            ns,
+            interfaceSymbol.Name,
+            methods,
+            classData,
+            isPartial: false,
+            typeParameters: typeParameters,
+            isInterfaceProxy: true);
+    }
+
+    private static IReadOnlyList<TypeParameterModel> ExtractTypeParameters(INamedTypeSymbol typeSymbol)
+    {
+        if (typeSymbol.TypeParameters.Length == 0)
+            return System.Array.Empty<TypeParameterModel>();
+
+        var result = new List<TypeParameterModel>(typeSymbol.TypeParameters.Length);
+        foreach (var tp in typeSymbol.TypeParameters)
+        {
+            var constraints = new List<string>();
+            // Primary constraints — per C# spec they must come first in the `where` clause.
+            if (tp.HasReferenceTypeConstraint)
+                constraints.Add(tp.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+            else if (tp.HasValueTypeConstraint && !tp.HasUnmanagedTypeConstraint)
+                constraints.Add("struct");
+            else if (tp.HasUnmanagedTypeConstraint)
+                constraints.Add("unmanaged");
+            else if (tp.HasNotNullConstraint)
+                constraints.Add("notnull");
+
+            foreach (var ct in tp.ConstraintTypes)
+                constraints.Add(ct.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+
+            // new() must be last.
+            if (tp.HasConstructorConstraint)
+                constraints.Add("new()");
+
+            result.Add(new TypeParameterModel(tp.Name, constraints));
+        }
+        return result;
     }
 
     private const int MaxPropertyDepth = 5;
