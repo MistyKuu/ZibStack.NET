@@ -729,7 +729,7 @@ public class OrderService : IOrderService
         Assert.NotNull(iface);
         Assert.NotNull(impl);
 
-        var proxy = AopParser.ParseInterfaceProxy(iface!, impl!, null, default);
+        var proxy = AopParser.ParseInterfaceProxy(iface!.OriginalDefinition, iface!, impl!, null, default);
         Assert.NotNull(proxy);
         Assert.True(proxy!.IsInterfaceProxy);
         Assert.Equal("IOrderService", proxy.ClassName);
@@ -772,7 +772,7 @@ public class OrderService : IOrderService
 ");
         var iface = GetTypeByName(compilation, "IOrderService");
         var impl = GetTypeByName(compilation, "OrderService");
-        var proxy = AopParser.ParseInterfaceProxy(iface!, impl!, null, default);
+        var proxy = AopParser.ParseInterfaceProxy(iface!.OriginalDefinition, iface!, impl!, null, default);
         Assert.NotNull(proxy);
         Assert.True(proxy!.IsInterfaceProxy);
         Assert.Single(proxy.Methods);
@@ -793,7 +793,7 @@ public class OrderService : IOrderService
 ");
         var iface = GetTypeByName(compilation, "IOrderService");
         var impl = GetTypeByName(compilation, "OrderService");
-        var proxy = AopParser.ParseInterfaceProxy(iface!, impl!, null, default);
+        var proxy = AopParser.ParseInterfaceProxy(iface!.OriginalDefinition, iface!, impl!, null, default);
         Assert.Null(proxy);
     }
 

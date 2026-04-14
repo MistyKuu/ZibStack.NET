@@ -24,8 +24,13 @@ public static class AopParser
         if (context.Node is not InvocationExpressionSyntax invocation)
             return null;
 
-        var filePath = invocation.SyntaxTree.FilePath;
-        if (string.IsNullOrEmpty(filePath) || filePath.EndsWith(".g.cs"))
+        // Skip our own generated output (always ends in `.g.cs`) so we don't try to
+        // intercept calls inside the interceptor wrappers themselves. Empty FilePath is
+        // legitimate (in-memory test compilations, scripting, generators that don't set
+        // it) — those should still be intercepted, otherwise the integration tests
+        // silently no-op and "no codegen" looks indistinguishable from "no errors".
+        var filePath = invocation.SyntaxTree.FilePath ?? "";
+        if (filePath.EndsWith(".g.cs"))
             return null;
 
         ct.ThrowIfCancellationRequested();
@@ -279,13 +284,23 @@ public static class AopParser
     /// but its methods inherit whichever aspects apply: interface-member-level, impl-method-
     /// level for the specific implementation, and impl-class-level.
     /// </summary>
+    /// <param name="interfaceOpen">
+    /// Open-generic form of the interface (e.g. <c>IRepo&lt;T&gt;</c>). Used for emission so the
+    /// extension method reproduces the interface's own type parameters. Must equal
+    /// <paramref name="interfaceClosed"/>.OriginalDefinition or an already-open symbol.
+    /// </param>
+    /// <param name="interfaceClosed">
+    /// Closed form as seen in the impl's interface list (e.g. <c>IRepo&lt;string&gt;</c>). Needed
+    /// for <c>FindImplementationForInterfaceMember</c> to resolve the concrete method.
+    /// </param>
     public static InterceptedClassModel? ParseInterfaceProxy(
-        INamedTypeSymbol interfaceSymbol,
+        INamedTypeSymbol interfaceOpen,
+        INamedTypeSymbol interfaceClosed,
         INamedTypeSymbol implClassSymbol,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>? classData,
         CancellationToken ct)
     {
-        if (interfaceSymbol.TypeKind != TypeKind.Interface)
+        if (interfaceOpen.TypeKind != TypeKind.Interface)
             return null;
 
         var implAttrs = implClassSymbol.GetAttributes();
@@ -295,38 +310,44 @@ public static class AopParser
 
         var methods = new List<InterceptedMethodModel>();
 
-        foreach (var member in interfaceSymbol.GetMembers())
+        // Walk the CLOSED interface's members — those are the symbols stored in
+        // implClassSymbol.Interfaces, and the only shape FindImplementationForInterfaceMember
+        // can resolve. For code emission we project each back to the OPEN form via
+        // .OriginalDefinition so the generated signature keeps `T` instead of `string`.
+        foreach (var member in interfaceClosed.GetMembers())
         {
             ct.ThrowIfCancellationRequested();
-            if (member is not IMethodSymbol methodSymbol)
+            if (member is not IMethodSymbol closedMethod)
                 continue;
-            if (methodSymbol.MethodKind != MethodKind.Ordinary)
+            if (closedMethod.MethodKind != MethodKind.Ordinary)
                 continue;
-            if (methodSymbol.IsStatic)
+            if (closedMethod.IsStatic)
                 continue;
+
+            var openMethod = (IMethodSymbol)closedMethod.OriginalDefinition;
 
             var aspects = new List<AspectInfo>();
             var seenAspectTypes = new HashSet<string>();
 
             // Method-level aspects declared on the interface member itself (rare but valid).
-            CollectAspects(methodSymbol.GetAttributes(), methodSymbol, aspects, seenAspectTypes);
+            CollectAspects(openMethod.GetAttributes(), openMethod, aspects, seenAspectTypes);
 
             // Method-level aspects on the concrete implementation of THIS interface member.
             // This is what makes `[Log]` on an impl method intercept calls made via the
             // interface reference too.
-            if (implClassSymbol.FindImplementationForInterfaceMember(methodSymbol) is IMethodSymbol implMethod)
-                CollectAspects(implMethod.GetAttributes(), methodSymbol, aspects, seenAspectTypes);
+            if (implClassSymbol.FindImplementationForInterfaceMember(closedMethod) is IMethodSymbol implMethod)
+                CollectAspects(implMethod.GetAttributes(), openMethod, aspects, seenAspectTypes);
 
             // Impl class-level aspects (e.g. `[Log]` on the class) apply to every public method.
             if (classLevelAspectAttrs.Length > 0)
-                CollectAspects(classLevelAspectAttrs, methodSymbol, aspects, seenAspectTypes);
+                CollectAspects(classLevelAspectAttrs, openMethod, aspects, seenAspectTypes);
 
             if (aspects.Count == 0)
                 continue;
 
             aspects.Sort((a, b) => a.Order.CompareTo(b.Order));
 
-            var model = BuildMethodModel(methodSymbol, aspects);
+            var model = BuildMethodModel(openMethod, aspects);
             if (model != null)
                 methods.Add(model);
         }
@@ -334,15 +355,15 @@ public static class AopParser
         if (methods.Count == 0)
             return null;
 
-        var ns = interfaceSymbol.ContainingNamespace.IsGlobalNamespace
+        var ns = interfaceOpen.ContainingNamespace.IsGlobalNamespace
             ? ""
-            : interfaceSymbol.ContainingNamespace.ToDisplayString();
+            : interfaceOpen.ContainingNamespace.ToDisplayString();
 
-        var typeParameters = ExtractTypeParameters(interfaceSymbol);
+        var typeParameters = ExtractTypeParameters(interfaceOpen);
 
         return new InterceptedClassModel(
             ns,
-            interfaceSymbol.Name,
+            interfaceOpen.Name,
             methods,
             classData,
             isPartial: false,

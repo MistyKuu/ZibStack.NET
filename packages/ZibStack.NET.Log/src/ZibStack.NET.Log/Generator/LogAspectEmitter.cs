@@ -75,8 +75,11 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         // Generic methods declare their own type parameters (e.g. `T Create<T>()`), and a
         // static `LoggerMessage.Define<T>` delegate cached on the non-generic wrapper class
         // cannot reference those method-level parameters — the type simply isn't in scope.
-        // Fall back to inline `__logger.Log(...)` for generic methods (see EmitBefore).
-        if (method.IsGenericMethod)
+        // The same applies when the containing class is generic (`BaseService<T>`) and a
+        // method's parameters/return type reference the class-level T: the wrapper
+        // `__BaseService_Aop` is NOT generic, so T isn't visible there either.
+        // Fall back to inline `__logger.Log(...)` in both cases (see EmitBefore).
+        if (UseInlinePath(method, loggable.Count, cls))
             return;
 
         // --- Entry delegate ---
@@ -111,11 +114,13 @@ internal sealed class LogAspectEmitter : IAspectEmitter
 
     /// <summary>
     /// True when we must use the inline <c>__logger.Log(...)</c> path (no pre-baked
-    /// <c>LoggerMessage.Define</c> delegate): either too many params or the method
-    /// declares its own type parameters (delegate would reference them out of scope).
+    /// <c>LoggerMessage.Define</c> delegate): too many params, method declares its own
+    /// type parameters, or the containing class is itself generic (delegate fields live
+    /// on a non-generic wrapper, so any reference to a class/method type parameter is
+    /// out of scope).
     /// </summary>
-    private static bool UseInlinePath(InterceptedMethodModel method, int loggableCount)
-        => method.IsGenericMethod || loggableCount > 6;
+    private static bool UseInlinePath(InterceptedMethodModel method, int loggableCount, InterceptedClassModel cls)
+        => method.IsGenericMethod || cls.TypeParameters.Count > 0 || loggableCount > 6;
 
     // === EmitBefore: log entry ===
 
@@ -146,7 +151,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
             sb.AppendLine($"{indent}var __logger = (global::Microsoft.Extensions.Logging.ILogger)__sp.GetService(typeof(global::Microsoft.Extensions.Logging.ILogger<{loggerCategory}>))!;");
         }
 
-        if (!UseInlinePath(method, loggable.Count))
+        if (!UseInlinePath(method, loggable.Count, cls))
         {
             var args = string.Join("", loggable.Select(p => FormatEntryArg(p, objectLogging)));
             sb.AppendLine($"{indent}__log{method.MethodName}Entry(__logger{args}, null);");
@@ -180,7 +185,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         var logParams = P(aspect, "LogParameters", true, cls);
         var loggableCount = logParams ? method.Parameters.Count(p => !p.IsNoLog) : 0;
 
-        if (UseInlinePath(method, loggableCount))
+        if (UseInlinePath(method, loggableCount, cls))
         {
             var levelName = LogLevelNames[P(aspect, "EntryExitLevel", 2, cls)];
             var msg = PStr(aspect, "ExitMessage") ?? BuildExitMessage(cls, method, measureElapsed, logReturn, objectLogging);
@@ -224,7 +229,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         var logParams = P(aspect, "LogParameters", true, cls);
         var loggableCount = logParams ? method.Parameters.Count(p => !p.IsNoLog) : 0;
 
-        if (UseInlinePath(method, loggableCount))
+        if (UseInlinePath(method, loggableCount, cls))
         {
             var levelName = LogLevelNames[P(aspect, "ExceptionLevel", 4, cls)];
             var msg = PStr(aspect, "ExceptionMessage") ?? BuildErrorMessage(cls, method, measureElapsed);
