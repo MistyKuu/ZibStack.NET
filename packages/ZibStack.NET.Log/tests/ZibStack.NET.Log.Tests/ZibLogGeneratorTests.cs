@@ -507,7 +507,7 @@ public class Svc { [Log] public int A(int x) => x; [Log] public int B(int x) => 
 public class Caller2 { public int R() { var s = new Svc(); return s.A(1) + s.B(2); } }
 ", parseOptions, path: "Src2.cs");
 
-        var references = BuildStandardReferences();
+        var (references, _) = BuildStandardReferences();
 
         var c1 = CSharpCompilation.Create("T", new[] { src1 }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
