@@ -90,7 +90,8 @@ public sealed class TypeScriptSettings
 }
 
 /// <summary>
-/// OpenAPI emitter settings. Generates OpenAPI 3.1 documents.
+/// OpenAPI emitter settings. Default target is OpenAPI 3.0.3 — see
+/// <see cref="OpenApiVersion"/>.
 /// </summary>
 public sealed class OpenApiSettings
 {
@@ -112,8 +113,10 @@ public sealed class OpenApiSettings
     public string? Description { get; set; }
 
     /// <summary>
-    /// OpenAPI version emitted in the <c>openapi</c> field. Default <c>"3.1.0"</c>.
-    /// Allows downgrade to <c>3.0.3</c> for tooling that doesn't support 3.1 yet.
+    /// OpenAPI version emitted in the <c>openapi</c> field. Default <c>"3.0.3"</c>
+    /// for broadest tooling compatibility (Swashbuckle, NSwag codegen,
+    /// Microsoft.OpenApi.Readers 1.6.x don't yet support 3.1). Override if you
+    /// target readers that do.
     /// </summary>
-    public string OpenApiVersion { get; set; } = "3.1.0";
+    public string OpenApiVersion { get; set; } = "3.0.3";
 }

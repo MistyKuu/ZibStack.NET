@@ -46,8 +46,12 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var (symbols, _) = source;
+            var (symbols, compilation) = source;
             if (symbols.IsDefaultOrEmpty) return;
+
+            // Parse ITypeGenConfigurator DSL first — global settings feed the emitters,
+            // per-type overrides merge into SchemaClass/SchemaEnum below.
+            var config = ConfiguratorParser.Parse(compilation, spc.ReportDiagnostic);
 
             var model = new SchemaModel();
             foreach (var sym in symbols)
@@ -69,6 +73,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 {
                     var en = SchemaParser.ParseEnum(sym);
                     if (en is null) continue;
+                    ApplyFluentToEnum(en, config);
                     ReportTargetsIfEmpty(spc, sym, en.Targets);
                     ReportInvalidOutputDirIfEmpty(spc, sym, en.OutputDir);
                     model.Enums.Add(en);
@@ -77,6 +82,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 {
                     var cls = SchemaParser.ParseClass(sym);
                     if (cls is null) continue;
+                    ApplyFluentToClass(cls, config);
                     ReportTargetsIfEmpty(spc, sym, cls.Targets);
                     ReportInvalidOutputDirIfEmpty(spc, sym, cls.OutputDir);
                     model.Classes.Add(cls);
@@ -85,10 +91,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
 
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
-            // Settings: defaults for now. Configurator parsing comes in a follow-up
-            // (memory project_typegen_backlog). The pipeline already flows settings
-            // through, so wiring it later is additive.
-            var settings = new GlobalSettings();
+            var settings = config?.Settings ?? new GlobalSettings();
 
             // Run each requested emitter.
             var allFiles = new List<EmittedFile>();
@@ -105,6 +108,42 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             var manifest = BuildManifest(allFiles);
             spc.AddSource("ZibStack.TypeGen.Manifest.g.cs", SourceText.From(manifest, Encoding.UTF8));
         });
+    }
+
+    /// <summary>
+    /// Fills in attribute-less fields from the configurator's per-type overrides.
+    /// Attributes always win — fluent only fills the gap. Ignore flags are OR-merged
+    /// so the fluent can widen, never narrow.
+    /// </summary>
+    private static void ApplyFluentToClass(SchemaClass cls, ConfiguratorParser.Parsed? config)
+    {
+        var o = LookupOverride(cls.CSharpFullName, config);
+        if (o is null) return;
+        cls.TsNameOverride ??= o.TsName;
+        cls.OpenApiNameOverride ??= o.OpenApiName;
+        // Treat "." (the default when no attribute OutputDir) as unset for merge purposes.
+        if (cls.OutputDir == "." && !string.IsNullOrEmpty(o.OutputDir)) cls.OutputDir = o.OutputDir!;
+        if (o.Ignore) { cls.TsIgnore = true; cls.OpenApiIgnore = true; }
+        cls.TsIgnore |= o.TsIgnore;
+        cls.OpenApiIgnore |= o.OpenApiIgnore;
+    }
+
+    private static void ApplyFluentToEnum(SchemaEnum en, ConfiguratorParser.Parsed? config)
+    {
+        var o = LookupOverride(en.CSharpFullName, config);
+        if (o is null) return;
+        en.TsNameOverride ??= o.TsName;
+        en.OpenApiNameOverride ??= o.OpenApiName;
+        if (en.OutputDir == "." && !string.IsNullOrEmpty(o.OutputDir)) en.OutputDir = o.OutputDir!;
+        if (o.Ignore) { en.TsIgnore = true; en.OpenApiIgnore = true; }
+        en.TsIgnore |= o.TsIgnore;
+        en.OpenApiIgnore |= o.OpenApiIgnore;
+    }
+
+    private static ConfiguratorParser.PerTypeOverrides? LookupOverride(string fullName, ConfiguratorParser.Parsed? config)
+    {
+        if (config is null) return null;
+        return config.PerType.TryGetValue(fullName, out var o) ? o : null;
     }
 
     private static bool RequestsTarget(SchemaModel model, TypeTarget target)

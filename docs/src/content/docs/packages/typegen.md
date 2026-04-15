@@ -157,41 +157,54 @@ Override any single property with `[TsType("...")]` or `[OpenApiProperty(Format 
 
 Two layers, in increasing specificity:
 
-### 1. Project-wide — `ITypeGenConfigurator`
+### 1. Project-wide — `ITypeGenConfigurator` (fluent DSL)
 
-One class per project, picked up automatically by the generator. Data-only (property
-initializers), since the generator reads its syntax at compile time rather than invoking
-it.
+One class per project, picked up automatically by the generator. The `Configure`
+method body is a fluent DSL parsed at compile time — it's never actually invoked
+at runtime, so all arguments must be literal expressions (string literals, enum
+members, constants). Anything dynamic is invisible and surfaces as diagnostic
+`TG0013`.
 
 ```csharp
 public sealed class TypeGenConfig : ITypeGenConfigurator
 {
-    public TypeScriptSettings TypeScript => new()
+    public void Configure(ITypeGenBuilder b)
     {
-        OutputDir = "../client/src/api",
-        FileLayout = TypeScriptFileLayout.SingleFile,
-        SingleFileName = "models.ts",
-        UseInterfaces = true,
-        PropertyNameStyle = NameStyle.CamelCase,
-        StripSuffixes = { "Dto", "Model" },
-    };
+        b.TypeScript(ts =>
+        {
+            ts.OutputDir = "../client/src/api";
+            ts.FileLayout = TypeScriptFileLayout.SingleFile;
+            ts.SingleFileName = "models.ts";
+            ts.PropertyNameStyle = NameStyle.CamelCase;
+        });
 
-    public OpenApiSettings OpenApi => new()
-    {
-        OutputPath = "../api/openapi.yaml",
-        Title = "Order Service",
-        Version = "2.1.0",
-        Description = "Public API for the order service.",
-    };
+        b.OpenApi(oa =>
+        {
+            oa.OutputPath = "../api/openapi.yaml";
+            oa.Title = "Order Service";
+            oa.Version = "2.1.0";
+            oa.Description = "Public API for the order service.";
+        });
+
+        // Per-type overrides for DTOs you can't (or don't want to) annotate —
+        // e.g. types from a referenced library.
+        b.ForType<Order>()
+            .TsName("OrderDto")
+            .OutputDir("generated/orders");
+
+        b.ForType<InternalAudit>().Ignore();
+    }
 }
 ```
 
 > Only one `ITypeGenConfigurator` per project — multiple implementations fire
-> diagnostic `TG0010`.
+> diagnostic `TG0010`. Unrecognized fluent calls fire `TG0012`.
 
 ### 2. Per-class / per-property attributes
 
-Wins over project-wide settings. See the override examples above.
+Wins over project-wide settings and per-type fluent overrides. Precedence from
+lowest to highest: defaults → `TypeScript`/`OpenApi` global blocks →
+`ForType<T>()` per-type fluent → class/property attributes.
 
 ## Output mechanism
 
@@ -219,6 +232,8 @@ unchanged (stable mtimes, no file-watcher thrash in frontend dev servers).
 | `TG0003` | Error | Generic type on `[GenerateTypes]` — not supported in the MVP |
 | `TG0010` | Error | More than one `ITypeGenConfigurator` in this project |
 | `TG0011` | Error | Empty `OutputDir` on `[GenerateTypes]` |
+| `TG0012` | Warning | Unrecognized fluent call in `ITypeGenConfigurator.Configure` |
+| `TG0013` | Warning | Non-literal argument passed to a configurator DSL method |
 
 ## File layout & cross-file imports
 
@@ -247,10 +262,6 @@ You can override via `OpenApiSettings.OpenApiVersion`.
   will contribute real endpoints in a follow-up.
 - **Dictionary in OpenAPI** emits as plain `object` — needs
   `additionalProperties` mapping in a follow-up.
-- **Roslyn configurator parsing** (reading `ITypeGenConfigurator` values from
-  syntax trees) is still stubbed — global settings use defaults. Per-class /
-  per-property attributes work fully today.
-
 See [project_typegen_backlog on GitHub](https://github.com/MistyKuu/ZibStack.NET)
 for the full roadmap (Python, Kotlin, Swift, Go, Dart, JSON Schema, `[CrudApi]`
 path integration, and the configurator parser).

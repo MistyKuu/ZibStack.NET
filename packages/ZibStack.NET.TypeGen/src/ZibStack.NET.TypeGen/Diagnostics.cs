@@ -46,6 +46,24 @@ internal static class TypeGenDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public const string UnknownConfiguratorCallId = "TG0012";
+    public static readonly DiagnosticDescriptor UnknownConfiguratorCall = new(
+        UnknownConfiguratorCallId,
+        title: "Unrecognized configurator DSL call",
+        messageFormat: "TypeGen configurator doesn't recognize '{0}'. Only TypeScript(), OpenApi(), ForType<T>() and their chained builders (.TsName, .OpenApiName, .OutputDir, .Ignore, .TsIgnore, .OpenApiIgnore) are parsed at compile time.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public const string NonLiteralArgumentId = "TG0013";
+    public static readonly DiagnosticDescriptor NonLiteralArgument = new(
+        NonLiteralArgumentId,
+        title: "Configurator argument must be a compile-time constant",
+        messageFormat: "Argument for '{0}' isn't a literal or constant. The configurator is parsed at compile time — use string literals, enum members, or const fields.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     public const string GenericTypeId = "TG0003";
     public static readonly DiagnosticDescriptor GenericType = new(
         GenericTypeId,
