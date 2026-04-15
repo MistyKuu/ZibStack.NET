@@ -151,4 +151,24 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
+
+    // ── Tier 3: Call-site analysis (AOP0020-AOP0021) ────────────────────────
+
+    public const string DelegateConversionId = "AOP0020";
+    public static readonly DiagnosticDescriptor DelegateConversion = new(
+        DelegateConversionId,
+        title: "Method group conversion bypasses aspects",
+        messageFormat: "Aspect on '{0}' will be skipped here — converting to a delegate captures the original method directly. Calls through the delegate will not be intercepted.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public const string BaseCallId = "AOP0021";
+    public static readonly DiagnosticDescriptor BaseCall = new(
+        BaseCallId,
+        title: "base.Method() bypasses the aspect on the override",
+        messageFormat: "base.{0}() does not run the interceptor for this method. If '{0}' is overridden, the base call goes straight to the base implementation without the aspect.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true);
 }

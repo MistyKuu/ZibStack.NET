@@ -10,7 +10,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.12.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.3" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -19,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ZibStack.NET.Aop\ZibStack.NET.Aop.csproj" />
     <ProjectReference Include="..\..\src\ZibStack.NET.Aop.Analyzers\ZibStack.NET.Aop.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\ZibStack.NET.Aop.CodeFixes\ZibStack.NET.Aop.CodeFixes.csproj" />
   </ItemGroup>
 
 </Project>

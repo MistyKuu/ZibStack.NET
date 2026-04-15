@@ -41,6 +41,13 @@
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer"
                       PrivateAssets="all" />
+
+    <!-- Code fix provider, bundled the same way. Loaded by Roslyn from the analyzers/
+         folder; pairs with the analyzer DLL. -->
+    <ProjectReference Include="..\ZibStack.NET.Aop.CodeFixes\ZibStack.NET.Aop.CodeFixes.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,6 +55,8 @@
     <!-- Bundle the analyzer DLL so installing ZibStack.NET.Aop also turns on
          the AOP0xxx diagnostics. No separate package install required. -->
     <None Include="..\ZibStack.NET.Aop.Analyzers\bin\$(Configuration)\netstandard2.0\ZibStack.NET.Aop.Analyzers.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\ZibStack.NET.Aop.CodeFixes\bin\$(Configuration)\netstandard2.0\ZibStack.NET.Aop.CodeFixes.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <!-- Auto-enable interceptor namespaces in consumer projects on restore. -->
     <None Include="build\ZibStack.NET.Aop.props" Pack="true" PackagePath="build\" />
