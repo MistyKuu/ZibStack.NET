@@ -137,6 +137,13 @@ var app = builder.Build();
 app.Services.UseAop();               // bridges DI into the aspect runtime
 ```
 
+**Compile-time analyzers + code fixes (bundled, no extra install):**
+15 Roslyn diagnostics catch broken aspect placements before you build —
+`[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`, `[Log]` on a
+`private` method, method group conversions that bypass the interceptor,
+and more. 9 of them ship an Alt+Enter code fix. Full reference:
+[docs/packages/aop-analyzers](https://mistykuu.github.io/ZibStack.NET/packages/aop-analyzers/).
+
 ---
 
 ## Tier 2 — Ergonomics

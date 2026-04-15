@@ -1,0 +1,271 @@
+---
+title: AOP Analyzers — Compile-Time Diagnostics
+description: Compile-time error and warning diagnostics for ZibStack.NET.Aop, plus Roslyn code fixes. Catches dead-end aspect placements (static, ref, private), invalid attribute arguments (Retry MaxAttempts, Timeout TimeoutMs), and bypassed call sites (delegate conversion, base.) — directly in the IDE, before the build.
+---
+
+[![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Aop.svg)](https://www.nuget.org/packages/ZibStack.NET.Aop) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Analyzers)
+
+When you install `ZibStack.NET.Aop` you also get a set of **Roslyn analyzers and code fixes** that catch broken aspect placements at compile time. The diagnostics show up directly in your IDE — red squiggle, light-bulb fix, no waiting for a build. No separate package install required.
+
+> **Why this matters:** the source-generator part can only emit interceptors for placements that are physically possible. Anything else (aspect on a `static` method, `[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`) silently no-ops at runtime and you'd never know. Analyzers turn those silent failures into immediate, locatable errors.
+
+## Diagnostic Categories
+
+Three tiers, all under the `ZibStack.Aop` category:
+
+| Tier | Covers | Severity |
+|---|---|---|
+| **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
+| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
+| **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor. | Warning / Info |
+
+## Tier 1 — Placement
+
+These fire on the method (or attribute) that the aspect is applied to.
+
+### `AOP0001` — Aspect on static method (Error)
+
+C# interceptors require an instance receiver (`this @this`). Static methods cannot be intercepted.
+
+```csharp
+public class Svc
+{
+    [Log]
+    public static void DoWork() { }   // ❌ AOP0001
+}
+```
+
+**Code fix:** Remove the aspect attribute.
+
+### `AOP0002` — Aspect on private/protected method (Error)
+
+The generated interceptor lives in a separate `__X_Aop` class and is not a member of the target type nor a derived class. C# access rules forbid it from invoking `private`/`protected`/`private protected` methods.
+
+```csharp
+public class Svc
+{
+    [Log]
+    private void DoWork() { }   // ❌ AOP0002
+}
+```
+
+**Code fix:** Make the method `internal` (lowest accessibility the interceptor can reach).
+
+> Class-level aspects automatically pick up `public`, `internal`, and `protected internal` instance methods of the type — no warning fires for those, since the parser simply skips members it can't intercept.
+
+### `AOP0003` — Aspect on method with ref/out/in parameter (Error)
+
+The interceptor stores parameter values in an `AspectParameterInfo[]` for `AspectContext.Parameters`. `ref`/`out`/`in` cannot survive that capture.
+
+```csharp
+public class Svc
+{
+    [Log]
+    public void Pull(out int x) { x = 1; }   // ❌ AOP0003
+}
+```
+
+### `AOP0003B` — Aspect on method returning by ref (Error)
+
+```csharp
+private int _x;
+
+[Log]
+public ref int GetRef() => ref _x;   // ❌ AOP0003B
+```
+
+### `AOP0004` — `[AspectHandler]` type does not implement a handler interface (Error)
+
+Reported on the `[AspectHandler(typeof(...))]` declaration itself.
+
+```csharp
+[AspectHandler(typeof(NotAHandler))]   // ❌ AOP0004
+public sealed class BrokenAspectAttribute : AspectAttribute { }
+
+public class NotAHandler { }   // doesn't implement any I*Handler
+```
+
+### `AOP0005` — Custom `AspectAttribute` missing `[AspectHandler]` (Error)
+
+Without an `[AspectHandler]`, the generator has nothing to wire up.
+
+```csharp
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class OrphanedAspectAttribute : AspectAttribute { }   // ❌ AOP0005
+```
+
+### `AOP0006` — Aspect on operator or conversion (Error)
+
+The generator only intercepts ordinary instance methods.
+
+```csharp
+public class Box
+{
+    [Log]
+    public static Box operator +(Box a, Box b) => new();   // ❌ AOP0006
+}
+```
+
+## Tier 2 — Attribute Arguments
+
+Reported on the attribute application itself, so the squiggle lands precisely on the wrong value.
+
+### `[Cache]`
+
+| ID | Severity | Trigger | Code fix |
+|---|---|---|---|
+| `AOP0010` | Warning | `[Cache]` on `void` or non-generic `Task` method — there's nothing to cache | Remove `[Cache]` |
+
+```csharp
+[Cache]                              // ❌ AOP0010
+public void DoWork() { }
+
+[Cache]                              // ❌ AOP0010
+public Task DoAsync() => Task.CompletedTask;
+
+[Cache]                              // ✅ ok — Task<int> has a value
+public Task<int> GetAsync() => Task.FromResult(1);
+```
+
+### `[Retry]`
+
+| ID | Severity | Trigger | Code fix |
+|---|---|---|---|
+| `AOP0011` | Error | `MaxAttempts <= 0` — would never even execute | Set `MaxAttempts = 3` |
+| `AOP0012` | Error | `DelayMs < 0` | Set `DelayMs = 0` |
+| `AOP0013` | Warning | `BackoffMultiplier < 1.0` — shrinks delay between retries | Set `BackoffMultiplier = 1.0` |
+
+```csharp
+[Retry(MaxAttempts = 0)]             // ❌ AOP0011
+public int A() => 1;
+
+[Retry(DelayMs = -100)]              // ❌ AOP0012
+public int B() => 1;
+
+[Retry(BackoffMultiplier = 0.5)]     // ⚠ AOP0013 — each retry waits less than the last
+public int C() => 1;
+```
+
+### `[Timeout]`
+
+| ID | Severity | Trigger | Code fix |
+|---|---|---|---|
+| `AOP0014` | Error | `TimeoutMs <= 0` | Set `TimeoutMs = 30000` |
+| `AOP0015` | Warning | Method has no `CancellationToken` parameter — the timeout fires but the method can't observe it | Add `CancellationToken cancellationToken = default` parameter |
+
+```csharp
+[Timeout(TimeoutMs = 0)]             // ❌ AOP0014
+public Task<int> A(CancellationToken ct) => Task.FromResult(1);
+
+[Timeout(TimeoutMs = 5000)]          // ⚠ AOP0015 — token is created but never awaited
+public Task<int> B() => Task.FromResult(1);
+```
+
+### `[Validate]`
+
+| ID | Severity | Trigger | Code fix |
+|---|---|---|---|
+| `AOP0016` | Warning | Method has no parameters | Remove `[Validate]` |
+| `AOP0017` | Info | None of the parameters or their reachable property graph carry `DataAnnotations` | (none — diagnostic only) |
+
+```csharp
+[Validate]                           // ❌ AOP0016 — nothing to validate
+public int Get() => 1;
+
+[Validate]                           // ℹ AOP0017 — no [Required]/[Range]/...
+public int Sum(int a, int b) => a + b;
+
+[Validate]                           // ✅ ok — Order has [Range] on a property
+public void Place(Order order) { }
+
+public class Order
+{
+    [Range(1, 100)]
+    public int Quantity { get; set; }
+}
+```
+
+## Tier 3 — Call Sites
+
+Diagnoses places where the call *would* go through the interceptor at first glance, but doesn't.
+
+### `AOP0020` — Method group → delegate (Warning)
+
+Converting an aspect-decorated method to `Func<>`/`Action<>`/event handler captures the original method directly. Calls through the delegate skip the interceptor entirely.
+
+```csharp
+public class Svc
+{
+    [Log]
+    public int GetOrder(int id) => id;
+}
+
+public class Caller
+{
+    public Func<int, int> MakeFunc(Svc s) => s.GetOrder;   // ⚠ AOP0020
+    //                                       ^^^^^^^^^^
+    //   The Func captures the unwrapped method.
+    //   Calling it later won't trigger [Log].
+}
+```
+
+### `AOP0021` — `base.Method()` bypasses the aspect on the override (Info)
+
+`base.X()` deliberately uses non-virtual dispatch and skips interceptors targeting the call expression. If `X` has an aspect, the base call goes straight through.
+
+```csharp
+public class Base
+{
+    [Log]
+    public virtual int GetOrder(int id) => id;
+}
+
+public class Derived : Base
+{
+    public override int GetOrder(int id) => base.GetOrder(id);   // ℹ AOP0021
+}
+```
+
+## Code Fix Summary
+
+Nine of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+
+| Diagnostic | Code fix |
+|---|---|
+| `AOP0001` | Remove aspect attribute from static method |
+| `AOP0002` | Change accessibility to `internal` |
+| `AOP0010` | Remove `[Cache]` from non-returning method |
+| `AOP0011` | Set `MaxAttempts = 3` |
+| `AOP0012` | Set `DelayMs = 0` |
+| `AOP0013` | Set `BackoffMultiplier = 1.0` |
+| `AOP0014` | Set `TimeoutMs = 30000` |
+| `AOP0015` | Add `CancellationToken cancellationToken = default` parameter |
+| `AOP0016` | Remove `[Validate]` from parameterless method |
+
+The remaining diagnostics are intentionally fix-less — repairing them either requires an API redesign (`AOP0003`/`AOP0006`), depends on user intent (`AOP0017`), or describes legitimate code that should just be reviewed (`AOP0020`/`AOP0021`).
+
+## Suppression
+
+Standard Roslyn suppression works:
+
+```csharp
+#pragma warning disable AOP0015
+[Timeout(TimeoutMs = 5000)]
+public async Task<int> WorkAsync() { ... }   // can't add CT to interface contract
+#pragma warning restore AOP0015
+```
+
+Or in `.editorconfig`:
+
+```ini
+# Globally downgrade AOP0017 (Validate without DataAnnotations) to silent.
+dotnet_diagnostic.AOP0017.severity = none
+```
+
+## Why analyzers, not just runtime checks?
+
+Three reasons:
+
+1. **Speed of feedback.** The runtime would discover `[Cache]` on a `void` method only when that method was first called — and even then, the result is just "cache silently doesn't help". Analyzers fail in the editor, in seconds.
+2. **Locatable errors.** A runtime exception from inside a generated interceptor points at generated code; an analyzer diagnostic points at the exact attribute or call site.
+3. **No false friends.** Many of these mistakes (negative `DelayMs`, `MaxAttempts = 0`, method without `CancellationToken`) don't *crash* — they just don't do what you wanted. Analyzers refuse the bug instead of letting it run.

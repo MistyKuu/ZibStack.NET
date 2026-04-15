@@ -20,6 +20,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Log — Structured Logging', slug: 'packages/log' },
 						{ label: 'AOP — Aspects & [Trace]', slug: 'packages/aop' },
+						{ label: 'AOP Analyzers — Compile-Time Diagnostics', slug: 'packages/aop-analyzers' },
 					],
 				},
 				{

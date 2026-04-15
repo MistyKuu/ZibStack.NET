@@ -9,6 +9,8 @@ AOP (Aspect-Oriented Programming) framework for .NET 8+ using **C# interceptors*
 
 > **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Aop/sample/SampleApi)
 
+> **Compile-time diagnostics:** every aspect placement in this guide is also validated by 15 Roslyn analyzers shipped in the same package — `AOP0001` through `AOP0021`. Bad placements (`[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`, `[Log]` on a `private` method, …) light up in the IDE before you can build, and 7 of them have an Alt+Enter code fix. See **[AOP Analyzers — Compile-Time Diagnostics](./aop-analyzers/)** for the full reference.
+
 ## Install
 
 ```
