@@ -5,7 +5,7 @@ namespace ZibStack.NET.Dto;
 internal sealed class ResponsePropertyInfo
 {
     public string PropertyName { get; }
-    /// <summary>Original entity property name (differs from PropertyName when [RenameProperty] is used).</summary>
+    /// <summary>Original entity property name (differs from PropertyName when fluent .RenameTo() applies).</summary>
     public string SourcePropertyName { get; }
     public string JsonName { get; }
     public string DisplayTypeName { get; }

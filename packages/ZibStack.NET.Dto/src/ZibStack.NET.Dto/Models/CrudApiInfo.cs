@@ -7,17 +7,19 @@ internal sealed class CrudApiInfo
     public string ClassName { get; }
     public string? Namespace { get; }
     public string FullyQualifiedName { get; }
-    public string Route { get; }
-    public string KeyPropertyName { get; }
+    // Made settable so the fluent IDtoConfigurator pipeline can override values
+    // pulled from the [CrudApi] attribute. Read-elsewhere unchanged.
+    public string Route { get; set; }
+    public string KeyPropertyName { get; set; }
     public string KeyTypeName { get; }
-    public int Operations { get; }
-    public int Style { get; }
-    public string? AuthorizePolicy { get; }
-    public string? GetByIdPolicy { get; }
-    public string? GetListPolicy { get; }
-    public string? CreatePolicy { get; }
-    public string? UpdatePolicy { get; }
-    public string? DeletePolicy { get; }
+    public int Operations { get; set; }
+    public int Style { get; set; }
+    public string? AuthorizePolicy { get; set; }
+    public string? GetByIdPolicy { get; set; }
+    public string? GetListPolicy { get; set; }
+    public string? CreatePolicy { get; set; }
+    public string? UpdatePolicy { get; set; }
+    public string? DeletePolicy { get; set; }
 
     public string? CreateRequestName { get; }
     public string? UpdateRequestName { get; }

@@ -90,6 +90,23 @@ internal static class DtoConfiguratorParser
 
     public static Parsed? Parse(Compilation compilation, System.Action<Diagnostic> report)
     {
+        try
+        {
+            return ParseCore(compilation, report);
+        }
+        catch
+        {
+            // Be defensive — Roslyn's incremental syntax tracking can throw if we
+            // accidentally use a node from a different snapshot. The whole DSL is
+            // optional (attributes work without it), so degrading silently keeps
+            // the rest of the generator productive instead of taking everything
+            // down with CS8785.
+            return null;
+        }
+    }
+
+    private static Parsed? ParseCore(Compilation compilation, System.Action<Diagnostic> report)
+    {
         var iface = compilation.GetTypeByMetadataName(ConfiguratorInterface);
         if (iface is null) return null;
 
@@ -350,17 +367,21 @@ internal static class DtoConfiguratorParser
         if (inv.ArgumentList.Arguments.Count == 0) return;
         if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return;
 
-        IEnumerable<StatementSyntax> stmts = lambda.Body switch
+        // Walk assignments directly — wrapping an expression-bodied lambda in a
+        // synthesized SyntaxFactory.ExpressionStatement would create floating syntax
+        // not bound to any tree, and any subsequent SemanticModel call against its
+        // descendants throws ArgumentException ("Syntax node is not within syntax tree").
+        IEnumerable<AssignmentExpressionSyntax> assignments = lambda.Body switch
         {
-            BlockSyntax block => block.Statements,
-            ExpressionSyntax expr => new[] { Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ExpressionStatement(expr) },
-            _ => System.Array.Empty<StatementSyntax>(),
+            BlockSyntax block => block.Statements
+                .OfType<ExpressionStatementSyntax>()
+                .Select(es => es.Expression).OfType<AssignmentExpressionSyntax>(),
+            AssignmentExpressionSyntax single => new[] { single },
+            _ => System.Array.Empty<AssignmentExpressionSyntax>(),
         };
 
-        foreach (var stmt in stmts)
+        foreach (var assignment in assignments)
         {
-            if (stmt is not ExpressionStatementSyntax es) continue;
-            if (es.Expression is not AssignmentExpressionSyntax assignment) continue;
             if (assignment.Left is not MemberAccessExpressionSyntax left) continue;
             var propName = left.Name.Identifier.Text;
             var val = ReadValue(assignment.Right, sm);

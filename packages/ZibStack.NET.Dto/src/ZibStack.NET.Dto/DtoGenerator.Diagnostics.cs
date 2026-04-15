@@ -20,11 +20,6 @@ public partial class DtoGenerator
             "Type '{0}' must be declared as partial to use [{1}]",
             "ZibStack.NET.Dto", DiagnosticSeverity.Error, true);
 
-        public static readonly DiagnosticDescriptor RenamePropertyNotFound = new(
-            "SDTO003", "Property not found for rename",
-            "Property '{0}' specified in [RenameProperty] does not exist on type '{1}'",
-            "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
-
         public static readonly DiagnosticDescriptor CreateOnlyWithoutCreateDto = new(
             "SDTO004", "DtoOnly(Create) without CreateDto",
             "Property '{0}' has [DtoOnly(DtoTarget.Create)] but type '{1}' has no [CreateDto] — attribute has no effect",
@@ -44,11 +39,6 @@ public partial class DtoGenerator
             "SDTO007", "Required property ignored",
             "Property '{0}' is required but has [DtoIgnore] — ToEntity() may fail at runtime",
             "ZibStack.NET.Dto", DiagnosticSeverity.Warning, true);
-
-        public static readonly DiagnosticDescriptor DuplicateRenameTo = new(
-            "SDTO008", "Duplicate rename target",
-            "Multiple [RenameProperty] attributes target the same name '{0}'",
-            "ZibStack.NET.Dto", DiagnosticSeverity.Error, true);
 
         public static readonly DiagnosticDescriptor CrudApiMissingResponseDto = new(
             "SDTO009", "CrudApi without ResponseDto",
@@ -205,34 +195,6 @@ public partial class DtoGenerator
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.MustBePartial, syntax.Identifier.GetLocation(), symbol.Name, "PickFrom"));
             if (hasOmitFrom)
                 spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.MustBePartial, syntax.Identifier.GetLocation(), symbol.Name, "OmitFrom"));
-        }
-
-        // SDTO003: RenameProperty — check property exists
-        // SDTO008: Duplicate rename targets
-        var renameTargets = new HashSet<string>();
-        foreach (var a in attrs)
-        {
-            if (a.AttributeClass?.ToDisplayString() != RenamePropertyAttributeFqn) continue;
-            if (a.ConstructorArguments.Length < 2) continue;
-
-            var from = a.ConstructorArguments[0].Value as string;
-            var to = a.ConstructorArguments[1].Value as string;
-
-            if (from is not null)
-            {
-                var propExists = GetAllProperties(symbol).Any(p => p.Name == from);
-                if (!propExists && !hasCreateDtoFor && !hasUpdateDtoFor)
-                {
-                    spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.RenamePropertyNotFound,
-                        syntax.Identifier.GetLocation(), from, symbol.Name));
-                }
-            }
-
-            if (to is not null && !renameTargets.Add(to))
-            {
-                spc.ReportDiagnostic(Diagnostic.Create(Diagnostics.DuplicateRenameTo,
-                    syntax.Identifier.GetLocation(), to));
-            }
         }
 
         // Property-level diagnostics

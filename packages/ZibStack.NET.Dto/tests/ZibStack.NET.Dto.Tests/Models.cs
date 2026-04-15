@@ -115,8 +115,10 @@ public partial record CreateConfigRequest;
 [UpdateDtoFor(typeof(ExternalConfig), Ignore = new[] { "Id", "IsSecret" })]
 public partial record UpdateConfigRequest;
 
-// ─── RenameProperty ────────────────────────────────────────────────
-
+// [RenameProperty] removed in the fluent-config refactor — see DtoConfig.cs (in
+// real consumers) for the replacement: b.ForType<T>().Property(p => p.X).RenameTo("y").
+// ExternalUser models retained without their old [RenameProperty] markers so the
+// test surface still builds; matching tests in RenamePropertyTests.cs are removed.
 public class ExternalUser
 {
     public int Id { get; set; }
@@ -126,11 +128,9 @@ public class ExternalUser
 }
 
 [CreateDtoFor(typeof(ExternalUser), Ignore = new[] { "Id", "LastName" })]
-[RenameProperty("FirstName", "Name")]
 public partial record CreateUserRequest;
 
 [UpdateDtoFor(typeof(ExternalUser), Ignore = new[] { "Id", "LastName" })]
-[RenameProperty("FirstName", "Name")]
 public partial record UpdateUserRequest;
 
 // ─── PartialFrom ───────────────────────────────────────────────────
@@ -198,4 +198,27 @@ public class UpdateOnlyModel
 {
     public string Name { get; set; } = string.Empty;
     public int Value { get; set; }
+}
+
+// ─── Fluent IDtoConfigurator fixtures ────────────────────────────────
+//
+// These models carry NO Dto attributes — DTO generation is fully driven
+// by FluentTestDtoConfig (sibling file). Verifies the fluent path produces
+// the same shapes as the attribute path would.
+
+public class FluentArticle
+{
+    public int Id { get; set; }
+    public required string Title { get; set; }
+    public string? Body { get; set; }
+    public DateTime PublishedAt { get; set; }
+}
+
+// Mixed-mode fixture — [CrudApi] marker + fluent options + per-property override.
+[CrudApi]
+public partial class FluentMixedModel
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+    public string? Secret { get; set; }
 }

@@ -296,18 +296,10 @@ public partial class DtoGenerator
             }
         }
 
-        // Read [RenameProperty] attributes
+        // Per-property renames now go through fluent .Property(p => p.X).RenameTo("y")
+        // or [DtoName] on the property — empty map keeps downstream code structurally
+        // unchanged without scanning for a class-level rename attribute that no longer exists.
         var renameMap = new Dictionary<string, string>();
-        foreach (var a in symbol.GetAttributes())
-        {
-            if (a.AttributeClass?.ToDisplayString() != RenamePropertyAttributeFqn) continue;
-            if (a.ConstructorArguments.Length >= 2 &&
-                a.ConstructorArguments[0].Value is string from &&
-                a.ConstructorArguments[1].Value is string to)
-            {
-                renameMap[from] = to;
-            }
-        }
 
         // Handle generics — user's class params map to target's type params
         var genericParams = "";
@@ -621,18 +613,9 @@ public partial class DtoGenerator
 
     private static List<DtoPropertyInfo> CollectProperties(INamedTypeSymbol symbol, DtoKind? kind, HashSet<string>? seen, List<DtoClassInfo>? autoNested)
     {
-        // Read [RenameProperty] from class
+        // No class-level rename map — per-property renames go through fluent
+        // .Property(p => p.X).RenameTo("y") or [DtoName] applied per property.
         var renameMap = new Dictionary<string, string>();
-        foreach (var a in symbol.GetAttributes())
-        {
-            if (a.AttributeClass?.ToDisplayString() != RenamePropertyAttributeFqn) continue;
-            if (a.ConstructorArguments.Length >= 2 &&
-                a.ConstructorArguments[0].Value is string from &&
-                a.ConstructorArguments[1].Value is string to)
-            {
-                renameMap[from] = to;
-            }
-        }
 
         var properties = new List<DtoPropertyInfo>();
 

@@ -35,5 +35,18 @@ internal sealed class DtoConfig : IDtoConfigurator
             .Property(p => p.Id).IgnoreIn(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)
             .Property(p => p.Body).RenameTo("content")
             .Property(p => p.PublishedAt).IgnoreIn(DtoTarget.Create);
+
+        // Player keeps its [CrudApi] attribute as the marker but uses fluent to
+        // override CrudApi options + add per-property overrides. Phase 1D wires the
+        // fluent config through the [CrudApi]-implied pipeline so this mix works.
+        b.ForType<Player>()
+            .CrudApi(api =>
+            {
+                // Limit operations to Create + Update + GetById (drop list/delete/bulk).
+                api.Operations = CrudOperations.Create | CrudOperations.Update | CrudOperations.GetById;
+                api.Route = "api/v2/players";
+            })
+            // Hide TeamId from response — UI should use the embedded Team object only.
+            .Property(p => p.TeamId).IgnoreIn(DtoTarget.Response);
     }
 }
