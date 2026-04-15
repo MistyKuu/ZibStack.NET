@@ -28,14 +28,18 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Pull every type declaration that carries [GenerateTypes].
+        // Pull every type declaration that carries [GenerateTypes] OR [CrudApi].
+        // [CrudApi]-only types don't drive emission but are tracked so we can warn
+        // (TG0014) that they're invisible without [GenerateTypes].
         var classes = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => node is ClassDeclarationSyntax or StructDeclarationSyntax or EnumDeclarationSyntax,
             transform: static (ctx, _) =>
             {
                 var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
                 if (symbol is null) return null;
-                if (!SchemaParser.HasGenerateTypes(symbol)) return null;
+                var hasGen = SchemaParser.HasGenerateTypes(symbol);
+                var hasCrud = SchemaParser.HasCrudApi(symbol);
+                if (!hasGen && !hasCrud) return null;
                 return symbol;
             })
             .Where(static s => s is not null);
@@ -48,6 +52,20 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         {
             var (symbols, compilation) = source;
             if (symbols.IsDefaultOrEmpty) return;
+
+            // Warn about [CrudApi]-only classes that TypeGen can't emit paths for —
+            // they need [GenerateTypes] so we discover them via the same provider.
+            // (Actually they're already in `symbols` thanks to the dual predicate above,
+            //  but the OpenApiEmitter would skip them; surface the cause explicitly.)
+            foreach (var sym in symbols)
+            {
+                if (sym is null) continue;
+                if (!SchemaParser.HasGenerateTypes(sym) && SchemaParser.HasCrudApi(sym))
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        TypeGenDiagnostics.CrudApiWithoutGenerateTypes,
+                        sym.Locations.FirstOrDefault() ?? Location.None,
+                        sym.ToDisplayString()));
+            }
 
             // Parse ITypeGenConfigurator DSL first — global settings feed the emitters,
             // per-type overrides merge into SchemaClass/SchemaEnum below.

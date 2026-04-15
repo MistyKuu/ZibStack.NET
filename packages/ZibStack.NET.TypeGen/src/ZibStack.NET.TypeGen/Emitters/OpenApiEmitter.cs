@@ -83,7 +83,7 @@ internal static class OpenApiEmitter
         sb.AppendLine($"  version: {YamlString(oa.Version)}");
         if (!string.IsNullOrEmpty(oa.Description))
             sb.AppendLine($"  description: {YamlString(oa.Description!)}");
-        sb.AppendLine("paths: {}");
+        EmitPathsYaml(sb, model, nameByCSharp);
         sb.AppendLine("components:");
         sb.AppendLine("  schemas:");
 
@@ -99,6 +99,180 @@ internal static class OpenApiEmitter
         }
 
         return sb.ToString();
+    }
+
+    // ── paths emission (driven by [CrudApi]) ─────────────────────────────────
+
+    /// <summary>
+    /// Emits the full <c>paths:</c> block from any class carrying <c>[CrudApi]</c>.
+    /// Convention: response shape is the class itself (<c>$ref</c> by emitted name);
+    /// request bodies are <c>Create{Class}Request</c> / <c>Update{Class}Request</c> —
+    /// users are responsible for ensuring those exist as schemas (typically by also
+    /// putting <c>[GenerateTypes]</c> on the request DTOs).
+    /// </summary>
+    private static void EmitPathsYaml(StringBuilder sb, SchemaModel model, IReadOnlyDictionary<string, string> nameByCSharp)
+    {
+        var crudClasses = model.Classes.Where(c => c.Crud is not null && (c.Targets & TypeTarget.OpenApi) != 0).ToList();
+        if (crudClasses.Count == 0) { sb.AppendLine("paths: {}"); return; }
+
+        sb.AppendLine("paths:");
+        foreach (var cls in crudClasses)
+        {
+            var route = ResolveRoute(cls);
+            var keyType = ResolveKeyParamType(cls);
+            var collectionPath = "/" + route.TrimStart('/');
+            var itemPath = collectionPath + "/{" + LowerFirst(cls.Crud!.KeyProperty) + "}";
+            var ops = cls.Crud.Operations;
+
+            // Group by path so multiple verbs share a single key.
+            var collectionVerbs = new List<(string Verb, System.Action<StringBuilder> Emit)>();
+            var itemVerbs = new List<(string Verb, System.Action<StringBuilder> Emit)>();
+
+            if ((ops & CrudOperations.GetList) != 0)
+                collectionVerbs.Add(("get", b => EmitListOpYaml(b, cls)));
+            if ((ops & CrudOperations.Create) != 0)
+                collectionVerbs.Add(("post", b => EmitCreateOpYaml(b, cls)));
+            if ((ops & CrudOperations.GetById) != 0)
+                itemVerbs.Add(("get", b => EmitGetByIdOpYaml(b, cls, keyType)));
+            if ((ops & CrudOperations.Update) != 0)
+                itemVerbs.Add(("patch", b => EmitUpdateOpYaml(b, cls, keyType)));
+            if ((ops & CrudOperations.Delete) != 0)
+                itemVerbs.Add(("delete", b => EmitDeleteOpYaml(b, cls, keyType)));
+
+            if (collectionVerbs.Count > 0) EmitPathBlockYaml(sb, collectionPath, collectionVerbs);
+            if (itemVerbs.Count > 0) EmitPathBlockYaml(sb, itemPath, itemVerbs);
+        }
+    }
+
+    private static void EmitPathBlockYaml(StringBuilder sb, string path, List<(string Verb, System.Action<StringBuilder> Emit)> verbs)
+    {
+        sb.AppendLine($"  {path}:");
+        foreach (var (verb, emit) in verbs)
+        {
+            sb.AppendLine($"    {verb}:");
+            emit(sb);
+        }
+    }
+
+    private static void EmitListOpYaml(StringBuilder sb, SchemaClass cls)
+    {
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: list{cls.EmittedName}");
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '200':");
+        sb.AppendLine("          description: OK");
+        sb.AppendLine("          content:");
+        sb.AppendLine("            application/json:");
+        sb.AppendLine("              schema:");
+        sb.AppendLine("                type: array");
+        sb.AppendLine($"                items: {{ $ref: '#/components/schemas/{cls.EmittedName}' }}");
+    }
+
+    private static void EmitCreateOpYaml(StringBuilder sb, SchemaClass cls)
+    {
+        var req = $"Create{cls.SourceName}Request";
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: create{cls.EmittedName}");
+        sb.AppendLine("      requestBody:");
+        sb.AppendLine("        required: true");
+        sb.AppendLine("        content:");
+        sb.AppendLine("          application/json:");
+        sb.AppendLine($"            schema: {{ $ref: '#/components/schemas/{req}' }}");
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '201':");
+        sb.AppendLine("          description: Created");
+        sb.AppendLine("          content:");
+        sb.AppendLine("            application/json:");
+        sb.AppendLine($"              schema: {{ $ref: '#/components/schemas/{cls.EmittedName}' }}");
+    }
+
+    private static void EmitGetByIdOpYaml(StringBuilder sb, SchemaClass cls, (string TypeKey, string? FmtKey) keyType)
+    {
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: get{cls.EmittedName}ById");
+        EmitKeyParamYaml(sb, cls.Crud!.KeyProperty, keyType);
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '200':");
+        sb.AppendLine("          description: OK");
+        sb.AppendLine("          content:");
+        sb.AppendLine("            application/json:");
+        sb.AppendLine($"              schema: {{ $ref: '#/components/schemas/{cls.EmittedName}' }}");
+        sb.AppendLine("        '404':");
+        sb.AppendLine("          description: Not Found");
+    }
+
+    private static void EmitUpdateOpYaml(StringBuilder sb, SchemaClass cls, (string TypeKey, string? FmtKey) keyType)
+    {
+        var req = $"Update{cls.SourceName}Request";
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: update{cls.EmittedName}");
+        EmitKeyParamYaml(sb, cls.Crud!.KeyProperty, keyType);
+        sb.AppendLine("      requestBody:");
+        sb.AppendLine("        required: true");
+        sb.AppendLine("        content:");
+        sb.AppendLine("          application/json:");
+        sb.AppendLine($"            schema: {{ $ref: '#/components/schemas/{req}' }}");
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '200':");
+        sb.AppendLine("          description: OK");
+        sb.AppendLine("          content:");
+        sb.AppendLine("            application/json:");
+        sb.AppendLine($"              schema: {{ $ref: '#/components/schemas/{cls.EmittedName}' }}");
+    }
+
+    private static void EmitDeleteOpYaml(StringBuilder sb, SchemaClass cls, (string TypeKey, string? FmtKey) keyType)
+    {
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: delete{cls.EmittedName}");
+        EmitKeyParamYaml(sb, cls.Crud!.KeyProperty, keyType);
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '204':");
+        sb.AppendLine("          description: No Content");
+    }
+
+    private static void EmitKeyParamYaml(StringBuilder sb, string keyName, (string TypeKey, string? FmtKey) keyType)
+    {
+        sb.AppendLine("      parameters:");
+        sb.AppendLine($"        - name: {LowerFirst(keyName)}");
+        sb.AppendLine("          in: path");
+        sb.AppendLine("          required: true");
+        sb.AppendLine("          schema:");
+        sb.AppendLine($"            type: {keyType.TypeKey}");
+        if (keyType.FmtKey != null) sb.AppendLine($"            format: {keyType.FmtKey}");
+    }
+
+    /// <summary>
+    /// Resolves the route per <c>[CrudApi]</c> conventions: explicit <c>Route</c>
+    /// wins; otherwise <c>api/{prefix}/{pluralized-class-name}</c>. Pluralization
+    /// is naive (append <c>s</c>) — irregular nouns (Bus → Buses, Person → People)
+    /// must use the explicit <c>Route</c> override.
+    /// </summary>
+    private static string ResolveRoute(SchemaClass cls)
+    {
+        var crud = cls.Crud!;
+        if (!string.IsNullOrEmpty(crud.Route)) return crud.Route!;
+        var prefix = crud.RoutePrefix?.Trim('/');
+        var middle = string.IsNullOrEmpty(prefix) ? "" : prefix + "/";
+        return $"api/{middle}{Pluralize(cls.SourceName).ToLowerInvariant()}";
+    }
+
+    private static string Pluralize(string name) => name + "s";
+
+    private static string LowerFirst(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToLowerInvariant(s[0]) + s.Substring(1);
+
+    /// <summary>
+    /// Looks up the property matching <c>Crud.KeyProperty</c> and translates its
+    /// C# type to OpenAPI type/format. Falls back to <c>integer/int32</c> when
+    /// the property isn't found — same default as <c>[CrudApi]</c> assumes.
+    /// </summary>
+    private static (string TypeKey, string? FmtKey) ResolveKeyParamType(SchemaClass cls)
+    {
+        var key = cls.Properties.FirstOrDefault(p =>
+            string.Equals(p.SourceName, cls.Crud!.KeyProperty, System.StringComparison.Ordinal));
+        if (key is null) return ("integer", "int32");
+        var mapped = MapCSharpToOpenApi(key.CSharpTypeFullName, new Dictionary<string, string>());
+        return (mapped.TypeKey, mapped.FmtKey);
     }
 
     private static void EmitClassYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
@@ -203,7 +377,7 @@ internal static class OpenApiEmitter
         }
         else sb.AppendLine();
         sb.AppendLine("  },");
-        sb.AppendLine("  \"paths\": {},");
+        EmitPathsJson(sb, model);
         sb.AppendLine("  \"components\": {");
         sb.AppendLine("    \"schemas\": {");
 
@@ -305,6 +479,92 @@ internal static class OpenApiEmitter
         sb.Append(string.Join(", ", en.Members.Select(m => JsonString(m.Name))));
         sb.AppendLine("]");
         sb.Append($"{indent}}}");
+    }
+
+    /// <summary>
+    /// JSON paths emitter. Mirrors <see cref="EmitPathsYaml"/> but produces compact
+    /// JSON. Schema content is intentionally minimal: <c>$ref</c> + <c>responses</c> +
+    /// <c>requestBody</c> + path parameters. Keeps in lockstep with YAML.
+    /// </summary>
+    private static void EmitPathsJson(StringBuilder sb, SchemaModel model)
+    {
+        var crudClasses = model.Classes.Where(c => c.Crud is not null && (c.Targets & TypeTarget.OpenApi) != 0).ToList();
+        if (crudClasses.Count == 0) { sb.AppendLine("  \"paths\": {},"); return; }
+
+        sb.AppendLine("  \"paths\": {");
+        var pathEntries = new List<(string Path, List<(string Verb, string Body)> Verbs)>();
+        foreach (var cls in crudClasses)
+        {
+            var route = "/" + ResolveRoute(cls).TrimStart('/');
+            var keyType = ResolveKeyParamType(cls);
+            var itemPath = route + "/{" + LowerFirst(cls.Crud!.KeyProperty) + "}";
+            var ops = cls.Crud.Operations;
+
+            var coll = new List<(string, string)>();
+            var item = new List<(string, string)>();
+            if ((ops & CrudOperations.GetList) != 0) coll.Add(("get", BuildListJson(cls)));
+            if ((ops & CrudOperations.Create) != 0) coll.Add(("post", BuildCreateJson(cls)));
+            if ((ops & CrudOperations.GetById) != 0) item.Add(("get", BuildGetByIdJson(cls, keyType)));
+            if ((ops & CrudOperations.Update) != 0) item.Add(("patch", BuildUpdateJson(cls, keyType)));
+            if ((ops & CrudOperations.Delete) != 0) item.Add(("delete", BuildDeleteJson(cls, keyType)));
+
+            if (coll.Count > 0) pathEntries.Add((route, coll));
+            if (item.Count > 0) pathEntries.Add((itemPath, item));
+        }
+
+        for (int i = 0; i < pathEntries.Count; i++)
+        {
+            var (path, verbs) = pathEntries[i];
+            sb.Append($"    {JsonString(path)}: {{ ");
+            for (int j = 0; j < verbs.Count; j++)
+            {
+                sb.Append($"\"{verbs[j].Verb}\": {verbs[j].Body}");
+                if (j < verbs.Count - 1) sb.Append(", ");
+            }
+            sb.Append(" }");
+            if (i < pathEntries.Count - 1) sb.Append(',');
+            sb.AppendLine();
+        }
+        sb.AppendLine("  },");
+    }
+
+    private static string BuildListJson(SchemaClass cls) =>
+        $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"list{cls.EmittedName}\", " +
+        $"\"responses\": {{ \"200\": {{ \"description\": \"OK\", \"content\": {{ \"application/json\": " +
+        $"{{ \"schema\": {{ \"type\": \"array\", \"items\": {{ \"$ref\": \"#/components/schemas/{cls.EmittedName}\" }} }} }} }} }} }} }}";
+
+    private static string BuildCreateJson(SchemaClass cls) =>
+        $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"create{cls.EmittedName}\", " +
+        $"\"requestBody\": {{ \"required\": true, \"content\": {{ \"application/json\": {{ \"schema\": " +
+        $"{{ \"$ref\": \"#/components/schemas/Create{cls.SourceName}Request\" }} }} }} }}, " +
+        $"\"responses\": {{ \"201\": {{ \"description\": \"Created\", \"content\": {{ \"application/json\": " +
+        $"{{ \"schema\": {{ \"$ref\": \"#/components/schemas/{cls.EmittedName}\" }} }} }} }} }} }}";
+
+    private static string BuildGetByIdJson(SchemaClass cls, (string TypeKey, string? FmtKey) kt) =>
+        $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"get{cls.EmittedName}ById\", " +
+        $"\"parameters\": [{KeyParamJson(cls.Crud!.KeyProperty, kt)}], " +
+        $"\"responses\": {{ \"200\": {{ \"description\": \"OK\", \"content\": {{ \"application/json\": " +
+        $"{{ \"schema\": {{ \"$ref\": \"#/components/schemas/{cls.EmittedName}\" }} }} }} }}, " +
+        $"\"404\": {{ \"description\": \"Not Found\" }} }} }}";
+
+    private static string BuildUpdateJson(SchemaClass cls, (string TypeKey, string? FmtKey) kt) =>
+        $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"update{cls.EmittedName}\", " +
+        $"\"parameters\": [{KeyParamJson(cls.Crud!.KeyProperty, kt)}], " +
+        $"\"requestBody\": {{ \"required\": true, \"content\": {{ \"application/json\": {{ \"schema\": " +
+        $"{{ \"$ref\": \"#/components/schemas/Update{cls.SourceName}Request\" }} }} }} }}, " +
+        $"\"responses\": {{ \"200\": {{ \"description\": \"OK\", \"content\": {{ \"application/json\": " +
+        $"{{ \"schema\": {{ \"$ref\": \"#/components/schemas/{cls.EmittedName}\" }} }} }} }} }} }}";
+
+    private static string BuildDeleteJson(SchemaClass cls, (string TypeKey, string? FmtKey) kt) =>
+        $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"delete{cls.EmittedName}\", " +
+        $"\"parameters\": [{KeyParamJson(cls.Crud!.KeyProperty, kt)}], " +
+        $"\"responses\": {{ \"204\": {{ \"description\": \"No Content\" }} }} }}";
+
+    private static string KeyParamJson(string keyName, (string TypeKey, string? FmtKey) kt)
+    {
+        var fmt = kt.FmtKey is null ? "" : $", \"format\": \"{kt.FmtKey}\"";
+        return $"{{ \"name\": \"{LowerFirst(keyName)}\", \"in\": \"path\", \"required\": true, " +
+               $"\"schema\": {{ \"type\": \"{kt.TypeKey}\"{fmt} }} }}";
     }
 
     // ── shared mapping ──────────────────────────────────────────────────────

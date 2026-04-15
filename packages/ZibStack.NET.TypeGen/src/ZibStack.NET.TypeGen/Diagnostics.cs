@@ -64,6 +64,15 @@ internal static class TypeGenDiagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    public const string CrudApiWithoutGenerateTypesId = "TG0014";
+    public static readonly DiagnosticDescriptor CrudApiWithoutGenerateTypes = new(
+        CrudApiWithoutGenerateTypesId,
+        title: "[CrudApi] class is invisible to TypeGen without [GenerateTypes]",
+        messageFormat: "Class '{0}' has [CrudApi] but no [GenerateTypes(Targets = TypeTarget.OpenApi)]. TypeGen needs [GenerateTypes] to discover the class — without it the OpenAPI 'paths' block won't include this endpoint.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     public const string GenericTypeId = "TG0003";
     public static readonly DiagnosticDescriptor GenericType = new(
         GenericTypeId,

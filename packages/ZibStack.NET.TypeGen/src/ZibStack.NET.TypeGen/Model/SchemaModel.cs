@@ -21,6 +21,45 @@ internal enum TypeTarget
     OpenApi = 1 << 1,
 }
 
+/// <summary>
+/// Mirror of <c>ZibStack.NET.Dto.CrudOperations</c> — same numeric layout so we can
+/// cast directly from the int read off the attribute. Kept in this assembly so
+/// TypeGen has zero runtime dependency on the Dto package.
+/// </summary>
+[System.Flags]
+internal enum CrudOperations
+{
+    None = 0,
+    GetById = 1,
+    GetList = 2,
+    Create = 4,
+    Update = 8,
+    Delete = 16,
+    BulkCreate = 32,
+    BulkDelete = 64,
+    All = GetById | GetList | Create | Update | Delete,
+}
+
+/// <summary>
+/// Subset of <c>[CrudApi]</c> the OpenAPI emitter cares about: route + key
+/// property + which operations to emit. Authorization, ApiStyle, etc. are out
+/// of MVP scope.
+/// </summary>
+internal sealed class CrudApiInfo
+{
+    /// <summary>Explicit route override; when set, wins over conventional path.</summary>
+    public string? Route { get; set; }
+
+    /// <summary>Optional segment between <c>api/</c> and the pluralized class name.</summary>
+    public string? RoutePrefix { get; set; }
+
+    /// <summary>Path parameter name on operations targeting a single record.</summary>
+    public string KeyProperty { get; set; } = "Id";
+
+    /// <summary>Bitmask of operations to emit (GET-by-id, list, create, update, delete, bulk*).</summary>
+    public CrudOperations Operations { get; set; } = CrudOperations.All;
+}
+
 internal enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
 internal enum TypeScriptFileLayout { FilePerClass, SingleFile }
 
@@ -92,6 +131,9 @@ internal sealed class SchemaClass
 
     public bool TsIgnore { get; set; }
     public bool OpenApiIgnore { get; set; }
+
+    /// <summary>Populated when the class carries <c>[CrudApi]</c>. <c>null</c> = not a CRUD endpoint.</summary>
+    public CrudApiInfo? Crud { get; set; }
 }
 
 internal sealed class SchemaProperty

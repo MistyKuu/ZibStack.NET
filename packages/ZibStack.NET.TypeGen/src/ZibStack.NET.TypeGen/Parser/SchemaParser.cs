@@ -19,6 +19,10 @@ internal static class SchemaParser
     private const string OpenApiSchemaNameAttr = "ZibStack.NET.TypeGen.OpenApiSchemaNameAttribute";
     private const string OpenApiPropertyAttr = "ZibStack.NET.TypeGen.OpenApiPropertyAttribute";
     private const string OpenApiIgnoreAttr = "ZibStack.NET.TypeGen.OpenApiIgnoreAttribute";
+    // String-only — no reference to ZibStack.NET.Dto. The attribute is generated
+    // by Dto's source generator into the user's compilation, so we read it via
+    // its full metadata name without taking a binary dependency.
+    private const string CrudApiAttr = "ZibStack.NET.Dto.CrudApiAttribute";
 
     /// <summary>
     /// Returns true if the symbol carries <c>[GenerateTypes]</c>. Cheap predicate
@@ -26,6 +30,9 @@ internal static class SchemaParser
     /// </summary>
     public static bool HasGenerateTypes(INamedTypeSymbol symbol) =>
         symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == GenerateTypesAttr);
+
+    public static bool HasCrudApi(INamedTypeSymbol symbol) =>
+        symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == CrudApiAttr);
 
     public static SchemaClass? ParseClass(INamedTypeSymbol symbol)
     {
@@ -46,6 +53,7 @@ internal static class SchemaParser
             OpenApiNameOverride = ReadStringArg(symbol, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(symbol, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(symbol, OpenApiIgnoreAttr),
+            Crud = ReadCrudApi(symbol),
         };
 
         foreach (var member in symbol.GetMembers().OfType<IPropertySymbol>())
@@ -162,6 +170,24 @@ internal static class SchemaParser
         foreach (var na in attr.NamedArguments)
             if (na.Key == namedKey && na.Value.Value is string nv) return nv;
         return null;
+    }
+
+    private static CrudApiInfo? ReadCrudApi(ISymbol symbol)
+    {
+        var attr = symbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == CrudApiAttr);
+        if (attr is null) return null;
+        var info = new CrudApiInfo();
+        foreach (var na in attr.NamedArguments)
+        {
+            switch (na.Key)
+            {
+                case "Route": info.Route = na.Value.Value as string; break;
+                case "RoutePrefix": info.RoutePrefix = na.Value.Value as string; break;
+                case "KeyProperty": if (na.Value.Value is string kp && kp.Length > 0) info.KeyProperty = kp; break;
+                case "Operations": if (na.Value.Value is int ops) info.Operations = (CrudOperations)ops; break;
+            }
+        }
+        return info;
     }
 
     private static bool HasAttr(ISymbol symbol, string attrFullName) =>

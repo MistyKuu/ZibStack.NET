@@ -87,6 +87,14 @@ public sealed class SampleApiBuildTests
         Assert.Contains("format: email", yaml);
         Assert.Contains("description: Verified contact email.", yaml);
         Assert.Contains("description: Display name shown in receipts.", yaml);
+
+        // [CrudApi] on Order contributes a full paths block — full RESTful endpoint set.
+        Assert.Contains("  /api/orders:", yaml);
+        Assert.Contains("  /api/orders/{id}:", yaml);
+        Assert.Contains("operationId: createOrder", yaml);
+        Assert.Contains("operationId: getOrderById", yaml);
+        Assert.Contains("operationId: updateOrder", yaml);
+        Assert.Contains("operationId: deleteOrder", yaml);
     }
 
     private static (int Exit, string Output) Run(string file, string args)

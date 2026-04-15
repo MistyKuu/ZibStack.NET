@@ -234,6 +234,7 @@ unchanged (stable mtimes, no file-watcher thrash in frontend dev servers).
 | `TG0011` | Error | Empty `OutputDir` on `[GenerateTypes]` |
 | `TG0012` | Warning | Unrecognized fluent call in `ITypeGenConfigurator.Configure` |
 | `TG0013` | Warning | Non-literal argument passed to a configurator DSL method |
+| `TG0014` | Warning | `[CrudApi]` on class without `[GenerateTypes]` — `paths:` won't include it |
 
 ## File layout & cross-file imports
 
@@ -242,6 +243,53 @@ real `import { X } from './X';` statements at the top of each file, so the outpu
 compiles directly with `tsc` and the tooling in the consumer (`ts-node`, Vite,
 webpack) resolves everything without a barrel file. Switch to a single bundled
 file via `TypeScriptSettings.FileLayout = TypeScriptFileLayout.SingleFile`.
+
+## `[CrudApi]` → OpenAPI `paths:`
+
+If a class carries `[CrudApi]` (from `ZibStack.NET.Dto`), TypeGen contributes
+matching REST endpoints to the emitted OpenAPI document. No extra configuration —
+the same attribute that drives endpoint generation drives the contract.
+
+```csharp
+[CrudApi]
+[GenerateTypes(Targets = TypeTarget.OpenApi, OutputDir = "generated")]
+public partial class Order
+{
+    public int Id { get; set; }
+    public string Customer { get; set; } = "";
+    public decimal Total { get; set; }
+}
+```
+
+Emits:
+
+```yaml
+paths:
+  /api/orders:
+    get:    { operationId: listOrder,   tags: [Order], responses: { '200': ... } }
+    post:   { operationId: createOrder, tags: [Order], requestBody: { $ref: CreateOrderRequest } }
+  /api/orders/{id}:
+    get:    { operationId: getOrderById, parameters: [...], responses: { '200': ..., '404': ... } }
+    patch:  { operationId: updateOrder,  requestBody: { $ref: UpdateOrderRequest } }
+    delete: { operationId: deleteOrder,  responses: { '204': No Content } }
+```
+
+What's read from `[CrudApi]`:
+- `Route` — explicit override; otherwise convention is `api/{pluralized-class-name-lowercase}`
+- `RoutePrefix` — slotted between `api/` and the pluralized class name
+- `KeyProperty` — path parameter name (default `Id`); type inferred from the property
+- `Operations` — bitmask controlling which verbs emit (default = `GetById | GetList | Create | Update | Delete`)
+
+**Limitations (MVP):**
+- Pluralization is naive `+"s"`. For irregular nouns (`Bus`, `Octopus`, `Person`) use an explicit `Route`.
+- `$ref`s point at `{Class}`, `Create{Class}Request`, `Update{Class}Request` by convention.
+  TypeGen doesn't emit those request schemas automatically — add `[GenerateTypes]` on the
+  request/response DTOs yourself (or Dto's `[CreateDto]`/`[UpdateDto]` keep them in sync).
+  `[CrudApi]` without `[GenerateTypes]` triggers diagnostic `TG0014`.
+- Authorization policies (`AuthorizePolicy`, per-op policies) don't map to OpenAPI
+  `security`/`components.securitySchemes` yet.
+- Bulk operations (`BulkCreate`, `BulkDelete`) and query-DSL params (`filter`/`sort`/`select`)
+  are out of scope for this iteration.
 
 ## Why OpenAPI 3.0 (not 3.1)
 
@@ -258,8 +306,8 @@ You can override via `OpenApiSettings.OpenApiVersion`.
   to closed types only.
 - **Inheritance** across DTOs is emitted as flat types — base-class properties are
   inlined, no `extends` in TypeScript or `allOf` in OpenAPI yet.
-- **OpenAPI `paths`** are empty. The `[CrudApi]` integration from `ZibStack.NET.Dto`
-  will contribute real endpoints in a follow-up.
+- **Authorization on emitted paths** isn't yet mapped from `[CrudApi]` policies
+  to OpenAPI `security` / `securitySchemes`.
 - **Dictionary in OpenAPI** emits as plain `object` — needs
   `additionalProperties` mapping in a follow-up.
 See [project_typegen_backlog on GitHub](https://github.com/MistyKuu/ZibStack.NET)

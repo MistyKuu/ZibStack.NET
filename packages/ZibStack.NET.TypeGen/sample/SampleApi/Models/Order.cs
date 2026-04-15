@@ -1,11 +1,16 @@
 using System.Collections.Generic;
+using ZibStack.NET.Dto;
 using ZibStack.NET.TypeGen;
 
 namespace SampleApi.Models;
 
+// [CrudApi] makes the Dto generator emit REST endpoints; TypeGen sees the same
+// attribute and contributes the matching `paths:` block to openapi.yaml.
+// GetById / GetList / Create / Update / Delete are emitted by default.
+[CrudApi]
 [GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
                OutputDir = "generated")]
-public class Order
+public partial class Order
 {
     public int Id { get; set; }
     public string Customer { get; set; } = "";
