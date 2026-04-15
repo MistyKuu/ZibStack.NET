@@ -157,7 +157,11 @@ internal static class ConfiguratorParser
 
             case "ForType":
                 var typeName = ResolveForTypeArg(first, semantic);
-                if (typeName is null) { ReportUnknown(report, first); return; }
+                // Silent skip when the type symbol can't be resolved — almost always a partial
+                // compilation in the IDE (mid-edit), not actually-broken code. The full build's
+                // generator pass will succeed and pick this up. Reporting TG0012 here would
+                // spam the editor with false positives that disappear on the next keystroke.
+                if (typeName is null) return;
                 if (!parsed.PerType.TryGetValue(typeName, out var overrides))
                     parsed.PerType[typeName] = overrides = new PerTypeOverrides();
                 ProcessForTypeChain(calls, semantic, overrides, report);
