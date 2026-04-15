@@ -157,6 +157,12 @@ internal static class ConfiguratorParser
                 if (calls.Count > 1) ReportUnknown(report, calls[1]);
                 return;
 
+            case "Python":
+                ApplyLambdaBlock(first, semantic, parsed.Settings.Python, report,
+                    (settings, prop, val) => AssignPython(settings, prop, val));
+                if (calls.Count > 1) ReportUnknown(report, calls[1]);
+                return;
+
             case "ForType":
                 var typeName = ResolveForTypeArg(first, semantic);
                 // Silent skip when the type symbol can't be resolved — almost always a partial
@@ -280,6 +286,19 @@ internal static class ConfiguratorParser
             case "Version": if (val is string v) s.Version = v; break;
             case "Description": s.Description = val as string; break;
             case "OpenApiVersion": if (val is string ov) s.OpenApiVersion = ov; break;
+        }
+    }
+
+    private static void AssignPython(PythonSettings s, string prop, object? val)
+    {
+        switch (prop)
+        {
+            case "OutputDir": s.OutputDir = val as string; break;
+            case "SingleFileName": if (val is string sf) s.SingleFileName = sf; break;
+            case "FileLayout": if (val is int fl) s.FileLayout = (PythonFileLayout)fl; break;
+            case "Style": if (val is int ps) s.Style = (PythonStyle)ps; break;
+            case "SnakeCaseProperties": if (val is bool sc) s.SnakeCaseProperties = sc; break;
+            case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
         }
     }
 

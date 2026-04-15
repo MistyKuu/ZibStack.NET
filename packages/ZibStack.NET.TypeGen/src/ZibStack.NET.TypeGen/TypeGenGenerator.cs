@@ -133,6 +133,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 allFiles.AddRange(TypeScriptEmitter.Emit(model, settings));
             if (RequestsTarget(model, TypeTarget.OpenApi))
                 allFiles.AddRange(OpenApiEmitter.Emit(model, settings));
+            if (RequestsTarget(model, TypeTarget.Python))
+                allFiles.AddRange(PythonEmitter.Emit(model, settings));
 
             if (allFiles.Count == 0) return;
 

@@ -81,6 +81,9 @@ public interface ITypeGenBuilder
     /// <summary>Apply settings to the global <see cref="OpenApiSettings"/>.</summary>
     ITypeGenBuilder OpenApi(Action<OpenApiSettings> configure);
 
+    /// <summary>Apply settings to the global <see cref="PythonSettings"/>.</summary>
+    ITypeGenBuilder Python(Action<PythonSettings> configure);
+
     /// <summary>
     /// Begin per-type overrides for <typeparamref name="T"/>. Overrides take
     /// precedence over the <c>TypeScript</c>/<c>OpenApi</c> global blocks but lose

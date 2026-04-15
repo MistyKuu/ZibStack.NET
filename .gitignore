@@ -19,3 +19,6 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+
+## TypeGen sample outputs — regenerated on every build, never commit.
+**/sample/**/generated/

@@ -19,6 +19,7 @@ internal enum TypeTarget
     None = 0,
     TypeScript = 1 << 0,
     OpenApi = 1 << 1,
+    Python = 1 << 2,
 }
 
 /// <summary>
@@ -62,6 +63,18 @@ internal sealed class CrudApiInfo
 
 internal enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
 internal enum TypeScriptFileLayout { FilePerClass, SingleFile }
+internal enum PythonFileLayout { FilePerClass, SingleFile }
+internal enum PythonStyle { Pydantic, Dataclass }
+
+internal sealed class PythonSettings
+{
+    public string? OutputDir { get; set; }
+    public PythonFileLayout FileLayout { get; set; } = PythonFileLayout.FilePerClass;
+    public string SingleFileName { get; set; } = "models.py";
+    public PythonStyle Style { get; set; } = PythonStyle.Pydantic;
+    public bool SnakeCaseProperties { get; set; } = true;
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
 
 internal sealed class TypeScriptSettings
 {
@@ -235,6 +248,7 @@ internal sealed class GlobalSettings
 {
     public TypeScriptSettings TypeScript { get; set; } = new();
     public OpenApiSettings OpenApi { get; set; } = new();
+    public PythonSettings Python { get; set; } = new();
 
     /// <summary>
     /// Set by the generator when <c>ZibStack.NET.Query</c> is referenced by the

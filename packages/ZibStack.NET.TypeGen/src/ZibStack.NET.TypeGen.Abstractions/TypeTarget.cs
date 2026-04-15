@@ -17,4 +17,11 @@ public enum TypeTarget
 
     /// <summary>OpenAPI 3.1 schema document (default extension <c>.yaml</c>).</summary>
     OpenApi = 1 << 1,
+
+    /// <summary>
+    /// Python <c>Pydantic v2</c> <c>BaseModel</c> classes (file extension <c>.py</c>).
+    /// Idiomatic target for FastAPI backends consuming the same contract as the
+    /// C# DTOs — type hints + optional validation on parse.
+    /// </summary>
+    Python = 1 << 2,
 }

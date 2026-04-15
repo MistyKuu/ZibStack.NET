@@ -8,7 +8,7 @@ namespace SampleApi.Models;
 // attribute and contributes the matching `paths:` block to openapi.yaml.
 // GetById / GetList / Create / Update / Delete are emitted by default.
 [CrudApi]
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi | TypeTarget.Python,
                OutputDir = "generated")]
 public partial class Order
 {
@@ -28,7 +28,7 @@ public partial class Order
     public List<OrderItem> Items { get; set; } = new();
 }
 
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi | TypeTarget.Python,
                OutputDir = "generated")]
 public class OrderItem
 {
@@ -37,7 +37,7 @@ public class OrderItem
     public decimal UnitPrice { get; set; }
 }
 
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi | TypeTarget.Python,
                OutputDir = "generated")]
 public enum OrderStatus
 {
@@ -51,7 +51,7 @@ public enum OrderStatus
 // the fluent configurator's b.ForType<Customer>() block in TypeGenConfig.cs.
 // Demonstrates "configure without touching source" (useful when the DTO lives
 // in a referenced library you can't annotate).
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi | TypeTarget.Python,
                OutputDir = "generated")]
 public class Customer
 {

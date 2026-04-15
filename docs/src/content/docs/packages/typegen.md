@@ -135,21 +135,21 @@ target and be hidden in the other.
 
 The emitters translate C# types to target-language equivalents. Defaults:
 
-| C# | TypeScript | OpenAPI |
-|---|---|---|
-| `int`, `long`, `short` | `number` | `integer` (format `int32`/`int64`) |
-| `float`, `double` | `number` | `number` (format `float`/`double`) |
-| `decimal` | `string` (precision!) | `number` (format `double`) |
-| `string` | `string` | `string` |
-| `bool` | `boolean` | `boolean` |
-| `System.Guid` | `string` | `string` (format `uuid`) |
-| `System.DateTime` | `string` | `string` (format `date-time`) |
-| `System.DateOnly` | `string` | `string` (format `date`) |
-| `T?` (nullable) | optional `?` | `nullable: true` + not in `required` |
-| `List<T>`, `T[]` | `T[]` | `type: array, items: ...` |
-| `Dictionary<K, V>` | `Record<K, V>` | `type: object, additionalProperties: V` |
-| User DTO | `TypeName` | `$ref: '#/components/schemas/TypeName'` |
-| `enum` | `export enum` (numeric values) | `type: string, enum: [...]` |
+| C# | TypeScript | OpenAPI | Python (Pydantic) |
+|---|---|---|---|
+| `int`, `long`, `short` | `number` | `integer` (`int32`/`int64`) | `int` |
+| `float`, `double` | `number` | `number` (`float`/`double`) | `float` |
+| `decimal` | `string` (precision!) | `number` (`double`) | `str` (precision!) |
+| `string` | `string` | `string` | `str` |
+| `bool` | `boolean` | `boolean` | `bool` |
+| `System.Guid` | `string` | `string` (`uuid`) | `UUID` |
+| `System.DateTime` | `string` | `string` (`date-time`) | `datetime` |
+| `System.DateOnly` | `string` | `string` (`date`) | `date` |
+| `T?` (nullable) | optional `?` | `nullable: true` + not in `required` | `T \| None = None` |
+| `List<T>`, `T[]` | `T[]` | `type: array, items: ...` | `list[T]` |
+| `Dictionary<K, V>` | `Record<K, V>` | `type: object, additionalProperties: V` | `dict[K, V]` |
+| User DTO | `TypeName` | `$ref: '#/components/schemas/TypeName'` | `TypeName` (imported) |
+| `enum` | `export enum` (numeric values) | `type: string, enum: [...]` | `IntEnum` |
 
 Override any single property with `[TsType("...")]` or `[OpenApiProperty(Format = "...")]`.
 
@@ -338,6 +338,42 @@ drift on what a given `[DtoIgnore(flags)]` means.
   `allOf: [ { $ref: Base }, { type: object, properties: <new-only> } ]` in OpenAPI and
   `export interface Child extends Base { ...new-only }` in TypeScript. When the base
   isn't in the model, inherited properties are flattened (inlined) into the child.
+
+## Python (Pydantic v2)
+
+`TypeTarget.Python` emits Pydantic v2 `BaseModel` subclasses — idiomatic for
+FastAPI backends consuming the same contract as the C# DTOs. Class names stay
+PascalCase; property names get snake_cased (PEP 8) with `Field(alias="…")`
+preserving the C# casing on JSON parse / serialize.
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.Python, OutputDir = "../api_models")]
+public class Order
+{
+    public int Id { get; set; }
+    public string Customer { get; set; } = "";
+    public OrderStatus Status { get; set; }
+    public string? Note { get; set; }
+}
+```
+
+```python
+# order.py
+from __future__ import annotations
+from pydantic import BaseModel, Field
+from order_status import OrderStatus
+
+class Order(BaseModel):
+    id: int = Field(alias="Id")
+    customer: str = Field(alias="Customer")
+    status: OrderStatus = Field(alias="Status")
+    note: str | None = Field(default=None, alias="Note")
+```
+
+Switch to plain stdlib dataclasses (no Pydantic dependency) via the configurator:
+`b.Python(py => py.Style = PythonStyle.Dataclass);`. Single-file bundle vs
+file-per-class via `py.FileLayout`. Disable snake_case conversion with
+`py.SnakeCaseProperties = false`.
 
 ## Why OpenAPI 3.0 (not 3.1)
 

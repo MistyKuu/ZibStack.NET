@@ -90,6 +90,62 @@ public sealed class TypeScriptSettings
 }
 
 /// <summary>
+/// Layout strategy for Python output files.
+/// </summary>
+public enum PythonFileLayout
+{
+    /// <summary>One <c>.py</c> file per source class.</summary>
+    FilePerClass,
+
+    /// <summary>All models concatenated into one file (default <c>models.py</c>).</summary>
+    SingleFile,
+}
+
+/// <summary>
+/// Python emitter settings. Targets Pydantic v2 — if you want plain <c>dataclass</c>
+/// instead, set <see cref="Style"/>. All settings have sensible defaults; override
+/// via <c>ITypeGenConfigurator</c>.
+/// </summary>
+public sealed class PythonSettings
+{
+    /// <summary>Output directory; relative to the project or absolute.</summary>
+    public string? OutputDir { get; set; }
+
+    /// <summary>File layout — one per class (default) or single bundled <c>models.py</c>.</summary>
+    public PythonFileLayout FileLayout { get; set; } = PythonFileLayout.FilePerClass;
+
+    /// <summary>File name when <see cref="FileLayout"/> is <see cref="PythonFileLayout.SingleFile"/>.</summary>
+    public string SingleFileName { get; set; } = "models.py";
+
+    /// <summary>
+    /// Emit style. <see cref="PythonStyle.Pydantic"/> (default) produces
+    /// <c>BaseModel</c> subclasses with validation; <see cref="PythonStyle.Dataclass"/>
+    /// produces stdlib <c>@dataclass</c>es (no runtime deps).
+    /// </summary>
+    public PythonStyle Style { get; set; } = PythonStyle.Pydantic;
+
+    /// <summary>
+    /// Convert property names to <c>snake_case</c> (PEP 8) when emitting. Default
+    /// <c>true</c> — with Pydantic, aliasing preserves the original PascalCase
+    /// on JSON parsing via <c>Field(alias=...)</c>.
+    /// </summary>
+    public bool SnakeCaseProperties { get; set; } = true;
+
+    /// <summary>Emit the standard <c># @generated</c> banner at the top of each file.</summary>
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
+
+/// <summary>Python emission style.</summary>
+public enum PythonStyle
+{
+    /// <summary>Pydantic v2 <c>BaseModel</c> — JSON parse/serialize + validation.</summary>
+    Pydantic,
+
+    /// <summary>Plain <c>@dataclass</c> — no runtime dependencies, no validation.</summary>
+    Dataclass,
+}
+
+/// <summary>
 /// OpenAPI emitter settings. Default target is OpenAPI 3.0.3 — see
 /// <see cref="OpenApiVersion"/>.
 /// </summary>
