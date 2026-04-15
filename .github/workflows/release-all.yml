@@ -41,7 +41,10 @@ jobs:
       - name: Pack 1 — Aop.Abstractions
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Abstractions/ZibStack.NET.Aop.Abstractions.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack 2 — Aop
+      # Bundles ZibStack.NET.Aop.dll (generator) + ZibStack.NET.Aop.Analyzers.dll
+      # (15 AOP00xx diagnostics) + ZibStack.NET.Aop.CodeFixes.dll (9 code fixes).
+      # All three ride along under analyzers/dotnet/cs in a single .nupkg.
+      - name: Pack 2 — Aop (with Analyzers + CodeFixes bundled)
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop/ZibStack.NET.Aop.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       - name: Pack 2a — Aop.Polly

@@ -28,7 +28,11 @@ jobs:
       - name: Pack Abstractions
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Abstractions/ZibStack.NET.Aop.Abstractions.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
-      - name: Pack Generator
+      # Bundles ZibStack.NET.Aop.dll (generator) +
+      #         ZibStack.NET.Aop.Analyzers.dll (15 AOP00xx diagnostics) +
+      #         ZibStack.NET.Aop.CodeFixes.dll (9 Roslyn code fixes)
+      # All three ride along under analyzers/dotnet/cs in a single .nupkg.
+      - name: Pack Generator (with Analyzers + CodeFixes bundled)
         run: dotnet pack packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop/ZibStack.NET.Aop.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
       - name: Pack Polly

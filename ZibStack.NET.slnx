@@ -6,6 +6,8 @@
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Aop/src/">
     <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Abstractions/ZibStack.NET.Aop.Abstractions.csproj" />
+    <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Analyzers/ZibStack.NET.Aop.Analyzers.csproj" />
+    <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.CodeFixes/ZibStack.NET.Aop.CodeFixes.csproj" />
     <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/ZibStack.NET.Aop.HybridCache.csproj" />
     <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/ZibStack.NET.Aop.Polly.csproj" />
     <Project Path="packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop/ZibStack.NET.Aop.csproj" />
