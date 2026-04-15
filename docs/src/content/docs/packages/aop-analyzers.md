@@ -18,7 +18,7 @@ Four families, all under the `ZibStack.Aop` category:
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
 | **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
 | **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor. | Warning / Info |
-| **Tier 4 — Convention Enforcement** (`AOP1001`+) | Architectural rules you declare on a base type, enforced on every concrete derivative. | Warning |
+| **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1003`) | Architectural rules you declare on a base type, enforced on every concrete derivative — required aspects, required interface implementations, required methods. | Warning |
 
 ## Tier 1 — Placement
 
@@ -317,9 +317,64 @@ declaration with matching indentation.
 - Suppress per-type with `#pragma warning disable AOP1001` if a particular derivative is
   legitimately exempt.
 
+### `AOP1002` — Type missing interface required by base/interface (Warning)
+
+```csharp
+[RequireImplementation(typeof(IDisposable), Reason = "Connections must clean up sockets")]
+public abstract class DatabaseConnection { }
+
+public class SqlConnection : DatabaseConnection { }
+//           ^^^^^^^^^^^^^
+//   ⚠ AOP1002: 'SqlConnection' derives from 'DatabaseConnection' which requires
+//             implementing 'IDisposable'. Reason: Connections must clean up sockets.
+
+public class PgConnection : DatabaseConnection, IDisposable
+{
+    public void Dispose() { }
+}                                                  // ✅ ok
+```
+
+Use this for cross-cutting capabilities (`IDisposable`, `IAsyncDisposable`, custom marker
+interfaces) that the base type cannot inherit directly without forcing every member onto
+the contract.
+
+**Code fix:** "Implement {Interface}" — appends the interface to the base list. The
+compiler's own CS0535 light-bulb ("Implement interface") then takes over to stub the
+required members.
+
+### `AOP1003` — Type missing method required by base/interface (Warning)
+
+For plug-in / module conventions where the framework calls a method by name (often via
+reflection) and the signature varies per host, so it can't be encoded in an abstract
+member.
+
+```csharp
+[RequireMethod("Configure",
+    ReturnType = typeof(void),
+    Parameters = new[] { typeof(IServiceCollection) },
+    Reason = "Modules must register their services")]
+public abstract class Module { }
+
+public class AuthModule : Module { }
+//           ^^^^^^^^^^
+//   ⚠ AOP1003: requires 'void Configure(IServiceCollection)'. Reason: Modules must register their services.
+
+public class OrderModule : Module
+{
+    public void Configure(IServiceCollection services) { }   // ✅
+}
+```
+
+`ReturnType` and `Parameters` are optional — when omitted, only the method name is
+checked. Methods inherited from intermediate base classes satisfy the rule, so a base
+class can ship a virtual default implementation without tripping the analyzer.
+
+No code fix — generating method stubs is too opinionated about body shape; the analyzer
+just points you at the missing method.
+
 ## Code Fix Summary
 
-Ten of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+Eleven of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
 
 | Diagnostic | Code fix |
 |---|---|
@@ -333,6 +388,7 @@ Ten of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd
 | `AOP0015` | Add `CancellationToken cancellationToken = default` parameter |
 | `AOP0016` | Remove `[Validate]` from parameterless method |
 | `AOP1001` | Add `[Aspect]` attribute |
+| `AOP1002` | Implement {Interface} (append to base list) |
 
 The remaining diagnostics are intentionally fix-less — repairing them either requires an API redesign (`AOP0003`/`AOP0006`), depends on user intent (`AOP0017`), or describes legitimate code that should just be reviewed (`AOP0020`/`AOP0021`).
 

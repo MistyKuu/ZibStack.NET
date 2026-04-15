@@ -183,4 +183,24 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "A base type or interface declared with [RequireAspect(typeof(X))] expects every concrete derivative to also carry [X]. Without it, the configured runtime behavior won't apply and the derivative falls into a silent edge case.");
+
+    public const string MissingRequiredImplementationId = "AOP1002";
+    public static readonly DiagnosticDescriptor MissingRequiredImplementation = new(
+        MissingRequiredImplementationId,
+        title: "Type is missing an interface required by its base/interface",
+        messageFormat: "'{0}' derives from '{1}' which requires implementing '{2}'{3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A base type or interface declared with [RequireImplementation(typeof(I))] expects every concrete derivative to also implement I. Use this for cross-cutting capabilities (IDisposable, IAsyncDisposable, custom marker interfaces) that the base type cannot inherit directly.");
+
+    public const string MissingRequiredMethodId = "AOP1003";
+    public static readonly DiagnosticDescriptor MissingRequiredMethod = new(
+        MissingRequiredMethodId,
+        title: "Type is missing a method required by its base/interface",
+        messageFormat: "'{0}' derives from '{1}' which requires a method '{2}'{3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A base type or interface declared with [RequireMethod(\"X\")] expects every concrete derivative to declare a method named X (and matching the optional return type / parameter list). Use this for plug-in conventions called by reflection where the framework cannot enforce the contract through inheritance.");
 }
