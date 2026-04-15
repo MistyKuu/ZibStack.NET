@@ -26,8 +26,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         // here means the entity itself is NOT emitted as TS / OpenAPI. It's only here to
         // anchor companion lookups below. (You CAN still chain config like .TsName(...)
         // / .Property(...) which would apply IF the type ever does get emitted.)
-        b.ForType<Article>();
-
+   
         // Explicit per-companion opt-in. Synthesizes ONLY the Create variant from
         // Article's properties — UpdateArticleRequest / ArticleResponse are NOT emitted
         // because they aren't listed.
