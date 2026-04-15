@@ -40,3 +40,16 @@ public enum OrderStatus
     Delivered = 2,
     Cancelled = 3,
 }
+
+// No per-class rename / OpenAPI attrs here — the rename + schema name come from
+// the fluent configurator's b.ForType<Customer>() block in TypeGenConfig.cs.
+// Demonstrates "configure without touching source" (useful when the DTO lives
+// in a referenced library you can't annotate).
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+               OutputDir = "generated")]
+public class Customer
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+}

@@ -50,6 +50,20 @@ components:
         UnitPrice:
           type: number
           format: double
+    CustomerV1:
+      type: object
+      required:
+        - Id
+        - Name
+        - Email
+      properties:
+        Id:
+          type: integer
+          format: int32
+        Name:
+          type: string
+        Email:
+          type: string
     OrderStatus:
       type: string
       enum:

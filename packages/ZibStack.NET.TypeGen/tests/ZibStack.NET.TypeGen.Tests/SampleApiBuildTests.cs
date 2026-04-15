@@ -61,6 +61,15 @@ public sealed class SampleApiBuildTests
         Assert.Contains("title: Sample Order API", yaml);
         Assert.Contains("version: 1.2.3", yaml);
         Assert.Contains("description: Demo service exercising the TypeGen fluent configurator.", yaml);
+
+        // Per-type fluent override: b.ForType<Customer>().TsName("CustomerDto").OpenApiName("CustomerV1").
+        // Customer.cs has [GenerateTypes] only — no per-class rename attribute — so this proves
+        // the per-type fluent path actually applies to the schema/file emission.
+        Assert.True(File.Exists(Path.Combine(GeneratedDir, "CustomerDto.ts")),
+            "TS per-type rename via b.ForType<Customer>().TsName(\"CustomerDto\") didn't take effect.");
+        Assert.False(File.Exists(Path.Combine(GeneratedDir, "Customer.ts")),
+            "Old non-renamed Customer.ts still present — fluent rename didn't supersede source name.");
+        Assert.Contains("    CustomerV1:", yaml);
     }
 
     private static (int Exit, string Output) Run(string file, string args)

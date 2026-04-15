@@ -1,3 +1,4 @@
+using SampleApi.Models;
 using ZibStack.NET.TypeGen;
 
 namespace SampleApi;
@@ -24,5 +25,12 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             oa.Version = "1.2.3";
             oa.Description = "Demo service exercising the TypeGen fluent configurator.";
         });
+
+        // Per-type fluent overrides — equivalent to putting [TsName]/[OpenApiSchemaName]
+        // attributes on Customer, but without touching the source file. Same precedence
+        // rules apply: if Customer also had a [TsName] attribute it would win over this.
+        b.ForType<Customer>()
+            .TsName("CustomerDto")
+            .OpenApiName("CustomerV1");
     }
 }
