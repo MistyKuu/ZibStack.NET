@@ -1,0 +1,112 @@
+<Project>
+
+  <!--
+    Reads the manifest .g.cs the source generator emits to obj/generated/ and
+    writes the actual .ts / .yaml files to the user-configured OutputDir.
+
+    The split is necessary because Roslyn source generators can only emit .cs
+    files into the compilation — they cannot write to arbitrary disk paths
+    during code generation. So we serialize each emitted file as string
+    constants in a single .g.cs manifest, then this target parses the manifest
+    and writes the real files post-build.
+
+    Uses RoslynCodeTaskFactory so the task is inline C# inside the .targets file
+    — no companion task DLL to ship, no extra package, no separate build of
+    Microsoft.Build.Utilities.Core.
+  -->
+
+  <UsingTask TaskName="ZibStackTypeGenWriteOutput"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ManifestPath ParameterType="System.String" Required="true" />
+      <ProjectDir ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs">
+<![CDATA[
+if (!File.Exists(ManifestPath))
+{
+    Log.LogMessage(MessageImportance.Low, "ZibStack.TypeGen: manifest not found at " + ManifestPath + " (no [GenerateTypes] classes?), skipping.");
+    return true;
+}
+
+var content = File.ReadAllText(ManifestPath);
+
+// FileCount = N
+var countMatch = Regex.Match(content, @"FileCount\s*=\s*(\d+)");
+if (!countMatch.Success)
+{
+    Log.LogWarning("ZibStack.TypeGen: could not read FileCount from manifest. Skipping.");
+    return true;
+}
+int fileCount = int.Parse(countMatch.Groups[1].Value);
+
+// Each file: TargetN, OutputDirN, FileNameN, ContentN — verbatim @"..." strings.
+// Verbatim strings escape inner quotes by doubling: "" → ", which we reverse below.
+var verbatim = new Regex(@"@""((?:[^""]|"""")*)""", RegexOptions.Singleline);
+var fields = new System.Collections.Generic.Dictionary<string, string>();
+
+string ReadField(string name)
+{
+    var m = Regex.Match(content, name + @"\s*=\s*(@""(?:[^""]|"""")*"")", RegexOptions.Singleline);
+    if (!m.Success) return null;
+    var inner = verbatim.Match(m.Groups[1].Value).Groups[1].Value;
+    return inner.Replace("\"\"", "\"");
+}
+
+int written = 0;
+for (int i = 0; i < fileCount; i++)
+{
+    var outputDir = ReadField("OutputDir" + i);
+    var fileName = ReadField("FileName" + i);
+    var fileContent = ReadField("Content" + i);
+    var target = ReadField("Target" + i);
+    if (outputDir == null || fileName == null || fileContent == null) continue;
+
+    // Resolve relative to project dir if not absolute.
+    string fullDir = Path.IsPathRooted(outputDir) ? outputDir : Path.Combine(ProjectDir, outputDir);
+    Directory.CreateDirectory(fullDir);
+    string fullPath = Path.Combine(fullDir, fileName);
+
+    // Skip the write if file is unchanged — keeps mtime stable, helps incremental
+    // build / file-watcher noise downstream (frontend dev servers, etc.).
+    if (File.Exists(fullPath) && File.ReadAllText(fullPath) == fileContent)
+    {
+        Log.LogMessage(MessageImportance.Low, "ZibStack.TypeGen: " + fullPath + " (" + target + ") unchanged.");
+        continue;
+    }
+
+    File.WriteAllText(fullPath, fileContent);
+    Log.LogMessage(MessageImportance.High, "ZibStack.TypeGen: wrote " + fullPath + " (" + target + ", " + fileContent.Length + " chars)");
+    written++;
+}
+
+if (written > 0)
+    Log.LogMessage(MessageImportance.High, "ZibStack.TypeGen: " + written + " file(s) written.");
+]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <!--
+    Run after CoreCompile: at that point the generator has produced its manifest
+    in obj/generated/. Bind to BuildDependsOn to ensure it runs in normal `dotnet
+    build` and `dotnet pack` flows. The manifest is named deterministically by
+    the source generator (ZibStack.TypeGen.Manifest.g.cs).
+  -->
+  <Target Name="ZibStackTypeGenWriteOutputFiles"
+          AfterTargets="CoreCompile"
+          Condition="Exists('$(IntermediateOutputPath)generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs')">
+    <PropertyGroup>
+      <_ZibStackTypeGenManifest>$(IntermediateOutputPath)generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs</_ZibStackTypeGenManifest>
+    </PropertyGroup>
+    <ZibStackTypeGenWriteOutput
+        ManifestPath="$(_ZibStackTypeGenManifest)"
+        ProjectDir="$(MSBuildProjectDirectory)" />
+  </Target>
+
+</Project>

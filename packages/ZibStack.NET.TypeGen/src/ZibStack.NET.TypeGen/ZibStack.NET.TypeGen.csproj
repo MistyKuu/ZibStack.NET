@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <NoWarn>RS2008;RS1032;NU5128</NoWarn>
+    <IsRoslynComponent>true</IsRoslynComponent>
+
+    <PackageId>ZibStack.NET.TypeGen</PackageId>
+    <Description>Roslyn source generator that emits TypeScript and OpenAPI 3.1 from C# DTOs annotated with [GenerateTypes]. Compile-time, zero reflection, no running app required. Per-class / per-property overrides via attributes; project-wide config via ITypeGenConfigurator.</Description>
+    <Authors>$(Authors)</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
+    <PackageTags>typegen;openapi;typescript;source-generator;codegen;roslyn</PackageTags>
+
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Generator deliberately does NOT reference Abstractions — it has internal mirror
+       types in Model/SchemaModel.cs so the analyzer DLL has no runtime dependencies
+       beyond Microsoft.CodeAnalysis. Consumers reference Abstractions separately. -->
+
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="build\ZibStack.NET.TypeGen.props" Pack="true" PackagePath="build\" Condition="Exists('build\ZibStack.NET.TypeGen.props')" />
+    <None Include="build\ZibStack.NET.TypeGen.targets" Pack="true" PackagePath="build\" Condition="Exists('build\ZibStack.NET.TypeGen.targets')" />
+  </ItemGroup>
+
+</Project>

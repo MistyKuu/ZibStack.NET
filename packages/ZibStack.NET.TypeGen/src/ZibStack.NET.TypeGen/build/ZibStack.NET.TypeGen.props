@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    Force the compiler-generated files to disk so the post-build target in
+    ZibStack.NET.TypeGen.targets can read the manifest .g.cs and write the
+    actual .ts / .yaml outputs. Without this, generator output stays in-memory
+    and the manifest is invisible to MSBuild.
+  -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
+</Project>

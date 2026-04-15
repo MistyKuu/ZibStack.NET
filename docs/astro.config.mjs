@@ -29,6 +29,7 @@ export default defineConfig({
 						{ label: 'Core — Relations & Utility Types', slug: 'packages/core' },
 						{ label: 'Validation — Compile-Time Rules', slug: 'packages/validation' },
 						{ label: 'Result — Functional Errors', slug: 'packages/result' },
+						{ label: 'TypeGen — TS & OpenAPI from C#', slug: 'packages/typegen' },
 					],
 				},
 				{

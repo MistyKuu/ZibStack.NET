@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+
+    <PackageId>ZibStack.NET.TypeGen.Abstractions</PackageId>
+    <Description>Attributes and settings for ZibStack.NET.TypeGen — the [GenerateTypes] entry point, per-class/per-property overrides ([TsName], [TsType], [OpenApiProperty], etc.), and ITypeGenConfigurator for global configuration.</Description>
+    <Authors>$(Authors)</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
+    <PackageTags>typegen;openapi;typescript;source-generator;codegen</PackageTags>
+  </PropertyGroup>
+
+</Project>

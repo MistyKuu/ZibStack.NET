@@ -83,6 +83,12 @@ jobs:
       - name: Pack 12 — Query
         run: dotnet pack packages/ZibStack.NET.Query/src/ZibStack.NET.Query/ZibStack.NET.Query.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
 
+      - name: Pack 13 — TypeGen.Abstractions
+        run: dotnet pack packages/ZibStack.NET.TypeGen/src/ZibStack.NET.TypeGen.Abstractions/ZibStack.NET.TypeGen.Abstractions.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
+      - name: Pack 14 — TypeGen
+        run: dotnet pack packages/ZibStack.NET.TypeGen/src/ZibStack.NET.TypeGen/ZibStack.NET.TypeGen.csproj -c Release -o ./artifacts -p:PackageVersion=${{ inputs.version }}
+
       # Push all at once (NuGet resolves deps from same push)
       - name: Push to NuGet
         run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

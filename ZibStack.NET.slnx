@@ -84,4 +84,15 @@
   <Folder Name="/packages/ZibStack.NET.Result/tests/">
     <Project Path="packages/ZibStack.NET.Result/tests/ZibStack.NET.Result.Tests/ZibStack.NET.Result.Tests.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.TypeGen/" />
+  <Folder Name="/packages/ZibStack.NET.TypeGen/src/">
+    <Project Path="packages/ZibStack.NET.TypeGen/src/ZibStack.NET.TypeGen.Abstractions/ZibStack.NET.TypeGen.Abstractions.csproj" />
+    <Project Path="packages/ZibStack.NET.TypeGen/src/ZibStack.NET.TypeGen/ZibStack.NET.TypeGen.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.TypeGen/tests/">
+    <Project Path="packages/ZibStack.NET.TypeGen/tests/ZibStack.NET.TypeGen.Tests/ZibStack.NET.TypeGen.Tests.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.TypeGen/sample/">
+    <Project Path="packages/ZibStack.NET.TypeGen/sample/SampleApi/SampleApi.csproj" />
+  </Folder>
 </Solution>

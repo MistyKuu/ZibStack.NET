@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <!-- Sample project doesn't ship anywhere — squelch packaging warnings. -->
+    <IsPackable>false</IsPackable>
+    <!-- Force the manifest .g.cs to land on disk so the targets file can read it. -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\ZibStack.NET.TypeGen.Abstractions\ZibStack.NET.TypeGen.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- Pick up the post-build .ts/.yaml writer target. NuGet consumers get this
+       automatically via build/<pkg>.targets; in-repo ProjectReference users have
+       to wire it explicitly. -->
+  <Import Project="..\..\src\ZibStack.NET.TypeGen\build\ZibStack.NET.TypeGen.targets" />
+
+</Project>
