@@ -42,12 +42,13 @@ public class OrderService2
     [Cache(DurationSeconds = 60)]
     public string GetCachedData(int id) => $"data-{id}-{DateTime.UtcNow.Ticks}";
 
-    // CancellationToken parameter so the timeout can actually cut the call short
-    // (AOP0015 catches the missing-CT form at compile time).
+    // [Timeout] aborts to the caller (TimeoutException after the deadline) but the
+    // body keeps running in background regardless of any CancellationToken — the
+    // current TimeoutHandler doesn't signal cancellation to anything.
     [Timeout(TimeoutMs = 5000)]
-    public async Task<string> SlowOperationAsync(CancellationToken cancellationToken = default)
+    public async Task<string> SlowOperationAsync()
     {
-        await Task.Delay(100, cancellationToken);
+        await Task.Delay(100);
         return "done";
     }
 }

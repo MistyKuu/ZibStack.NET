@@ -212,13 +212,13 @@ public class CacheVoidService
 }
 #pragma warning restore AOP0010
 
-// ── AOP0015 ground truth: [Timeout] without CancellationToken parameter ─────
+// ── TimeoutHandler ground truth: handler doesn't use any CT internally ──────
 //
-// The aspect creates a cancellation token internally, but with no CT parameter
-// to forward it to, the method body cannot observe cancellation — so the
-// timeout fires logically but the method runs to completion anyway.
+// Used by Timeout_AbortsToCallerButLeaksTheCall — the body completes in the
+// background even though the caller already saw a TimeoutException. This is
+// what TimeoutHandler does today (pure Task.WhenAny), and pinning it here
+// catches a regression if the handler is ever rewritten to actually cancel.
 
-#pragma warning disable AOP0015
 public class TimeoutNoTokenService
 {
     public int CompletedCallCount;
@@ -226,15 +226,11 @@ public class TimeoutNoTokenService
     [Timeout(TimeoutMs = 50)]
     public async Task<int> SlowAsync()
     {
-        // No CancellationToken parameter to observe — the 200ms delay finishes
-        // even though the [Timeout] is set to 50ms. Compare with
-        // TimeoutTestService.SlowAsync which DOES take a CT and IS cancelled.
         await Task.Delay(200);
         CompletedCallCount++;
         return 42;
     }
 }
-#pragma warning restore AOP0015
 
 // ── AOP0020 ground truth: aspect method passed as delegate ──────────────────
 

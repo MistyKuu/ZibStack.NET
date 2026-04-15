@@ -396,17 +396,19 @@ public class AopBehaviorTests
         Assert.Equal(1, svc.CallCount);   // ← reality: only first call executes the body
     }
 
-    // ── AOP0015 ground truth: [Timeout] without CT parameter ────────────────
+    // ── TimeoutHandler ground truth ──────────────────────────────────────────
     //
-    // The original analyzer message claimed the method "will complete anyway"
-    // because there's no CT to observe. Behavioral test proved the OPPOSITE:
-    // [Timeout(50)] over a 200ms body throws TimeoutException to the caller after
-    // ~50ms — the body DOES get aborted externally, it just keeps running in
-    // background. Updated AOP0015 message reflects "leaks the running call",
-    // not "has no effect".
+    // Pins the actual runtime behavior of [Timeout]: the caller receives
+    // TimeoutException after the deadline, but the body continues running in the
+    // background until it finishes naturally. This is a HANDLER property — the
+    // current TimeoutHandler does pure Task.WhenAny and never signals cancellation,
+    // so even adding a CancellationToken parameter to the method wouldn't help.
+    //
+    // (AOP0015 used to fire here suggesting "add a CT param" — that analyzer was
+    // removed because the suggestion was misleading: the handler ignores any CT.)
 
     [Fact]
-    public async Task TimeoutWithoutCT_AbortsToCallerButLeaksTheCall()
+    public async Task Timeout_AbortsToCallerButLeaksTheCall()
     {
         var svc = new TimeoutNoTokenService();
         svc.CompletedCallCount = 0;

@@ -126,15 +126,13 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public const string TimeoutNoCancellationTokenId = "AOP0015";
-    public static readonly DiagnosticDescriptor TimeoutNoCancellationToken = new(
-        TimeoutNoCancellationTokenId,
-        title: "[Timeout] without a CancellationToken parameter leaks the running call",
-        messageFormat: "[Timeout] on '{0}' aborts to the caller (TimeoutException is thrown after the deadline) but the method body cannot observe cancellation and keeps running in the background until it finishes naturally. Add a CancellationToken parameter and forward it to your awaits to cancel cooperatively.",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true,
-        description: "Verified by behavioral test: [Timeout(50)] on a Task<int> method that does Task.Delay(200) without observing the token throws TimeoutException to the caller after ~50ms, but the inner Task.Delay completes in the background. The hazard is resource leak / dangling work, not 'timeout has no effect'.");
+    // AOP0015 was here — TimeoutNoCancellationToken. Removed because the
+    // TimeoutHandler doesn't actually use any CancellationToken: it does pure
+    // Task.WhenAny(work, Task.Delay(timeoutMs)). Adding a CT param to satisfy
+    // the analyzer wouldn't change behavior — the handler would still ignore it
+    // and the body would still leak. The right fix is in the handler (create a
+    // CTS, signal it on timeout, propagate to a CT param if present), not in a
+    // misleading per-method warning.
 
     public const string ValidateNoParametersId = "AOP0016";
     public static readonly DiagnosticDescriptor ValidateNoParameters = new(

@@ -140,7 +140,7 @@ app.Services.UseAop();               // bridges DI into the aspect runtime
 ```
 
 **Compile-time analyzers + code fixes (bundled, no extra install):**
-20 Roslyn diagnostics catch broken aspect placements before you build —
+19 Roslyn diagnostics catch broken aspect placements before you build —
 `[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`, `[Log]` on a
 `private` method, method group conversions that bypass the interceptor,
 `base.Method()` calls that recurse infinitely, and more. Plus a set of

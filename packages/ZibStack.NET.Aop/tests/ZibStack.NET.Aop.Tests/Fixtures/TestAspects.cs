@@ -1,4 +1,5 @@
 using ZibStack.NET.Aop;
+using ZibStack.NET.Log;
 
 namespace ZibStack.NET.Aop.Tests.Fixtures;
 

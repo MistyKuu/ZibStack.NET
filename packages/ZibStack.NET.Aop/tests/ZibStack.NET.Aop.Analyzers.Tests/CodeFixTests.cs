@@ -381,8 +381,6 @@ public class Svc
         await test1.RunAsync();
     }
 
-    // ── AddCancellationTokenCodeFix (AOP0015) ───────────────────────────────
-
     // ── AddRequiredConstructorCodeFix (AOP1004) ────────────────────────────
 
     [Fact]
@@ -486,41 +484,6 @@ namespace ZibStack.NET.Aop
 }
 ";
 
-    [Fact]
-    public async Task TimeoutWithoutCT_FixedByAddingCT()
-    {
-        var test = @"
-using ZibStack.NET.Aop;
-using System.Threading.Tasks;
-
-public class Svc
-{
-    [{|#0:Timeout(TimeoutMs = 5000)|}]
-    public Task<int> GetAsync() => Task.FromResult(1);
-}
-" + AopStubs;
-
-        var fixedCode = @"
-using ZibStack.NET.Aop;
-using System.Threading.Tasks;
-
-public class Svc
-{
-    [Timeout(TimeoutMs = 5000)]
-    public Task<int> GetAsync(global::System.Threading.CancellationToken cancellationToken = default) => Task.FromResult(1);
-}
-" + AopStubs;
-
-        var test1 = new CSharpCodeFixTest<BuiltInAspectArgumentAnalyzer, AddCancellationTokenCodeFix, DefaultVerifier>
-        {
-            TestCode = test,
-            FixedCode = fixedCode,
-        };
-        test1.ExpectedDiagnostics.Add(
-            new DiagnosticResult(Diagnostics.TimeoutNoCancellationToken)
-                .WithLocation(0)
-                .WithArguments("GetAsync"));
-
-        await test1.RunAsync();
-    }
+    // TimeoutWithoutCT_FixedByAddingCT was here — removed alongside AOP0015 because
+    // TimeoutHandler ignores any CancellationToken anyway, so the fix did nothing useful.
 }

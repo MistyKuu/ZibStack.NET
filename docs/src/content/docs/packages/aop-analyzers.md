@@ -16,7 +16,7 @@ Four families, all under the `ZibStack.Aop` category:
 | Family | Covers | Severity |
 |---|---|---|
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
-| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
+| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0014`, `AOP0016`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
 | **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor — or, in the case of `base.Method()` over an aspect-decorated virtual, recurse infinitely. | Warning / Error |
 | **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1005`) | Architectural rules you declare on a base type / scoped type, enforced on derivatives or on the call site — required aspects, interfaces, methods, constructors, and namespace-scoped usage. | Warning |
 
@@ -152,15 +152,19 @@ public int C() => 1;
 | ID | Severity | Trigger | Code fix |
 |---|---|---|---|
 | `AOP0014` | Error | `TimeoutMs <= 0` | Set `TimeoutMs = 30000` |
-| `AOP0015` | Warning | Method has no `CancellationToken` parameter — `[Timeout]` aborts to the caller (TimeoutException) but the body keeps running in background until it finishes naturally (resource leak) | Add `CancellationToken cancellationToken = default` parameter |
 
 ```csharp
 [Timeout(TimeoutMs = 0)]             // ❌ AOP0014
-public Task<int> A(CancellationToken ct) => Task.FromResult(1);
-
-[Timeout(TimeoutMs = 5000)]          // ⚠ AOP0015 — token is created but never awaited
-public Task<int> B() => Task.FromResult(1);
+public Task<int> A() => Task.FromResult(1);
 ```
+
+> **Note on `[Timeout]` semantics:** the built-in `TimeoutHandler` does pure
+> `Task.WhenAny(work, Task.Delay(timeoutMs))` — it never signals cancellation to
+> the running call. The caller sees `TimeoutException` after the deadline, but
+> the body keeps running in the background until it finishes naturally. Adding a
+> `CancellationToken` parameter to the method does not change this — the handler
+> ignores it. (An earlier `AOP0015` analyzer used to suggest adding the
+> parameter; it was removed because the suggestion was misleading.)
 
 ### `[Validate]`
 
@@ -454,7 +458,7 @@ broaden the scope, or split the type).
 
 ## Code Fix Summary
 
-Twelve of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+Eleven of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
 
 | Diagnostic | Code fix |
 |---|---|
@@ -465,7 +469,6 @@ Twelve of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / 
 | `AOP0012` | Set `DelayMs = 0` |
 | `AOP0013` | Set `BackoffMultiplier = 1.0` |
 | `AOP0014` | Set `TimeoutMs = 30000` |
-| `AOP0015` | Add `CancellationToken cancellationToken = default` parameter |
 | `AOP0016` | Remove `[Validate]` from parameterless method |
 | `AOP1001` | Add `[Aspect]` attribute |
 | `AOP1002` | Implement {Interface} (append to base list) |
@@ -478,10 +481,11 @@ The remaining diagnostics are intentionally fix-less — repairing them either r
 Standard Roslyn suppression works:
 
 ```csharp
-#pragma warning disable AOP0015
-[Timeout(TimeoutMs = 5000)]
-public async Task<int> WorkAsync() { ... }   // can't add CT to interface contract
-#pragma warning restore AOP0015
+#pragma warning disable AOP0017
+[Validate]
+public int Sum(int a, int b) => a + b;   // intentional: validates nothing today, but the
+                                         // contract is "can be called with anything"
+#pragma warning restore AOP0017
 ```
 
 Or in `.editorconfig`:

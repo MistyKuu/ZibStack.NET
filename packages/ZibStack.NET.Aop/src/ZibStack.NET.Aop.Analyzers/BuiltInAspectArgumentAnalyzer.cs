@@ -20,7 +20,6 @@ public sealed class BuiltInAspectArgumentAnalyzer : DiagnosticAnalyzer
     private const string TimeoutAttributeFullName = "ZibStack.NET.Aop.TimeoutAttribute";
     private const string ValidateAttributeFullName = "ZibStack.NET.Aop.ValidateAttribute";
 
-    private const string CancellationTokenFullName = "System.Threading.CancellationToken";
     private const string DataAnnotationsNamespace = "System.ComponentModel.DataAnnotations";
     // ZibStack's own validation marker that should also count as "annotated".
     private const string ValidationAttributeFullName = "System.ComponentModel.DataAnnotations.ValidationAttribute";
@@ -32,7 +31,6 @@ public sealed class BuiltInAspectArgumentAnalyzer : DiagnosticAnalyzer
             Diagnostics.RetryDelay,
             Diagnostics.RetryBackoff,
             Diagnostics.TimeoutValue,
-            Diagnostics.TimeoutNoCancellationToken,
             Diagnostics.ValidateNoParameters,
             Diagnostics.ValidateNoAnnotations);
 
@@ -128,13 +126,10 @@ public sealed class BuiltInAspectArgumentAnalyzer : DiagnosticAnalyzer
         {
             ReportOnAttribute(ctx, Diagnostics.TimeoutValue, attr, timeoutMs.Value);
         }
-
-        var hasCt = method.Parameters.Any(p =>
-            p.Type.ToDisplayString() == CancellationTokenFullName);
-        if (!hasCt)
-        {
-            ReportOnAttribute(ctx, Diagnostics.TimeoutNoCancellationToken, attr, method.Name);
-        }
+        // No CancellationToken-presence check here — TimeoutHandler ignores any CT param
+        // anyway (it uses Task.WhenAny internally and never signals cancellation), so
+        // demanding a CT param would be a misleading false claim. See removal note in
+        // Diagnostics.cs (where AOP0015 used to live).
     }
 
     // ── [Validate] ─────────────────────────────────────────────────────────
