@@ -152,6 +152,7 @@ public int C() => 1;
 | ID | Severity | Trigger | Code fix |
 |---|---|---|---|
 | `AOP0014` | Error | `TimeoutMs <= 0` | Set `TimeoutMs = 30000` |
+| `AOP0015` | Warning | Method has no `CancellationToken` parameter — handler can't signal cooperative cancellation, body leaks on timeout | Add `CancellationToken cancellationToken = default` parameter |
 
 ```csharp
 [Timeout(TimeoutMs = 0)]             // ❌ AOP0014
@@ -159,6 +160,13 @@ public Task<int> A(CancellationToken ct) => Task.FromResult(1);
 
 [Timeout(TimeoutMs = 5000)]          // ⚠ AOP0015 — body has no CT to observe → leaks on timeout
 public Task<int> B() => Task.FromResult(1);
+
+[Timeout(TimeoutMs = 5000)]          // ✅ ok — body's Task.Delay observes ct and cooperatively aborts
+public async Task<int> C(CancellationToken ct = default)
+{
+    await Task.Delay(1000, ct);
+    return 42;
+}
 ```
 
 > **`[Timeout]` semantics — cooperative when CT param present:** if the method
