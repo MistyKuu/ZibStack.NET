@@ -114,6 +114,8 @@ internal static class TypeScriptEmitter
     private static void CollectRefs(string cSharpType, IReadOnlyDictionary<string, string> nameLookup, HashSet<string> acc)
     {
         var t = cSharpType.TrimEnd('?');
+        var patchInner = ExtractGeneric(t, "PatchField");
+        if (patchInner != null) { CollectRefs(patchInner, nameLookup, acc); return; }
         if (nameLookup.TryGetValue(t, out var mapped)) { acc.Add(mapped); return; }
         if (t.EndsWith("[]")) { CollectRefs(t.Substring(0, t.Length - 2), nameLookup, acc); return; }
         var listInner = ExtractGeneric(t, "List", "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection");
@@ -177,6 +179,10 @@ internal static class TypeScriptEmitter
     {
         // Strip nullable annotation marker if present.
         var t = cSharpType.TrimEnd('?');
+
+        // Unwrap Dto's PatchField<T> tri-state wrapper — TS consumers see plain T.
+        var patchInner = ExtractGeneric(t, "PatchField");
+        if (patchInner != null) return MapCSharpToTs(patchInner, isNullable, nameLookup);
 
         // Direct user-DTO reference?
         if (nameLookup.TryGetValue(t, out var mapped)) return mapped;

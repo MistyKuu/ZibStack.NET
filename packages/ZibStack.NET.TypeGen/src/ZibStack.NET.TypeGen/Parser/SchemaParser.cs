@@ -34,13 +34,33 @@ internal static class SchemaParser
     public static bool HasCrudApi(INamedTypeSymbol symbol) =>
         symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == CrudApiAttr);
 
-    public static SchemaClass? ParseClass(INamedTypeSymbol symbol)
-    {
-        var generateAttr = symbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == GenerateTypesAttr);
-        if (generateAttr is null) return null;
+    public static SchemaClass? ParseClass(INamedTypeSymbol symbol) => ParseClassCore(symbol, null, null);
 
-        var (targets, outputDir) = ReadGenerateTypesArgs(generateAttr);
+    /// <summary>
+    /// Parses a class without requiring <c>[GenerateTypes]</c> and with explicit
+    /// target/outputDir — used for auxiliary DTOs discovered by convention (e.g.
+    /// <c>Create{Class}Request</c> produced by the Dto generator, which TypeGen
+    /// auto-discovers so the <c>$ref</c>s from <c>[CrudApi]</c> paths resolve).
+    /// </summary>
+    public static SchemaClass? ParseAuxiliaryClass(INamedTypeSymbol symbol, TypeTarget target, string outputDir) =>
+        ParseClassCore(symbol, target, outputDir);
+
+    private static SchemaClass? ParseClassCore(INamedTypeSymbol symbol, TypeTarget? forceTarget, string? forceOutputDir)
+    {
+        TypeTarget targets;
+        string outputDir;
+        if (forceTarget is not null)
+        {
+            targets = forceTarget.Value;
+            outputDir = forceOutputDir ?? ".";
+        }
+        else
+        {
+            var generateAttr = symbol.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == GenerateTypesAttr);
+            if (generateAttr is null) return null;
+            (targets, outputDir) = ReadGenerateTypesArgs(generateAttr);
+        }
 
         var baseSymbol = symbol.BaseType;
         // Treat `object` / `ValueType` as "no base" — no inheritance to express.

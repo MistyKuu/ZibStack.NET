@@ -44,6 +44,9 @@ internal sealed class ResponseDtoInfo
     public string? ListResponseName { get; }
     public List<ResponsePropertyInfo>? ListProperties { get; }
 
+    /// <summary>Pipeline-stamped flag; see <see cref="DtoClassInfo.HasTypeGen"/>.</summary>
+    public bool HasTypeGen { get; set; }
+
     public ResponseDtoInfo(string className, string? ns, string fullyQualifiedName, string responseName, List<ResponsePropertyInfo> properties, string? listResponseName = null, List<ResponsePropertyInfo>? listProperties = null)
     {
         ClassName = className;

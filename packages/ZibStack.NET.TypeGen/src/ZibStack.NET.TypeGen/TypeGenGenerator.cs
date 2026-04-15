@@ -32,7 +32,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         // [CrudApi]-only types don't drive emission but are tracked so we can warn
         // (TG0014) that they're invisible without [GenerateTypes].
         var classes = context.SyntaxProvider.CreateSyntaxProvider(
-            predicate: static (node, _) => node is ClassDeclarationSyntax or StructDeclarationSyntax or EnumDeclarationSyntax,
+            predicate: static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax or EnumDeclarationSyntax,
             transform: static (ctx, _) =>
             {
                 var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
@@ -44,14 +44,33 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             })
             .Where(static s => s is not null);
 
+        // Second provider: every class/record symbol in the compilation (including
+        // generator-output syntax trees from ZibStack.NET.Dto) — used to resolve
+        // Create/Update/Response companion DTOs by name. CompilationProvider's
+        // GetTypeByMetadataName does NOT see other generators' output, but SyntaxProvider
+        // walks all trees — including .g.cs — so the companion lookup actually works.
+        var allTypes = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) =>
+                node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
+            transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
+            .Where(static s => s is not null);
+
         var compilation = context.CompilationProvider;
 
-        var combined = classes.Collect().Combine(compilation);
+        var combined = classes.Collect().Combine(allTypes.Collect()).Combine(compilation);
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var (symbols, compilation) = source;
+            var ((symbols, allTypeSymbols), compilation) = source;
             if (symbols.IsDefaultOrEmpty) return;
+
+            // Build a name lookup for companion DTO resolution. Keyed by fully-qualified
+            // name so namespace collisions (same simple name in different namespaces)
+            // resolve correctly.
+            var typesByFullName = new Dictionary<string, INamedTypeSymbol>();
+            foreach (var t in allTypeSymbols)
+                if (t is not null)
+                    typesByFullName[t.ToDisplayString()] = t;
 
             // Warn about [CrudApi]-only classes that TypeGen can't emit paths for —
             // they need [GenerateTypes] so we discover them via the same provider.
@@ -105,6 +124,20 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     ReportInvalidOutputDirIfEmpty(spc, sym, cls.OutputDir);
                     model.Classes.Add(cls);
                 }
+            }
+
+            // Auto-discover companion DTOs produced by ZibStack.NET.Dto or written by hand
+            // next to the primary class ([CreateDto] / [UpdateDto] / [ResponseDto] / [CrudApi]
+            // all land on the same name conventions). Each probe that resolves to a real
+            // type in the compilation is emitted as an auxiliary schema, so `$ref`s from
+            // CRUD paths (Create{X}Request, Update{X}Request, {X}Response) don't dangle.
+            var originalClasses = model.Classes.ToArray();   // snapshot before adding auxiliaries
+            foreach (var cls in originalClasses)
+            {
+                if ((cls.Targets & TypeTarget.OpenApi) == 0 || cls.OpenApiIgnore) continue;
+                DiscoverAuxiliarySchema(typesByFullName, cls, $"Create{cls.SourceName}Request", model);
+                DiscoverAuxiliarySchema(typesByFullName, cls, $"Update{cls.SourceName}Request", model);
+                DiscoverAuxiliarySchema(typesByFullName, cls, $"{cls.SourceName}Response", model);
             }
 
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
@@ -178,6 +211,32 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         if (o.Ignore) { en.TsIgnore = true; en.OpenApiIgnore = true; }
         en.TsIgnore |= o.TsIgnore;
         en.OpenApiIgnore |= o.OpenApiIgnore;
+    }
+
+    /// <summary>
+    /// Probes the compilation for a sibling type of <paramref name="parent"/> with the
+    /// given name. If found and not already in the model, parses it as an auxiliary
+    /// OpenAPI-only schema and adds it. Safe to call with a name that doesn't resolve —
+    /// just a no-op. Idempotent: later probes for the same type don't duplicate.
+    /// </summary>
+    private static void DiscoverAuxiliarySchema(
+        Dictionary<string, INamedTypeSymbol> typesByFullName, SchemaClass parent, string siblingName, SchemaModel model)
+    {
+        // Sibling lives in the same namespace as the parent (that's the convention the
+        // Dto generator follows for Create/Update/Response companions).
+        var parentFull = parent.CSharpFullName;
+        var lastDot = parentFull.LastIndexOf('.');
+        var ns = lastDot >= 0 ? parentFull.Substring(0, lastDot) : "";
+        var fullName = string.IsNullOrEmpty(ns) ? siblingName : $"{ns}.{siblingName}";
+
+        if (!typesByFullName.TryGetValue(fullName, out var sym)) return;
+        if (model.Classes.Any(c => c.CSharpFullName == fullName)) return;
+
+        var aux = SchemaParser.ParseAuxiliaryClass(sym, TypeTarget.OpenApi, parent.OutputDir);
+        if (aux is null) return;
+        // Match the parent's OpenApi settings — aux schemas are internal plumbing,
+        // don't need their own TS output.
+        model.Classes.Add(aux);
     }
 
     private static ConfiguratorParser.PerTypeOverrides? LookupOverride(string fullName, ConfiguratorParser.Parsed? config)

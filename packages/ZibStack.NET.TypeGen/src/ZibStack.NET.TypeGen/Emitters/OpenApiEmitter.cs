@@ -874,6 +874,12 @@ internal static class OpenApiEmitter
     {
         var t = cSharpType.TrimEnd('?');
 
+        // PatchField<T> is ZibStack.NET.Dto's tri-state wrapper for Create/Update DTOs.
+        // OpenAPI doesn't have a wire notion of tri-state — unwrap to the underlying
+        // type so the schema reads like a plain field.
+        var patchInner = ExtractGeneric(t, "PatchField");
+        if (patchInner != null) return MapCSharpToOpenApi(patchInner, nameByCSharp);
+
         if (nameByCSharp.TryGetValue(t, out var refName))
             return ("$ref", null, refName, null);
 

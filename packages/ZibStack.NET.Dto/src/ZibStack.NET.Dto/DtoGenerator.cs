@@ -89,6 +89,13 @@ public partial class DtoGenerator : IIncrementalGenerator
         var hasQueryDsl = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null);
 
+        // Detect ZibStack.NET.TypeGen so we can stamp [GenerateTypes] on auto-generated
+        // Create/Update/Response DTOs. This lets TypeGen's OpenAPI emitter discover them
+        // naturally — without it, the $ref from [CrudApi] paths dangles because
+        // TypeGen can't see other generators' output within one compilation pass.
+        var hasTypeGen = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName("ZibStack.NET.TypeGen.GenerateTypesAttribute") is not null);
+
         // Detect EF Core for Include generation in select
         var hasEfCore = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions") is not null);
@@ -250,25 +257,28 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Combine(updateDtoClasses.Collect())
             .Combine(combinedDtoClasses.Collect());
 
-        context.RegisterSourceOutput(allDtoClasses.Combine(hasFluentValidation), static (spc, pair) =>
+        context.RegisterSourceOutput(allDtoClasses.Combine(hasFluentValidation).Combine(hasTypeGen), static (spc, pair) =>
         {
-            var (((createInfos, updateInfos), combinedInfos), hasFluent) = pair;
+            var ((((createInfos, updateInfos), combinedInfos), hasFluent), hasTg) = pair;
             var nestedSeen = new HashSet<string>();
 
             foreach (var classInfo in createInfos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Create.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
             }
             foreach (var classInfo in updateInfos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Update.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
             }
             foreach (var classInfo in combinedInfos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Combined.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
@@ -284,14 +294,16 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(responseDtoClasses, static (spc, info) =>
+        context.RegisterSourceOutput(responseDtoClasses.Combine(hasTypeGen), static (spc, pair) =>
         {
+            var (info, hasTg) = pair;
+            info.HasTypeGen = hasTg;
             var source = GenerateResponseDtoSource(info);
             spc.AddSource($"{info.FullyQualifiedName}.Response.g.cs", source);
             if (info.ListResponseName is not null && info.ListProperties is not null)
             {
                 var listInfo = new ResponseDtoInfo(info.ClassName, info.Namespace, info.FullyQualifiedName,
-                    info.ListResponseName, info.ListProperties);
+                    info.ListResponseName, info.ListProperties) { HasTypeGen = hasTg };
                 var listSource = GenerateResponseDtoSource(listInfo);
                 spc.AddSource($"{info.FullyQualifiedName}.ListItem.g.cs", listSource);
             }
@@ -354,31 +366,34 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore), static (spc, pair) =>
+        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen), static (spc, pair) =>
         {
-            var (((implied, hasFluent), hasDsl), hasEf) = pair;
+            var ((((implied, hasFluent), hasDsl), hasEf), hasTg) = pair;
             var nestedSeen = new HashSet<string>();
 
             foreach (var classInfo in implied.CreateDtos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Create.CrudImplied.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
             }
             foreach (var classInfo in implied.UpdateDtos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Update.CrudImplied.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
             }
             foreach (var responseInfo in implied.ResponseDtos)
             {
+                responseInfo.HasTypeGen = hasTg;
                 var source = GenerateResponseDtoSource(responseInfo);
                 spc.AddSource($"{responseInfo.FullyQualifiedName}.Response.CrudImplied.g.cs", source);
                 if (responseInfo.ListResponseName is not null && responseInfo.ListProperties is not null)
                 {
                     var listInfo = new ResponseDtoInfo(responseInfo.ClassName, responseInfo.Namespace, responseInfo.FullyQualifiedName,
-                        responseInfo.ListResponseName, responseInfo.ListProperties);
+                        responseInfo.ListResponseName, responseInfo.ListProperties) { HasTypeGen = hasTg };
                     var listSource = GenerateResponseDtoSource(listInfo);
                     spc.AddSource($"{responseInfo.FullyQualifiedName}.ListItem.CrudImplied.g.cs", listSource);
                 }
@@ -407,30 +422,33 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore), static (spc, pair) =>
+        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen), static (spc, pair) =>
         {
-            var (((implied, hasFluent), hasDsl), hasEf) = pair;
+            var ((((implied, hasFluent), hasDsl), hasEf), hasTg) = pair;
             var nestedSeen = new HashSet<string>();
             foreach (var classInfo in implied.CreateDtos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Create.Model.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
             }
             foreach (var classInfo in implied.UpdateDtos)
             {
+                classInfo.HasTypeGen = hasTg;
                 var source = GenerateSource(classInfo, hasFluent);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Update.Model.g.cs", source);
                 EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
             }
             foreach (var responseInfo in implied.ResponseDtos)
             {
+                responseInfo.HasTypeGen = hasTg;
                 var source = GenerateResponseDtoSource(responseInfo);
                 spc.AddSource($"{responseInfo.FullyQualifiedName}.Response.Model.g.cs", source);
                 if (responseInfo.ListResponseName is not null && responseInfo.ListProperties is not null)
                 {
                     var listInfo = new ResponseDtoInfo(responseInfo.ClassName, responseInfo.Namespace, responseInfo.FullyQualifiedName,
-                        responseInfo.ListResponseName, responseInfo.ListProperties);
+                        responseInfo.ListResponseName, responseInfo.ListProperties) { HasTypeGen = hasTg };
                     var listSource = GenerateResponseDtoSource(listInfo);
                     spc.AddSource($"{responseInfo.FullyQualifiedName}.ListItem.Model.g.cs", listSource);
                 }

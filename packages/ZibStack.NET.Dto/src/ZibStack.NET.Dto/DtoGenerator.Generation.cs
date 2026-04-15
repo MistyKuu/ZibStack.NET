@@ -11,6 +11,18 @@ public partial class DtoGenerator
 {
     // ─── Code generation ───────────────────────────────────────────────
 
+    /// <summary>
+    /// Emits <c>[global::ZibStack.NET.TypeGen.GenerateTypes(TypeTarget.OpenApi)]</c>
+    /// above the generated record declaration. Only fires when the consumer references
+    /// ZibStack.NET.TypeGen — otherwise the attribute type wouldn't exist and the
+    /// generated code wouldn't compile.
+    /// </summary>
+    private static void EmitTypeGenAttribute(StringBuilder sb, bool hasTypeGen)
+    {
+        if (!hasTypeGen) return;
+        sb.AppendLine("[global::ZibStack.NET.TypeGen.GenerateTypes(global::ZibStack.NET.TypeGen.TypeTarget.OpenApi)]");
+    }
+
     private static string GenerateSource(DtoClassInfo classInfo, bool hasFluentValidation)
     {
         var sb = new StringBuilder();
@@ -69,6 +81,7 @@ public partial class DtoGenerator
         var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1)).ToList();
 
         sb.AppendLine($"/// <summary>Auto-generated Create request DTO for <see cref=\"{classInfo.ClassName}\"/>. Contains ToEntity() and Validate().</summary>");
+        EmitTypeGenAttribute(sb, classInfo.HasTypeGen);
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanCreate<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanValidate");
         sb.AppendLine("{");
 
@@ -129,6 +142,7 @@ public partial class DtoGenerator
         var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(2)).ToList();
 
         sb.AppendLine($"/// <summary>Auto-generated Update request DTO for <see cref=\"{classInfo.ClassName}\"/>. Contains ApplyTo() and Validate(). Uses PatchField for partial updates.</summary>");
+        EmitTypeGenAttribute(sb, classInfo.HasTypeGen);
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanApply<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanValidate");
         sb.AppendLine("{");
 
@@ -185,6 +199,7 @@ public partial class DtoGenerator
         // Combined is Create + Update. Exclude properties ignored from BOTH.
         var allProps = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1) || !p.IsIgnoredFrom(2)).ToList();
 
+        EmitTypeGenAttribute(sb, classInfo.HasTypeGen);
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanCreate<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanApply<{classInfo.ClassName}>");
         sb.AppendLine("{");
 
@@ -567,6 +582,7 @@ public partial class DtoGenerator
         }
 
         sb.AppendLine($"/// <summary>Auto-generated Response DTO for <see cref=\"{info.ClassName}\"/>. Contains FromEntity() and ProjectFrom(IQueryable).</summary>");
+        EmitTypeGenAttribute(sb, info.HasTypeGen);
         sb.AppendLine($"public record {info.ResponseName}");
         sb.AppendLine("{");
 
