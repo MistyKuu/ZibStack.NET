@@ -152,7 +152,7 @@ Plus a set of declarative architecture rules: `[RequireAspect(typeof(LogAttribut
 `[RequireConstructor(typeof(IServiceProvider))]`, `[ScopeTo("MyApp.Internal.**")]`
 — declared once on a base or scoped type, enforced everywhere a derivative
 or call site exists (same idea as Metalama, scoped to focused attributes).
-11 of them ship an Alt+Enter code fix. Full reference:
+23 of them ship an Alt+Enter code fix. Full reference:
 [docs/packages/aop-analyzers](https://mistykuu.github.io/ZibStack.NET/packages/aop-analyzers/).
 
 ---

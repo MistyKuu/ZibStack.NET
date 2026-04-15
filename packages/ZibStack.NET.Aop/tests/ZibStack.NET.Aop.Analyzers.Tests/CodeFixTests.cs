@@ -486,4 +486,154 @@ namespace ZibStack.NET.Aop
 
     // TimeoutWithoutCT_FixedByAddingCT was here — removed alongside AOP0015 because
     // TimeoutHandler ignores any CancellationToken anyway, so the fix did nothing useful.
+
+    // ── FixOptionalAspectArgCodeFix (AOP0030–AOP0041) ───────────────────────
+    //
+    // Single generic code fix covering all 12 Polly + HybridCache numeric-arg
+    // diagnostics. Below: one int-default test (PollyRetry MaxRetryAttempts),
+    // one double-default test (PollyCircuitBreaker FailureThreshold), and a
+    // representative HybridCache test. The other 9 share the same code path.
+
+    private const string PollyHybridCacheStubs = @"
+namespace ZibStack.NET.Aop
+{
+    public class AspectAttribute : System.Attribute { public int Order { get; set; } }
+
+    [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+    public sealed class PollyRetryAttribute : AspectAttribute
+    {
+        public int MaxRetryAttempts { get; set; } = 3;
+        public int DelayMs { get; set; } = 200;
+    }
+
+    [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+    public sealed class PollyCircuitBreakerAttribute : AspectAttribute
+    {
+        public double FailureThreshold { get; set; } = 0.5;
+        public int MinimumThroughput { get; set; } = 10;
+        public int SamplingDurationSeconds { get; set; } = 30;
+        public int BreakDurationSeconds { get; set; } = 15;
+    }
+
+    [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+    public sealed class HybridCacheAttribute : AspectAttribute
+    {
+        public int DurationSeconds { get; set; } = 300;
+    }
+}
+";
+
+    [Fact]
+    public async Task PollyRetryMaxAttemptsZero_FixedToThree()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+public class Svc { [{|#0:PollyRetry(MaxRetryAttempts = 0)|}] public int Get() => 1; }
+" + PollyHybridCacheStubs;
+
+        var fixedCode = @"
+using ZibStack.NET.Aop;
+public class Svc { [PollyRetry(MaxRetryAttempts = 3)] public int Get() => 1; }
+" + PollyHybridCacheStubs;
+
+        var test1 = new CSharpCodeFixTest<BuiltInAspectArgumentAnalyzer, FixOptionalAspectArgCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        test1.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.PollyRetryMaxAttempts).WithLocation(0).WithArguments(0));
+        await test1.RunAsync();
+    }
+
+    [Fact]
+    public async Task CircuitBreakerThresholdInvalid_FixedToHalf()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+public class Svc { [{|#0:PollyCircuitBreaker(FailureThreshold = 1.5)|}] public int Get() => 1; }
+" + PollyHybridCacheStubs;
+
+        var fixedCode = @"
+using ZibStack.NET.Aop;
+public class Svc { [PollyCircuitBreaker(FailureThreshold = 0.5)] public int Get() => 1; }
+" + PollyHybridCacheStubs;
+
+        var test1 = new CSharpCodeFixTest<BuiltInAspectArgumentAnalyzer, FixOptionalAspectArgCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        test1.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.PollyCircuitBreakerThreshold).WithLocation(0).WithArguments(1.5));
+        await test1.RunAsync();
+    }
+
+    [Fact]
+    public async Task HybridCacheDurationNegative_FixedToDefault()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+public class Svc { [{|#0:HybridCache(DurationSeconds = -1)|}] public int Get() => 1; }
+" + PollyHybridCacheStubs;
+
+        var fixedCode = @"
+using ZibStack.NET.Aop;
+public class Svc { [HybridCache(DurationSeconds = 300)] public int Get() => 1; }
+" + PollyHybridCacheStubs;
+
+        var test1 = new CSharpCodeFixTest<BuiltInAspectArgumentAnalyzer, FixOptionalAspectArgCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        test1.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.HybridCacheDuration).WithLocation(0).WithArguments(-1));
+        await test1.RunAsync();
+    }
+
+    [Fact]
+    public async Task RateLimiterQueueNegative_FixedToZero()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+public class Svc { [{|#0:PollyRateLimiter(QueueLimit = -5)|}] public int Get() => 1; }
+
+namespace ZibStack.NET.Aop
+{
+    [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+    public sealed class PollyRateLimiterAttribute : AspectAttribute
+    {
+        public int PermitLimit { get; set; } = 100;
+        public int WindowSeconds { get; set; } = 60;
+        public int QueueLimit { get; set; }
+    }
+}
+" + PollyHybridCacheStubs;
+
+        var fixedCode = @"
+using ZibStack.NET.Aop;
+public class Svc { [PollyRateLimiter(QueueLimit = 0)] public int Get() => 1; }
+
+namespace ZibStack.NET.Aop
+{
+    [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+    public sealed class PollyRateLimiterAttribute : AspectAttribute
+    {
+        public int PermitLimit { get; set; } = 100;
+        public int WindowSeconds { get; set; } = 60;
+        public int QueueLimit { get; set; }
+    }
+}
+" + PollyHybridCacheStubs;
+
+        var t = new CSharpCodeFixTest<BuiltInAspectArgumentAnalyzer, FixOptionalAspectArgCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        t.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.PollyRateLimiterQueue).WithLocation(0).WithArguments(-5));
+        await t.RunAsync();
+    }
 }

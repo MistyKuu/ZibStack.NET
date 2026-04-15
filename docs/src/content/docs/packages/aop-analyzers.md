@@ -495,7 +495,7 @@ broaden the scope, or split the type).
 
 ## Code Fix Summary
 
-Eleven of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+Twenty-three of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
 
 | Diagnostic | Code fix |
 |---|---|
@@ -510,6 +510,7 @@ Eleven of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / 
 | `AOP1001` | Add `[Aspect]` attribute |
 | `AOP1002` | Implement {Interface} (append to base list) |
 | `AOP1004` | Add stub constructor matching the required signature (body: `throw new NotImplementedException()`) |
+| `AOP0030`–`AOP0041` | Set the offending property to its package-documented default (e.g. `MaxRetryAttempts → 3`, `FailureThreshold → 0.5`, `DurationSeconds → 300`) |
 
 The remaining diagnostics are intentionally fix-less — repairing them either requires an API redesign (`AOP0003`/`AOP0006`), depends on user intent (`AOP0017`), or describes legitimate code that should just be reviewed (`AOP0020`/`AOP0021`).
 
