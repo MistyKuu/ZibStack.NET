@@ -44,33 +44,14 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             })
             .Where(static s => s is not null);
 
-        // Second provider: every class/record symbol in the compilation (including
-        // generator-output syntax trees from ZibStack.NET.Dto) — used to resolve
-        // Create/Update/Response companion DTOs by name. CompilationProvider's
-        // GetTypeByMetadataName does NOT see other generators' output, but SyntaxProvider
-        // walks all trees — including .g.cs — so the companion lookup actually works.
-        var allTypes = context.SyntaxProvider.CreateSyntaxProvider(
-            predicate: static (node, _) =>
-                node is ClassDeclarationSyntax or RecordDeclarationSyntax or StructDeclarationSyntax,
-            transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(static s => s is not null);
-
         var compilation = context.CompilationProvider;
 
-        var combined = classes.Collect().Combine(allTypes.Collect()).Combine(compilation);
+        var combined = classes.Collect().Combine(compilation);
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var ((symbols, allTypeSymbols), compilation) = source;
+            var (symbols, compilation) = source;
             if (symbols.IsDefaultOrEmpty) return;
-
-            // Build a name lookup for companion DTO resolution. Keyed by fully-qualified
-            // name so namespace collisions (same simple name in different namespaces)
-            // resolve correctly.
-            var typesByFullName = new Dictionary<string, INamedTypeSymbol>();
-            foreach (var t in allTypeSymbols)
-                if (t is not null)
-                    typesByFullName[t.ToDisplayString()] = t;
 
             // Warn about [CrudApi]-only classes that TypeGen can't emit paths for —
             // they need [GenerateTypes] so we discover them via the same provider.
@@ -123,22 +104,20 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     ReportTargetsIfEmpty(spc, sym, cls.Targets);
                     ReportInvalidOutputDirIfEmpty(spc, sym, cls.OutputDir);
                     model.Classes.Add(cls);
+
+                    // Synthesize Create/Update/Response companion schemas from Dto's attributes.
+                    // Roslyn doesn't let TypeGen see Dto's generated records in the same pass,
+                    // so we use shared/DtoSemantics.cs (single source of truth with Dto) to
+                    // recreate the schemas ourselves. $refs from [CrudApi] paths resolve cleanly.
+                    if ((cls.Targets & TypeTarget.OpenApi) != 0 && !cls.OpenApiIgnore)
+                    {
+                        SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Create);
+                        SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Update);
+                        SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Response);
+                    }
                 }
             }
 
-            // Auto-discover companion DTOs produced by ZibStack.NET.Dto or written by hand
-            // next to the primary class ([CreateDto] / [UpdateDto] / [ResponseDto] / [CrudApi]
-            // all land on the same name conventions). Each probe that resolves to a real
-            // type in the compilation is emitted as an auxiliary schema, so `$ref`s from
-            // CRUD paths (Create{X}Request, Update{X}Request, {X}Response) don't dangle.
-            var originalClasses = model.Classes.ToArray();   // snapshot before adding auxiliaries
-            foreach (var cls in originalClasses)
-            {
-                if ((cls.Targets & TypeTarget.OpenApi) == 0 || cls.OpenApiIgnore) continue;
-                DiscoverAuxiliarySchema(typesByFullName, cls, $"Create{cls.SourceName}Request", model);
-                DiscoverAuxiliarySchema(typesByFullName, cls, $"Update{cls.SourceName}Request", model);
-                DiscoverAuxiliarySchema(typesByFullName, cls, $"{cls.SourceName}Response", model);
-            }
 
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
@@ -214,29 +193,60 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Probes the compilation for a sibling type of <paramref name="parent"/> with the
-    /// given name. If found and not already in the model, parses it as an auxiliary
-    /// OpenAPI-only schema and adds it. Safe to call with a name that doesn't resolve —
-    /// just a no-op. Idempotent: later probes for the same type don't duplicate.
+    /// Emits a synthetic <c>Create{X}Request</c> / <c>Update{X}Request</c> / <c>{X}Response</c>
+    /// schema for <paramref name="parent"/> by walking its properties and applying the
+    /// shared <see cref="Shared.DtoSemantics"/> filter for <paramref name="variant"/>.
+    /// Only fires when the parent carries a Dto attribute that would make the Dto
+    /// generator produce that variant in real code (checked via <c>HasDtoAttributeFor</c>).
     /// </summary>
-    private static void DiscoverAuxiliarySchema(
-        Dictionary<string, INamedTypeSymbol> typesByFullName, SchemaClass parent, string siblingName, SchemaModel model)
+    private static void SynthesizeAuxiliaryForVariant(SchemaModel model, SchemaClass parent, INamedTypeSymbol parentSymbol, Shared.DtoTarget variant)
     {
-        // Sibling lives in the same namespace as the parent (that's the convention the
-        // Dto generator follows for Create/Update/Response companions).
-        var parentFull = parent.CSharpFullName;
-        var lastDot = parentFull.LastIndexOf('.');
-        var ns = lastDot >= 0 ? parentFull.Substring(0, lastDot) : "";
-        var fullName = string.IsNullOrEmpty(ns) ? siblingName : $"{ns}.{siblingName}";
+        if (!Shared.DtoSemantics.HasDtoAttributeFor(parentSymbol, variant)) return;
 
-        if (!typesByFullName.TryGetValue(fullName, out var sym)) return;
-        if (model.Classes.Any(c => c.CSharpFullName == fullName)) return;
+        var schemaName = Shared.DtoSemantics.GetDefaultDtoName(parent.SourceName, variant);
+        // Dedupe: if the user handwrote their own [GenerateTypes] partial, renamed a
+        // class to that name via OpenApiName override, or a prior synthesis already
+        // ran — don't emit a duplicate schema key.
+        if (model.Classes.Any(c =>
+                c.EmittedName == schemaName ||
+                c.SourceName == schemaName ||
+                c.OpenApiNameOverride == schemaName))
+            return;
 
-        var aux = SchemaParser.ParseAuxiliaryClass(sym, TypeTarget.OpenApi, parent.OutputDir);
-        if (aux is null) return;
-        // Match the parent's OpenApi settings — aux schemas are internal plumbing,
-        // don't need their own TS output.
+        var aux = new SchemaClass
+        {
+            CSharpFullName = $"{GetNamespace(parent.CSharpFullName)}.{schemaName}",
+            SourceName = schemaName,
+            EmittedName = schemaName,
+            Targets = TypeTarget.OpenApi,
+            OutputDir = parent.OutputDir,
+        };
+
+        // Response excludes the response-key ignores; Create/Update typically exclude the
+        // primary key (Id). Walk the parent symbol's properties directly — SchemaClass.Properties
+        // already captured attribute overrides but we need the RAW symbol for per-variant filtering.
+        foreach (var propSymbol in parentSymbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (propSymbol.IsStatic || propSymbol.IsIndexer) continue;
+            if (propSymbol.DeclaredAccessibility != Accessibility.Public) continue;
+            if (!Shared.DtoSemantics.IsIncluded(propSymbol, variant)) continue;
+
+            // Re-use the matching SchemaProperty built for the parent so validation
+            // constraints (minLength, etc.) and overrides flow through unchanged.
+            var original = parent.Properties.FirstOrDefault(p => p.SourceName == propSymbol.Name);
+            if (original is null) continue;
+            aux.Properties.Add(original);
+        }
+
+        // Empty aux (all properties filtered out) — don't bother adding.
+        if (aux.Properties.Count == 0) return;
         model.Classes.Add(aux);
+    }
+
+    private static string GetNamespace(string fullName)
+    {
+        var dot = fullName.LastIndexOf('.');
+        return dot >= 0 ? fullName.Substring(0, dot) : "";
     }
 
     private static ConfiguratorParser.PerTypeOverrides? LookupOverride(string fullName, ConfiguratorParser.Parsed? config)

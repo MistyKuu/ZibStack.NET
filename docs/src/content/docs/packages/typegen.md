@@ -310,12 +310,23 @@ What's read from `[CrudApi]`:
 - Bulk endpoints when flags are set — `POST /{resource}/bulk` (array of requests) and
   `POST /{resource}/bulk-delete` (array of keys).
 
+**What else is emitted automatically (Dto integration):**
+
+When a `[GenerateTypes]` class also carries a Dto attribute (`[CrudApi]`, `[CreateDto]`,
+`[UpdateDto]`, `[ResponseDto]`), TypeGen synthesizes the matching companion schemas —
+`Create{Class}Request`, `Update{Class}Request`, `{Class}Response` — directly from
+the parent's property list, respecting `[DtoIgnore(target)]` / `[DtoOnly(target)]`
+filtering. The `$ref`s that `[CrudApi]` paths point at resolve to real schemas, no
+annotations beyond `[GenerateTypes]` required.
+
+The filter rules live in `shared/DtoSemantics.cs` — one file linked into both the
+Dto and TypeGen generators via `<Compile Include>`, so the two generators can never
+drift on what a given `[DtoIgnore(flags)]` means.
+
 **Limitations (MVP):**
 - Pluralization is naive `+"s"`. For irregular nouns (`Bus`, `Octopus`, `Person`) use an explicit `Route`.
-- Request DTOs are referenced as `Create{Class}Request` / `Update{Class}Request` — TypeGen
-  doesn't emit those schemas itself. Add `[GenerateTypes]` on the request DTOs (Dto's
-  `[CreateDto]`/`[UpdateDto]` keep them as companion types). `[CrudApi]` without
-  `[GenerateTypes]` triggers diagnostic `TG0014`.
+- `[DtoName]` per-variant custom DTO names aren't read yet — naming is the Dto default convention.
+- `[ResponseDto(ListName=...)]` list-item variants aren't synthesized (use the main response schema).
 - Authorization policies don't map to `security`/`securitySchemes` yet.
 
 ## Dictionaries, inheritance

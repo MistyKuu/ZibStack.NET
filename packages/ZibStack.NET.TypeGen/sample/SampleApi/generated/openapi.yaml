@@ -125,6 +125,90 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderItem'
+    CreateOrderRequest:
+      type: object
+      required:
+        - Id
+        - Customer
+        - Total
+        - Status
+        - Items
+      properties:
+        Id:
+          type: integer
+          format: int32
+        Customer:
+          type: string
+        Total:
+          type: number
+          format: double
+        Status:
+          $ref: '#/components/schemas/OrderStatus'
+        CreditCardMasked:
+          type: string
+          nullable: true
+          format: password
+          description: Last four digits only.
+        Items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+    UpdateOrderRequest:
+      type: object
+      required:
+        - Id
+        - Customer
+        - Total
+        - Status
+        - Items
+      properties:
+        Id:
+          type: integer
+          format: int32
+        Customer:
+          type: string
+        Total:
+          type: number
+          format: double
+        Status:
+          $ref: '#/components/schemas/OrderStatus'
+        CreditCardMasked:
+          type: string
+          nullable: true
+          format: password
+          description: Last four digits only.
+        Items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+    OrderResponse:
+      type: object
+      required:
+        - Id
+        - Customer
+        - Total
+        - Status
+        - Items
+      properties:
+        Id:
+          type: integer
+          format: int32
+        Customer:
+          type: string
+        Total:
+          type: number
+          format: double
+        Status:
+          $ref: '#/components/schemas/OrderStatus'
+        CreditCardMasked:
+          type: string
+          nullable: true
+          format: password
+          description: Last four digits only.
+        Items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
     OrderItem:
       type: object
       required:

@@ -24,6 +24,12 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- Shared DTO filtering semantics — same file linked into ZibStack.NET.Dto.
+       See file header in shared/DtoSemantics.cs for the SSOT rationale. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildProjectDirectory)\..\..\..\..\shared\DtoSemantics.cs" Link="Shared\DtoSemantics.cs" />
+  </ItemGroup>
+
   <!-- Generator deliberately does NOT reference Abstractions — it has internal mirror
        types in Model/SchemaModel.cs so the analyzer DLL has no runtime dependencies
        beyond Microsoft.CodeAnalysis. Consumers reference Abstractions separately. -->

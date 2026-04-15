@@ -309,6 +309,109 @@ components:
         UpdatedAt:
           type: string
           format: date-time
+    CreatePlayerRequest:
+      type: object
+      required:
+        - Name
+        - Level
+        - Salary
+      properties:
+        Name:
+          type: string
+          minLength: 2
+          maxLength: 50
+        Level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+        Email:
+          type: string
+          nullable: true
+          format: email
+          description: Contact email (optional).
+        Salary:
+          type: string
+          format: decimal
+          description: Encoded as string to preserve precision.
+        Bio:
+          type: string
+          nullable: true
+          format: textarea
+        TeamId:
+          type: integer
+          format: int32
+          nullable: true
+    UpdatePlayerRequest:
+      type: object
+      required:
+        - Name
+        - Level
+        - Salary
+      properties:
+        Name:
+          type: string
+          minLength: 2
+          maxLength: 50
+        Level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+        Email:
+          type: string
+          nullable: true
+          format: email
+          description: Contact email (optional).
+        Salary:
+          type: string
+          format: decimal
+          description: Encoded as string to preserve precision.
+        Bio:
+          type: string
+          nullable: true
+          format: textarea
+        TeamId:
+          type: integer
+          format: int32
+          nullable: true
+    PlayerResponse:
+      type: object
+      required:
+        - Id
+        - Name
+        - Level
+        - Salary
+      properties:
+        Id:
+          type: integer
+          format: int32
+        Name:
+          type: string
+          minLength: 2
+          maxLength: 50
+        Level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+        Email:
+          type: string
+          nullable: true
+          format: email
+          description: Contact email (optional).
+        Salary:
+          type: string
+          format: decimal
+          description: Encoded as string to preserve precision.
+        Bio:
+          type: string
+          nullable: true
+          format: textarea
+        TeamId:
+          type: integer
+          format: int32
+          nullable: true
     TeamResponse:
       type: object
       required:
@@ -344,6 +447,42 @@ components:
         UpdatedAt:
           type: string
           format: date-time
+    CreateTeamRequest:
+      type: object
+      required:
+        - Name
+        - MaxMembers
+      properties:
+        Name:
+          type: string
+          maxLength: 100
+        Description:
+          type: string
+          nullable: true
+          maxLength: 500
+        MaxMembers:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+    UpdateTeamRequest:
+      type: object
+      required:
+        - Name
+        - MaxMembers
+      properties:
+        Name:
+          type: string
+          maxLength: 100
+        Description:
+          type: string
+          nullable: true
+          maxLength: 500
+        MaxMembers:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
     PaginatedResponseOfPlayer:
       type: object
       required: [items, totalCount, page, pageSize, totalPages, hasNextPage, hasPreviousPage]

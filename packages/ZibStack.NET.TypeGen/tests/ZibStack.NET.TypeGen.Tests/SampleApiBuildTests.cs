@@ -95,6 +95,13 @@ public sealed class SampleApiBuildTests
         Assert.Contains("operationId: getOrderById", yaml);
         Assert.Contains("operationId: updateOrder", yaml);
         Assert.Contains("operationId: deleteOrder", yaml);
+
+        // Companion request/response schemas synthesized from Dto semantics. Before
+        // this was wired, $refs like CreateOrderRequest dangled — the OpenAPI doc
+        // validated as structurally broken.
+        Assert.Contains("    CreateOrderRequest:", yaml);
+        Assert.Contains("    UpdateOrderRequest:", yaml);
+        Assert.Contains("    OrderResponse:", yaml);
     }
 
     private static (int Exit, string Output) Run(string file, string args)

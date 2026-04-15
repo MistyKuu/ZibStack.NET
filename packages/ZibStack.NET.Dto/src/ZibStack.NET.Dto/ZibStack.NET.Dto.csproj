@@ -27,6 +27,12 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- Shared DTO filtering semantics — linked into both this generator and
+       ZibStack.NET.TypeGen so the two can't drift. See file header for the SSOT rationale. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildProjectDirectory)\..\..\..\..\shared\DtoSemantics.cs" Link="Shared\DtoSemantics.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="$(MSBuildProjectDirectory)\..\..\README.md" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')" />
