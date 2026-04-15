@@ -55,6 +55,12 @@ public sealed class SampleApiBuildTests
         // OpenAPI version must be 3.0-compatible for Microsoft.OpenApi.Readers.
         var yaml = File.ReadAllText(Path.Combine(GeneratedDir, "openapi.yaml"));
         Assert.Contains("openapi: 3.0.3", yaml);
+
+        // Fluent configurator in SampleApi/TypeGenConfig.cs overrides Title/Version/Description.
+        // If these don't match, ConfiguratorParser didn't run end-to-end through the build.
+        Assert.Contains("title: Sample Order API", yaml);
+        Assert.Contains("version: 1.2.3", yaml);
+        Assert.Contains("description: Demo service exercising the TypeGen fluent configurator.", yaml);
     }
 
     private static (int Exit, string Output) Run(string file, string args)
