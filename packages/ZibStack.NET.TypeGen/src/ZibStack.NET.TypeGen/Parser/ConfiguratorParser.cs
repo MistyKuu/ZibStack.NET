@@ -33,6 +33,15 @@ internal static class ConfiguratorParser
         /// </summary>
         public int? FluentTargets { get; set; }
 
+        /// <summary>
+        /// Resolved symbol for the type the user wrote in <c>b.ForType&lt;T&gt;()</c>,
+        /// or <c>null</c> when symbol resolution failed (Roslyn cross-generator
+        /// visibility wall — typically Dto-emitted companion records). Used by
+        /// the generator to anchor companion synthesis from a parent type even
+        /// when the parent has no <c>WithGeneratedTypes</c> opt-in itself.
+        /// </summary>
+        public INamedTypeSymbol? Symbol { get; set; }
+
         /// <summary>Per-property fluent overrides keyed by property name (case-sensitive, matches C# source).</summary>
         public Dictionary<string, PerPropertyOverrides> Properties { get; } = new();
     }
@@ -170,7 +179,7 @@ internal static class ConfiguratorParser
                 return;
 
             case "ForType":
-                var typeName = ResolveForTypeArg(first, semantic);
+                var (typeName, typeSym) = ResolveForTypeArgWithSymbol(first, semantic);
                 // If symbol resolution fails (Dto-generated companion types like
                 // Create{X}Request that another generator emits in the same pass —
                 // Roslyn doesn't let us see them) — fall back to the raw syntactic
@@ -181,6 +190,7 @@ internal static class ConfiguratorParser
                 if (typeName is null) return;
                 if (!parsed.PerType.TryGetValue(typeName, out var overrides))
                     parsed.PerType[typeName] = overrides = new PerTypeOverrides();
+                if (overrides.Symbol is null) overrides.Symbol = typeSym;
                 ProcessForTypeChain(calls, semantic, overrides, report);
                 return;
 
@@ -216,12 +226,15 @@ internal static class ConfiguratorParser
     }
 
     private static string? ResolveForTypeArg(InvocationExpressionSyntax inv, SemanticModel sm)
+        => ResolveForTypeArgWithSymbol(inv, sm).Name;
+
+    private static (string? Name, INamedTypeSymbol? Symbol) ResolveForTypeArgWithSymbol(InvocationExpressionSyntax inv, SemanticModel sm)
     {
-        if (inv.Expression is not MemberAccessExpressionSyntax { Name: GenericNameSyntax g }) return null;
-        if (g.TypeArgumentList.Arguments.Count != 1) return null;
+        if (inv.Expression is not MemberAccessExpressionSyntax { Name: GenericNameSyntax g }) return (null, null);
+        if (g.TypeArgumentList.Arguments.Count != 1) return (null, null);
         var typeSyntax = g.TypeArgumentList.Arguments[0];
-        var typeSym = sm.GetTypeInfo(typeSyntax).Type;
-        return typeSym?.ToDisplayString();
+        var typeSym = sm.GetTypeInfo(typeSyntax).Type as INamedTypeSymbol;
+        return (typeSym?.ToDisplayString(), typeSym);
     }
 
     // ── lambda body walker ─────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+using System;
 using ZibStack.NET.Validation;
 
 namespace ZibStack.NET.Dto.Sample.Models;

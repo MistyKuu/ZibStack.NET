@@ -22,18 +22,19 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
 
         
         b.TypeScript(ts => { ts.OutputDir = "generated"; });
-        // Article: fluent discovery for the parent class triggers companion synthesis
-        // (Create/Update/Response). With TS target, all four companions emit as .ts files.
-        b.ForType<Article>()
-            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi);
+        // Article: declared so the parser recognizes the symbol — no .WithGeneratedTypes
+        // here means the entity itself is NOT emitted as TS / OpenAPI. It's only here to
+        // anchor companion lookups below. (You CAN still chain config like .TsName(...)
+        // / .Property(...) which would apply IF the type ever does get emitted.)
+        b.ForType<Article>();
 
-        // Refine the synthesized CreateArticleRequest schema by name. The lookup
-        // path here is by SourceName since Roslyn can't see Dto-generated symbols —
-        // parser stores the syntactic name and the generator matches it against any
-        // aux schema already in the model (added by Article's synthesis above).
+        // Explicit per-companion opt-in. Synthesizes ONLY the Create variant from
+        // Article's properties — UpdateArticleRequest / ArticleResponse are NOT emitted
+        // because they aren't listed.
         b.ForType<CreateArticleRequest>()
+            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi)
             .TsName("ArticleDto");
-        
+
         // Player: demonstrate per-property mapping overrides.
         b.ForType<Player>()
             // decimal → number (OpenAPI default) loses precision on the wire; force

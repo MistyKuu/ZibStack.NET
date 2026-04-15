@@ -140,23 +140,39 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     var sym = compilation.GetTypeByMetadataName(kvp.Key);
                     if (sym is null)
                     {
-                        // Fallback path for Dto-generated companion types (Create{X}Request /
-                        // Update{X}Request / {X}Response). Roslyn won't resolve them as
-                        // symbols (cross-generator visibility), but the synthesis pass that
-                        // ran earlier may have already added a SchemaClass with this simple
-                        // name. Apply this entry's overrides directly — ApplyFluentToClass
-                        // can't be used because it looks up by CSharpFullName, while the
-                        // fluent key here is the bare syntactic name without namespace.
-                        var existingAux = model.Classes.FirstOrDefault(c =>
-                            c.SourceName == kvp.Key || c.EmittedName == kvp.Key);
-                        if (existingAux is not null)
+                        // Symbol unresolvable — typically a Dto-generated companion the
+                        // user is opting into explicitly via fluent. If the name matches
+                        // the Dto naming pattern, find parent in the fluent set (its
+                        // Symbol is stored even when the parent has no .WithGeneratedTypes
+                        // — the user wrote b.ForType<X>() which resolved at parse time)
+                        // and synthesize that single variant.
+                        if (TryParseCompanionName(kvp.Key, out var parentName, out var variant))
                         {
-                            existingAux.Targets |= (TypeTarget)fluentTargets;
-                            existingAux.TsNameOverride ??= kvp.Value.TsName;
-                            existingAux.OpenApiNameOverride ??= kvp.Value.OpenApiName;
-                            if (kvp.Value.Ignore) { existingAux.TsIgnore = true; existingAux.OpenApiIgnore = true; }
-                            existingAux.TsIgnore |= kvp.Value.TsIgnore;
-                            existingAux.OpenApiIgnore |= kvp.Value.OpenApiIgnore;
+                            // Try to find parent by simple name in the fluent config.
+                            var parentEntry = config.PerType.FirstOrDefault(e =>
+                                e.Value.Symbol is not null && e.Value.Symbol.Name == parentName);
+                            var parentSym = parentEntry.Value?.Symbol;
+                            if (parentSym is not null)
+                            {
+                                // Synthesize from parent symbol — needs a transient SchemaClass
+                                // wrapping the parent for ParseAuxiliaryClass-based property walk.
+                                var parentCls = SchemaParser.ParseAuxiliaryClass(parentSym, (TypeTarget)fluentTargets, ".");
+                                if (parentCls is not null)
+                                {
+                                    SynthesizeAuxiliaryForVariant(model, parentCls, parentSym, variant, force: true);
+                                    var synthAux = model.Classes.FirstOrDefault(c => c.SourceName == kvp.Key);
+                                    if (synthAux is not null)
+                                    {
+                                        synthAux.Targets = (TypeTarget)fluentTargets;
+                                        synthAux.TsNameOverride ??= kvp.Value.TsName;
+                                        synthAux.OpenApiNameOverride ??= kvp.Value.OpenApiName;
+                                        if (!string.IsNullOrEmpty(kvp.Value.OutputDir))
+                                            synthAux.OutputDir = kvp.Value.OutputDir!;
+                                        else if (!string.IsNullOrEmpty(config.Settings.TypeScript.OutputDir))
+                                            synthAux.OutputDir = config.Settings.TypeScript.OutputDir!;
+                                    }
+                                }
+                            }
                         }
                         continue;
                     }
@@ -169,17 +185,19 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     ApplyFluentToClass(aux, config);
                     model.Classes.Add(aux);
 
-                    // Same companion-synthesis the attribute path runs — fluent-discovered
-                    // classes get Create/Update/Response companions in the same target set.
-                    // Force=true bypasses the [CreateDto]/[CrudApi] attribute gate; for
-                    // fluent-discovered types we trust the user's intent (Dto-side fluent
-                    // may be driving DTO generation without attributes either).
+                    // Companion synthesis only when the parent has the gate attributes
+                    // ([CreateDto] / [CrudApi] / etc.). For pure-fluent Article without
+                    // any Dto attributes, the gate fails and we emit ONLY the parent.
+                    // To opt into a specific companion, use:
+                    //   b.ForType<CreateArticleRequest>().WithGeneratedTypes(TS)
+                    // — that goes through the second pass below which detects the naming
+                    // pattern and synthesizes that one variant from the parent's properties.
                     if ((aux.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python)) != 0
                         && !aux.OpenApiIgnore)
                     {
-                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Create, force: true);
-                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Update, force: true);
-                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Response, force: true);
+                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Create);
+                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Update);
+                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Response);
                     }
                 }
 
@@ -274,6 +292,37 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         if (o.Ignore) { en.TsIgnore = true; en.OpenApiIgnore = true; }
         en.TsIgnore |= o.TsIgnore;
         en.OpenApiIgnore |= o.OpenApiIgnore;
+    }
+
+    /// <summary>
+    /// Parses Dto's companion DTO naming convention. Returns true (with parent name and
+    /// variant) when <paramref name="name"/> matches <c>Create{X}Request</c>,
+    /// <c>Update{X}Request</c>, or <c>{X}Response</c>. Lets the fluent layer opt into a
+    /// single companion (e.g. <c>b.ForType&lt;CreateArticleRequest&gt;()</c>) without
+    /// emitting siblings.
+    /// </summary>
+    private static bool TryParseCompanionName(string name, out string parentName, out Shared.DtoTarget variant)
+    {
+        if (name.StartsWith("Create", System.StringComparison.Ordinal) && name.EndsWith("Request", System.StringComparison.Ordinal))
+        {
+            parentName = name.Substring(6, name.Length - 6 - "Request".Length);
+            variant = Shared.DtoTarget.Create;
+            return parentName.Length > 0;
+        }
+        if (name.StartsWith("Update", System.StringComparison.Ordinal) && name.EndsWith("Request", System.StringComparison.Ordinal))
+        {
+            parentName = name.Substring(6, name.Length - 6 - "Request".Length);
+            variant = Shared.DtoTarget.Update;
+            return parentName.Length > 0;
+        }
+        if (name.EndsWith("Response", System.StringComparison.Ordinal))
+        {
+            parentName = name.Substring(0, name.Length - "Response".Length);
+            variant = Shared.DtoTarget.Response;
+            return parentName.Length > 0;
+        }
+        parentName = ""; variant = Shared.DtoTarget.None;
+        return false;
     }
 
     /// <summary>
