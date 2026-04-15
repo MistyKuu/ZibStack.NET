@@ -27,6 +27,8 @@ internal sealed class DtoConfig : IDtoConfigurator
         // through into the generated request DTOs.
         b.ForType<Article>()
             .CreateDto()
-            .UpdateDto();
+            .UpdateDto()
+            .ResponseDto()
+            .QueryDto(q => { q.DefaultSort = "PublishedAt"; q.DefaultSortDirection = SortDirection.Desc; });
     }
 }

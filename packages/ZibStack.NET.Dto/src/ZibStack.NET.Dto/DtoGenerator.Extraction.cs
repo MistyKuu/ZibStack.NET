@@ -137,7 +137,18 @@ public partial class DtoGenerator
         if (attr is null) return null;
 
         var nameArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Name").Value.Value as string;
+        return BuildResponseDtoInfoCore(symbol, nameArg);
+    } catch { return null; } }
 
+    /// <summary>
+    /// Shared core for response-DTO extraction. Both attribute-driven
+    /// (<see cref="GetResponseDtoInfo"/>) and fluent-driven paths reuse this.
+    /// Walks all properties, applies <c>[DtoIgnore]</c>/<c>[DtoOnly]</c>/<c>[Flatten]</c>,
+    /// detects nested response DTOs, builds a separate ListItem variant when
+    /// any property is <c>[DtoIgnore(DtoTarget.List)]</c>.
+    /// </summary>
+    internal static ResponseDtoInfo? BuildResponseDtoInfoCore(INamedTypeSymbol symbol, string? nameOverride)
+    { try {
         var properties = new List<ResponsePropertyInfo>();
         foreach (var prop in GetAllProperties(symbol))
         {
@@ -234,7 +245,7 @@ public partial class DtoGenerator
             symbol.Name,
             ns,
             SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
-            nameArg ?? $"{symbol.Name}Response",
+            nameOverride ?? $"{symbol.Name}Response",
             properties,
             listResponseName,
             listProperties);
@@ -408,6 +419,19 @@ public partial class DtoGenerator
         var defaultSortDirectionRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "DefaultSortDirection").Value.Value;
         var defaultSortDirection = defaultSortDirectionRaw is int d ? d : 0;
 
+        return BuildQueryDtoInfoCore(symbol, nameArg, sortable, defaultSort, defaultSortDirection);
+    } catch { return null; } }
+
+    /// <summary>
+    /// Shared core for query-DTO extraction. Both attribute-driven and fluent paths
+    /// reuse this. Walks public properties, applies <c>[DtoIgnore]</c>/<c>[DtoOnly]</c>
+    /// + <c>[UiTableColumn(Filterable=false)]</c>, skips complex/nav types, builds
+    /// nullable-shaped QueryPropertyInfo + navigation/collection paths for the DSL.
+    /// </summary>
+    internal static QueryDtoInfo? BuildQueryDtoInfoCore(
+        INamedTypeSymbol symbol, string? nameOverride,
+        bool sortable, string? defaultSort, int defaultSortDirection)
+    { try {
         var properties = new List<QueryPropertyInfo>();
         foreach (var prop in GetAllProperties(symbol))
         {
@@ -567,7 +591,7 @@ public partial class DtoGenerator
         return new QueryDtoInfo(
             symbol.Name, ns,
             SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
-            nameArg ?? $"{symbol.Name}Query",
+            nameOverride ?? $"{symbol.Name}Query",
             properties,
             sortable,
             defaultSort,

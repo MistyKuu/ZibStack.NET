@@ -30,4 +30,12 @@ public partial class DtoGenerator
 
         return BuildDtoClassInfoCore(symbol, kind, name, createValidator, updateValidator);
     }
+
+    private static ResponseDtoInfo? BuildResponseDtoInfoFromFluent(
+        INamedTypeSymbol symbol, DtoConfiguratorParser.TypeConfig tc) =>
+        BuildResponseDtoInfoCore(symbol, tc.ResponseName);
+
+    private static QueryDtoInfo? BuildQueryDtoInfoFromFluent(
+        INamedTypeSymbol symbol, DtoConfiguratorParser.TypeConfig tc) =>
+        BuildQueryDtoInfoCore(symbol, tc.QueryName, tc.QuerySortable, tc.QueryDefaultSort, tc.QueryDefaultSortDirection);
 }

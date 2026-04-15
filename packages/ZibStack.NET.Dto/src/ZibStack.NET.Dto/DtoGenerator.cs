@@ -514,11 +514,31 @@ public partial class DtoGenerator : IIncrementalGenerator
                         EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
                     }
                 }
-                // Phase 1: Response/Query fluent paths emit nothing yet — those
-                // require splitting GetResponseDtoInfo/GetQueryDtoInfo into reusable
-                // cores like BuildDtoClassInfoCore. For now users still annotate
-                // [ResponseDto]/[QueryDto] for those.
-                _ = hasDsl; _ = hasEf;
+                if (tc.Response)
+                {
+                    var info = BuildResponseDtoInfoFromFluent(tc.Symbol, tc);
+                    if (info is not null)
+                    {
+                        info.HasTypeGen = hasTg;
+                        spc.AddSource($"{info.FullyQualifiedName}.Response.Fluent.g.cs", GenerateResponseDtoSource(info));
+                        if (info.ListResponseName is not null && info.ListProperties is not null)
+                        {
+                            var listInfo = new ResponseDtoInfo(info.ClassName, info.Namespace, info.FullyQualifiedName,
+                                info.ListResponseName, info.ListProperties) { HasTypeGen = hasTg };
+                            spc.AddSource($"{info.FullyQualifiedName}.ListItem.Fluent.g.cs", GenerateResponseDtoSource(listInfo));
+                        }
+                    }
+                }
+                if (tc.Query)
+                {
+                    var info = BuildQueryDtoInfoFromFluent(tc.Symbol, tc);
+                    if (info is not null)
+                    {
+                        info.HasQueryDsl = hasDsl;
+                        info.HasEfCore = hasEf;
+                        spc.AddSource($"{info.FullyQualifiedName}.Query.Fluent.g.cs", GenerateQueryDtoSource(info));
+                    }
+                }
             }
         });
 
