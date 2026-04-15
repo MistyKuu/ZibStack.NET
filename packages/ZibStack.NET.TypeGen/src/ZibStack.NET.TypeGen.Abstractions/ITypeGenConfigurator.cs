@@ -145,6 +145,23 @@ public interface IPropertyBuilder<TClass, TProp>
     /// <summary>Equivalent to <c>[OpenApiSchemaName(name)]</c> on the property.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiName(string name);
 
+    /// <summary>
+    /// Override the inferred OpenAPI primary type (<c>integer</c>, <c>string</c>,
+    /// <c>number</c>, <c>boolean</c>, <c>array</c>, <c>object</c>). Useful for
+    /// preserving precision (e.g. force <c>decimal</c> to <c>string</c>) or
+    /// representing binary data (<c>byte[]</c> → <c>string</c> + <c>format: byte</c>).
+    /// Does NOT change the C# property type, only the emitted schema.
+    /// </summary>
+    IPropertyBuilder<TClass, TProp> OpenApiType(string openApiType);
+
+    /// <summary>
+    /// Emit <c>$ref: '#/components/schemas/{schemaName}'</c> for this property
+    /// instead of the inferred shape. Use when the property type is defined
+    /// elsewhere in the document (hand-written schema, external reference) and
+    /// you want to point at it by name.
+    /// </summary>
+    IPropertyBuilder<TClass, TProp> OpenApiRef(string schemaName);
+
     /// <summary>Equivalent to <c>[OpenApiProperty(Format = format)]</c>.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiFormat(string format);
 

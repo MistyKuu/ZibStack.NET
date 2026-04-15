@@ -127,7 +127,7 @@ internal static class OpenApiEmitter
     {
         var name = prop.OpenApiNameOverride ?? prop.SourceName;
         sb.AppendLine($"{indent}{name}:");
-        var (typeKey, fmtKey, refTarget, items) = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
+        var (typeKey, fmtKey, refTarget, items) = ResolvePropertyShape(prop, nameByCSharp);
         if (refTarget != null)
         {
             // OpenAPI 3.0: nullable $ref needs allOf wrapping — a bare $ref can't carry siblings.
@@ -263,7 +263,7 @@ internal static class OpenApiEmitter
     {
         var name = prop.OpenApiNameOverride ?? prop.SourceName;
         sb.Append($"{indent}{JsonString(name)}: {{ ");
-        var (typeKey, fmtKey, refTarget, items) = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
+        var (typeKey, fmtKey, refTarget, items) = ResolvePropertyShape(prop, nameByCSharp);
         var nullable = IsEffectivelyNullable(prop);
         if (refTarget != null)
         {
@@ -308,6 +308,24 @@ internal static class OpenApiEmitter
     }
 
     // ── shared mapping ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Resolves the emitted shape for one property. Fluent <c>OpenApiRef</c> wins
+    /// (emit <c>$ref</c> to the named schema, ignore inferred type entirely);
+    /// fluent <c>OpenApiType</c> overrides the primary type but keeps inferred
+    /// items / format unless those are also overridden. With no overrides this is
+    /// just <see cref="MapCSharpToOpenApi"/> — backwards-compatible default.
+    /// </summary>
+    private static (string TypeKey, string? FmtKey, string? RefTarget, OpenApiTypeMapping? Items) ResolvePropertyShape(
+        SchemaProperty prop, IReadOnlyDictionary<string, string> nameByCSharp)
+    {
+        if (prop.OpenApiRefOverride is { } refName)
+            return ("$ref", null, refName, null);
+        var inferred = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
+        if (prop.OpenApiTypeOverride is { } typeOverride)
+            return (typeOverride, inferred.FmtKey, null, null);
+        return inferred;
+    }
 
     private sealed record OpenApiTypeMapping(string TypeKey, string? FmtKey, string? RefTarget);
 

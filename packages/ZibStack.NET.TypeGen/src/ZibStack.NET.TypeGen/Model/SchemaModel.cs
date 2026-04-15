@@ -115,11 +115,17 @@ internal sealed class SchemaProperty
     /// <summary>Per-target type overrides.</summary>
     public string? TsTypeOverride { get; set; }
 
-    /// <summary>OpenAPI annotations from <c>[OpenApiProperty]</c>.</summary>
+    /// <summary>OpenAPI annotations from <c>[OpenApiProperty]</c> and per-property fluent overrides.</summary>
     public string? OpenApiFormat { get; set; }
     public object? OpenApiExample { get; set; }
     public string? OpenApiDescription { get; set; }
     public bool? OpenApiNullableOverride { get; set; }
+
+    /// <summary>Fluent-only — overrides the inferred primary OpenAPI type (e.g. force decimal → string).</summary>
+    public string? OpenApiTypeOverride { get; set; }
+
+    /// <summary>Fluent-only — emit as <c>$ref</c> to a named external schema instead of the inferred shape.</summary>
+    public string? OpenApiRefOverride { get; set; }
 
     public bool TsIgnore { get; set; }
     public bool OpenApiIgnore { get; set; }

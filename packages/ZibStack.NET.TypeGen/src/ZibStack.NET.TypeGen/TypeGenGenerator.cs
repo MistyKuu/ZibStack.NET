@@ -135,6 +135,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             prop.TsNameOverride ??= po.TsName;
             prop.TsTypeOverride ??= po.TsType;
             prop.OpenApiNameOverride ??= po.OpenApiName;
+            prop.OpenApiTypeOverride ??= po.OpenApiType;
+            prop.OpenApiRefOverride ??= po.OpenApiRef;
             prop.OpenApiFormat ??= po.OpenApiFormat;
             prop.OpenApiDescription ??= po.OpenApiDescription;
             prop.OpenApiNullableOverride ??= po.OpenApiNullable;

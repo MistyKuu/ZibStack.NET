@@ -36,6 +36,8 @@ internal static class ConfiguratorParser
         public string? TsName { get; set; }
         public string? TsType { get; set; }
         public string? OpenApiName { get; set; }
+        public string? OpenApiType { get; set; }
+        public string? OpenApiRef { get; set; }
         public string? OpenApiFormat { get; set; }
         public string? OpenApiDescription { get; set; }
         public bool? OpenApiNullable { get; set; }
@@ -351,6 +353,8 @@ internal static class ConfiguratorParser
             case "TsName": o.TsName = arg; break;
             case "TsType": o.TsType = arg; break;
             case "OpenApiName": o.OpenApiName = arg; break;
+            case "OpenApiType": o.OpenApiType = arg; break;
+            case "OpenApiRef": o.OpenApiRef = arg; break;
             case "OpenApiFormat": o.OpenApiFormat = arg; break;
             case "OpenApiDescription": o.OpenApiDescription = arg; break;
             case "OpenApiNullable":

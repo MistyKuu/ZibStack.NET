@@ -157,6 +157,33 @@ public class OpenApiEmitterTests
     }
 
     [Fact]
+    public void OpenApiTypeOverride_ReplacesInferredPrimaryType()
+    {
+        // decimal is normally `number` — override forces `string` (preserves precision).
+        var cls = Cls("Order", props: new[] { ("Total", "decimal", false) });
+        cls.Properties[0].OpenApiTypeOverride = "string";
+        var yaml = OpenApiEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains("Total:", yaml);
+        Assert.Contains("type: string", yaml);
+        Assert.DoesNotContain("type: number", yaml);
+    }
+
+    [Fact]
+    public void OpenApiRefOverride_EmitsRefInsteadOfInline()
+    {
+        // No matching schema in the model — the user vouches that AuditTrailV2 exists
+        // (hand-written elsewhere). Emitter trusts the override and emits the $ref.
+        var cls = Cls("Order", props: new[] { ("Audit", "object", false) });
+        cls.Properties[0].OpenApiRefOverride = "AuditTrailV2";
+        var yaml = OpenApiEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains("$ref: '#/components/schemas/AuditTrailV2'", yaml);
+        // The Audit property must not also have an inline `type: object` — the $ref replaces it.
+        // (Order itself is `type: object` at the schema level — that's expected.)
+        var auditSection = yaml.Substring(yaml.IndexOf("Audit:", System.StringComparison.Ordinal));
+        Assert.DoesNotContain("type:", auditSection.Substring(0, auditSection.IndexOf('\n', auditSection.IndexOf('\n') + 1)));
+    }
+
+    [Fact]
     public void OpenApiSchemaName_RenamesClassInComponents()
     {
         var cls = Cls("Order", props: new[] { ("Id", "int", false) });

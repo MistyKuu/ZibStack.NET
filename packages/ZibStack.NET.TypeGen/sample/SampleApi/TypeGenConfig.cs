@@ -26,6 +26,9 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             oa.Description = "Demo service exercising the TypeGen fluent configurator.";
         });
 
+        b.ForType<OrderItem>().TsName("hoho");
+        b.ForType<OrderItem>().Property(x => x.UnitPrice).TsName("ASD");
+
         // Per-type fluent overrides — equivalent to putting [TsName]/[OpenApiSchemaName]
         // attributes on Customer, but without touching the source file. Same precedence
         // rules apply: if Customer also had a [TsName] attribute it would win over this.

@@ -245,6 +245,26 @@ public class ConfiguratorParserTests
     }
 
     [Fact]
+    public void OpenApiTypeAndRef_StoredOnPropertyOverride()
+    {
+        var parsed = Parse("""
+            public class Order { public decimal Total { get; set; } public object Audit { get; set; } }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>()
+                        .Property(c => c.Total).OpenApiType("string")
+                        .Property(c => c.Audit).OpenApiRef("AuditTrailV2");
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        var props = parsed!.PerType["Order"].Properties;
+        Assert.Equal("string", props["Total"].OpenApiType);
+        Assert.Equal("AuditTrailV2", props["Audit"].OpenApiRef);
+    }
+
+    [Fact]
     public void NestedPropertyAccess_NotSupported_ReportsTG0012()
     {
         // c.Inner.Email — only single-member access is allowed.
@@ -319,6 +339,8 @@ public class ConfiguratorParserTests
                     IPropertyBuilder<TClass, TProp> TsName(string n);
                     IPropertyBuilder<TClass, TProp> TsType(string t);
                     IPropertyBuilder<TClass, TProp> OpenApiName(string n);
+                    IPropertyBuilder<TClass, TProp> OpenApiType(string t);
+                    IPropertyBuilder<TClass, TProp> OpenApiRef(string s);
                     IPropertyBuilder<TClass, TProp> OpenApiFormat(string f);
                     IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);
                     IPropertyBuilder<TClass, TProp> OpenApiNullable(bool n);

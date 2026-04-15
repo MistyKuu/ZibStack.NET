@@ -36,9 +36,10 @@ public sealed class SampleApiBuildTests
         var (exit, output) = Run("dotnet", $"build \"{SampleProj}\" -c Release --nologo");
         Assert.True(exit == 0, $"dotnet build failed:\n{output}");
 
-        // All four artifacts must land under generated/, nothing in the project root.
+        // All artifacts must land under generated/, nothing in the project root.
+        // OrderItem is renamed to "hoho" via b.ForType<OrderItem>().TsName("hoho") in TypeGenConfig.cs.
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "Order.ts")));
-        Assert.True(File.Exists(Path.Combine(GeneratedDir, "OrderItem.ts")));
+        Assert.True(File.Exists(Path.Combine(GeneratedDir, "hoho.ts")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "OrderStatus.ts")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "openapi.yaml")));
 
@@ -47,10 +48,17 @@ public sealed class SampleApiBuildTests
         var rootStray = Path.Combine(Path.GetDirectoryName(SampleProj)!, "openapi.yaml");
         Assert.False(File.Exists(rootStray), "openapi.yaml leaked to project root — OutputDir routing broken.");
 
-        // Cross-file imports must actually be present — the other regression we just fixed.
+        // Cross-file imports must follow the renamed type — proves the import resolver
+        // walks the post-fluent emitted name, not the source name.
         var orderTs = File.ReadAllText(Path.Combine(GeneratedDir, "Order.ts"));
-        Assert.Contains("import { OrderItem } from './OrderItem';", orderTs);
+        Assert.Contains("import { hoho } from './hoho';", orderTs);
         Assert.Contains("import { OrderStatus } from './OrderStatus';", orderTs);
+
+        // Per-property fluent on the renamed class: UnitPrice -> ASD via
+        // b.ForType<OrderItem>().Property(x => x.UnitPrice).TsName("ASD").
+        var hohoTs = File.ReadAllText(Path.Combine(GeneratedDir, "hoho.ts"));
+        Assert.Contains("ASD: string;", hohoTs);
+        Assert.DoesNotContain("unitPrice", hohoTs);
 
         // OpenAPI version must be 3.0-compatible for Microsoft.OpenApi.Readers.
         var yaml = File.ReadAllText(Path.Combine(GeneratedDir, "openapi.yaml"));

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ZibStack.NET.TypeGen;
 
 namespace SampleApi.Models;
