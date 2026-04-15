@@ -171,4 +171,16 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
+
+    // ── Convention enforcement (AOP1001-AOP1099) ────────────────────────────
+
+    public const string MissingRequiredAspectId = "AOP1001";
+    public static readonly DiagnosticDescriptor MissingRequiredAspect = new(
+        MissingRequiredAspectId,
+        title: "Type is missing an aspect required by its base/interface",
+        messageFormat: "'{0}' derives from '{1}' which requires [{2}]{3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A base type or interface declared with [RequireAspect(typeof(X))] expects every concrete derivative to also carry [X]. Without it, the configured runtime behavior won't apply and the derivative falls into a silent edge case.");
 }

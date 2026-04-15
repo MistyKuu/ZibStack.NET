@@ -5,19 +5,20 @@ description: Compile-time error and warning diagnostics for ZibStack.NET.Aop, pl
 
 [![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Aop.svg)](https://www.nuget.org/packages/ZibStack.NET.Aop) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Analyzers)
 
-When you install `ZibStack.NET.Aop` you also get a set of **Roslyn analyzers and code fixes** that catch broken aspect placements at compile time. The diagnostics show up directly in your IDE — red squiggle, light-bulb fix, no waiting for a build. No separate package install required.
+When you install `ZibStack.NET.Aop` you also get a set of **Roslyn analyzers and code fixes** that catch broken aspect placements *and enforce architectural rules* at compile time. The diagnostics show up directly in your IDE — red squiggle, light-bulb fix, no waiting for a build. No separate package install required.
 
 > **Why this matters:** the source-generator part can only emit interceptors for placements that are physically possible. Anything else (aspect on a `static` method, `[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`) silently no-ops at runtime and you'd never know. Analyzers turn those silent failures into immediate, locatable errors.
 
 ## Diagnostic Categories
 
-Three tiers, all under the `ZibStack.Aop` category:
+Four families, all under the `ZibStack.Aop` category:
 
-| Tier | Covers | Severity |
+| Family | Covers | Severity |
 |---|---|---|
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
 | **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
 | **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor. | Warning / Info |
+| **Tier 4 — Convention Enforcement** (`AOP1001`+) | Architectural rules you declare on a base type, enforced on every concrete derivative. | Warning |
 
 ## Tier 1 — Placement
 
@@ -226,9 +227,56 @@ public class Derived : Base
 }
 ```
 
+## Tier 4 — Convention Enforcement
+
+Declarative architecture rules. You annotate a base class or interface with
+`[RequireAspect(typeof(X))]`; the analyzer warns on every concrete derivative that doesn't
+also carry `[X]`. Same idea as Metalama's architecture validation — but as one focused
+attribute, no fabrics, no compile-time API.
+
+### `AOP1001` — Type missing aspect required by base/interface (Warning)
+
+```csharp
+[RequireAspect(typeof(LogAttribute), Reason = "All Topics must be audited")]
+public abstract class Topic { }
+
+public class OrderPlaced : Topic { }
+//           ^^^^^^^^^^^^
+//   ⚠ AOP1001: 'OrderPlaced' derives from 'Topic' which requires [Log].
+//             Reason: All Topics must be audited.
+
+[Log]
+public class PaymentMade : Topic { }   // ✅ ok
+```
+
+Works the same way for interfaces:
+
+```csharp
+[RequireAspect(typeof(TraceAttribute), Reason = "All command handlers must be traceable")]
+public interface ICommandHandler { }
+
+public class CreateOrderHandler : ICommandHandler { }
+//           ^^^^^^^^^^^^^^^^^^
+//   ⚠ AOP1001: requires [Trace]
+```
+
+**Code fix:** "Add [Aspect]" — inserts the attribute on its own line above the type
+declaration with the right indentation.
+
+**Notes:**
+- Abstract intermediate classes are exempt; only concrete derivatives are flagged.
+- Multiple `[RequireAspect]` attributes on a single base produce one diagnostic per
+  missing aspect — fix them one at a time with the light-bulb.
+- The same requirement reachable via two paths (e.g. base class **and** interface) is
+  collapsed to one diagnostic.
+- Subclasses of the required aspect are accepted (e.g. `[VerboseLog : LogAttribute]`
+  satisfies a `[RequireAspect(typeof(LogAttribute))]`).
+- Suppress per-type with `#pragma warning disable AOP1001` if a particular derivative is
+  legitimately exempt.
+
 ## Code Fix Summary
 
-Nine of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+Ten of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
 
 | Diagnostic | Code fix |
 |---|---|
@@ -241,6 +289,7 @@ Nine of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cm
 | `AOP0014` | Set `TimeoutMs = 30000` |
 | `AOP0015` | Add `CancellationToken cancellationToken = default` parameter |
 | `AOP0016` | Remove `[Validate]` from parameterless method |
+| `AOP1001` | Add `[Aspect]` attribute |
 
 The remaining diagnostics are intentionally fix-less — repairing them either requires an API redesign (`AOP0003`/`AOP0006`), depends on user intent (`AOP0017`), or describes legitimate code that should just be reviewed (`AOP0020`/`AOP0021`).
 
