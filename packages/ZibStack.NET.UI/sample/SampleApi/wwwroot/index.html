@@ -78,6 +78,8 @@
   <select class="sample-select" id="sample-select" onchange="loadSample(this.value)">
     <option value="imtiredofcrud">ImTiredOfCrud — Full Stack</option>
     <option value="crud-dtos">CRUD API + Separate DTOs</option>
+    <option value="fluent-config">Fluent IDtoConfigurator (zero attrs)</option>
+    <option value="fluent-mixed">Fluent + [CrudApi] mixed mode</option>
     <option value="ui-forms">UI Forms — All Hints</option>
     <option value="ui-tables">UI Tables — ERP Features</option>
     <option value="validation">Validation</option>
@@ -196,6 +198,95 @@ public partial class Order
 
     [DtoIgnore(DtoTarget.Query)]  // exclude from filtering
     public byte[]? Signature { get; set; }
+}`,
+
+'fluent-config': `// Fluent IDtoConfigurator — central project-wide config without any
+// Dto attribute markers on the model itself. Mix with attributes per class.
+
+using ZibStack.NET.Validation;
+
+namespace Demo;
+
+// MODEL: zero Dto attributes on the class. DTO generation is fully driven
+// by the IDtoConfigurator below. Validation attributes still flow through.
+public class Article
+{
+    public int Id { get; set; }
+
+    [ZRequired] [ZMaxLength(200)]
+    public required string Title { get; set; }
+
+    [ZMaxLength(10000)]
+    public string? Body { get; set; }
+
+    public DateTime PublishedAt { get; set; }
+}
+
+// CONFIG: implement IDtoConfigurator once per project. The generator parses
+// this method's syntax at compile time — no runtime invocation. Arguments
+// must be literals, enum members, constants, or typeof(...).
+internal sealed class DtoConfig : IDtoConfigurator
+{
+    public void Configure(IDtoBuilder b)
+    {
+        b.ForType<Article>()
+            // Type-level — equivalent attribute markers on the class.
+            .CreateDto(opts => opts.Name = "ArticleCreate")
+            .UpdateDto()
+            .ResponseDto()
+            .QueryDto(q =>
+            {
+                q.DefaultSort = "PublishedAt";
+                q.DefaultSortDirection = SortDirection.Desc;
+            })
+            // Per-property — equivalent to [DtoIgnore]/[DtoOnly]/[DtoName].
+            .Property(p => p.Id).IgnoreIn(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)
+            .Property(p => p.Body).RenameTo("content")        // → "content" on Create/Update/Response
+            .Property(p => p.PublishedAt).IgnoreIn(DtoTarget.Create);
+    }
+}`,
+
+'fluent-mixed': `// Mixed mode — keep [CrudApi] as the discoverable marker on the class
+// (it has runtime endpoint-registration semantics), but pull options +
+// per-property overrides from a central fluent config.
+
+using ZibStack.NET.Validation;
+
+namespace Demo;
+
+[CrudApi]   // marker stays on the class — visible at-a-glance signal
+public partial class Player
+{
+    public int Id { get; set; }
+
+    [ZRequired] [ZMinLength(2)] [ZMaxLength(50)]
+    public required string Name { get; set; }
+
+    [ZRange(1, 100)]
+    public int Level { get; set; }
+
+    [DtoOnly(DtoTarget.Create)]   // attribute + fluent coexist freely
+    public required string Password { get; set; }
+
+    [ZEmail]
+    public string? Email { get; set; }
+}
+
+internal sealed class DtoConfig : IDtoConfigurator
+{
+    public void Configure(IDtoBuilder b)
+    {
+        // CrudApi(...) overrides the attribute's settings; the attribute itself
+        // stays on the class as the marker that triggers endpoint generation.
+        b.ForType<Player>()
+            .CrudApi(api =>
+            {
+                api.Operations = CrudOperations.Create | CrudOperations.Update | CrudOperations.GetById;
+                api.Route = "api/v2/players";
+            })
+            // Per-property override on top of any [DtoIgnore]/[DtoOnly] on the class.
+            .Property(p => p.Email).RenameTo("contactEmail");
+    }
 }`,
 
 'ui-forms': `// All form UI hints — each property gets a different control
