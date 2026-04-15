@@ -18,8 +18,25 @@ export default defineConfig({
 				{
 					label: 'Drop-in Attributes',
 					items: [
-						{ label: 'Log — Structured Logging', slug: 'packages/log' },
-						{ label: 'AOP — Aspects & [Trace]', slug: 'packages/aop' },
+						{
+							label: 'Log — Structured Logging',
+							items: [
+								{ label: 'Overview', slug: 'packages/log' },
+								{ label: 'Features', slug: 'packages/log/features' },
+								{ label: 'Internals (rewriter)', slug: 'packages/log/internals' },
+								{ label: '[Log] attribute & diagnostics', slug: 'packages/log/log-attribute' },
+								{ label: 'Attribute reference', slug: 'packages/log/attributes' },
+								{ label: 'Benchmarks', slug: 'packages/log/benchmarks' },
+							],
+						},
+						{
+							label: 'AOP — Aspects & [Trace]',
+							items: [
+								{ label: 'Overview', slug: 'packages/aop' },
+								{ label: 'Built-in aspects', slug: 'packages/aop/built-in' },
+								{ label: 'Custom aspects & internals', slug: 'packages/aop/custom' },
+							],
+						},
 						{ label: 'AOP Analyzers — Compile-Time Diagnostics', slug: 'packages/aop-analyzers' },
 					],
 				},
@@ -35,9 +52,33 @@ export default defineConfig({
 				{
 					label: 'CRUD Stack',
 					items: [
-						{ label: 'Dto — CRUD API & DTOs', slug: 'packages/dto' },
+						{
+						label: 'Dto — CRUD API & DTOs',
+						items: [
+							{ label: 'Overview', slug: 'packages/dto' },
+							{ label: 'Attributes reference', slug: 'packages/dto/attributes' },
+							{ label: 'Fluent IDtoConfigurator', slug: 'packages/dto/fluent-config' },
+							{ label: 'External types (DtoFor)', slug: 'packages/dto/external-types' },
+							{ label: 'Utility types', slug: 'packages/dto/utility-types' },
+							{ label: 'Query DTO', slug: 'packages/dto/querydto' },
+							{ label: 'PaginatedResponse', slug: 'packages/dto/paginated' },
+							{ label: 'CRUD API', slug: 'packages/dto/crud-api' },
+							{ label: 'Response & mapping', slug: 'packages/dto/response-mapping' },
+							{ label: 'JSON & validation', slug: 'packages/dto/json-and-validation' },
+						],
+					},
 						{ label: 'Query — Filter & Sort DSL', slug: 'packages/query' },
-						{ label: 'UI — Form & Table Metadata', slug: 'packages/ui' },
+						{
+						label: 'UI — Form & Table Metadata',
+						items: [
+							{ label: 'Overview', slug: 'packages/ui' },
+							{ label: 'Generated JSON schemas', slug: 'packages/ui/json-schemas' },
+							{ label: 'Relationships', slug: 'packages/ui/relationships' },
+							{ label: 'Database integration', slug: 'packages/ui/database' },
+							{ label: 'Frontend integration', slug: 'packages/ui/frontend' },
+							{ label: 'All attributes', slug: 'packages/ui/attributes' },
+						],
+					},
 						{
 							label: 'Storage Adapters',
 							collapsed: false,
