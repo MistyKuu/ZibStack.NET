@@ -134,6 +134,21 @@ internal sealed class SchemaClass
 
     /// <summary>Populated when the class carries <c>[CrudApi]</c>. <c>null</c> = not a CRUD endpoint.</summary>
     public CrudApiInfo? Crud { get; set; }
+
+    /// <summary>
+    /// Shadow of <see cref="GlobalSettings.HasQueryDsl"/>, stamped onto the class
+    /// at emit time so emitter helpers can read it without threading settings around.
+    /// </summary>
+    public bool QueryDsl { get; set; }
+
+    /// <summary>
+    /// Fully-qualified C# name of the immediate base type, or <c>null</c> for <c>object</c>
+    /// (or <c>System.ValueType</c> for structs). Used by the emitters to decide whether
+    /// to wire inheritance — if the base is present in the model as another
+    /// <c>[GenerateTypes]</c> class, output becomes <c>allOf</c> / <c>extends</c>; otherwise
+    /// the base's properties were pre-inlined by the parser so the output stays flat.
+    /// </summary>
+    public string? BaseClassFullName { get; set; }
 }
 
 internal sealed class SchemaProperty
@@ -220,4 +235,12 @@ internal sealed class GlobalSettings
 {
     public TypeScriptSettings TypeScript { get; set; } = new();
     public OpenApiSettings OpenApi { get; set; } = new();
+
+    /// <summary>
+    /// Set by the generator when <c>ZibStack.NET.Query</c> is referenced by the
+    /// compilation. The Dto CRUD list endpoints bind <c>filter</c>/<c>sort</c>/
+    /// <c>select</c>/<c>count</c> query-string params only when that package is
+    /// available — so the OpenAPI spec matches the real endpoint shape.
+    /// </summary>
+    public bool HasQueryDsl { get; set; }
 }

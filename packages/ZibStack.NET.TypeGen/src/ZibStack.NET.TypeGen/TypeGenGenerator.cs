@@ -110,6 +110,10 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
             var settings = config?.Settings ?? new GlobalSettings();
+            // Detect ZibStack.NET.Query presence by probing a well-known type. When
+            // referenced, the Dto CRUD list endpoint binds additional query-string params
+            // (filter/sort/select/count) — the OpenAPI paths must match that shape.
+            settings.HasQueryDsl = compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null;
 
             // Run each requested emitter.
             var allFiles = new List<EmittedFile>();

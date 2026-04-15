@@ -140,6 +140,59 @@ public class CrudApiPathsTests
     }
 
     [Fact]
+    public void GetList_UsesPaginatedResponseWrapperSchema()
+    {
+        var yaml = OpenApiEmitter.Emit(ModelWith(CrudClass("Order")), new GlobalSettings()).Single().Content;
+
+        // List response: $ref to the wrapper, not an inline array of Order.
+        Assert.Contains("$ref: '#/components/schemas/PaginatedResponseOfOrder'", yaml);
+        // Wrapper schema itself emitted alongside the class schemas.
+        Assert.Contains("    PaginatedResponseOfOrder:", yaml);
+        Assert.Contains("items: { $ref: '#/components/schemas/Order' }", yaml);
+        Assert.Contains("totalCount:", yaml);
+        Assert.Contains("hasNextPage: { type: boolean }", yaml);
+    }
+
+    [Fact]
+    public void QueryDsl_OffByDefault_PageSizeOnly()
+    {
+        var yaml = OpenApiEmitter.Emit(ModelWith(CrudClass("Order")), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("- name: page", yaml);
+        Assert.Contains("- name: pageSize", yaml);
+        // filter/sort/select/count are only emitted when the Query package is referenced.
+        Assert.DoesNotContain("- name: filter", yaml);
+        Assert.DoesNotContain("- name: sort", yaml);
+        Assert.DoesNotContain("- name: select", yaml);
+    }
+
+    [Fact]
+    public void QueryDsl_On_EmitsFilterSortSelectCount()
+    {
+        var settings = new GlobalSettings { HasQueryDsl = true };
+        var yaml = OpenApiEmitter.Emit(ModelWith(CrudClass("Order")), settings).Single().Content;
+
+        Assert.Contains("- name: filter", yaml);
+        Assert.Contains("- name: sort", yaml);
+        Assert.Contains("- name: select", yaml);
+        Assert.Contains("- name: count", yaml);
+    }
+
+    [Fact]
+    public void BulkOps_EmittedWhenFlagsPresent()
+    {
+        var cls = CrudClass("Order", ops: CrudOperations.Create | CrudOperations.BulkCreate | CrudOperations.BulkDelete);
+        var yaml = OpenApiEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("/api/orders/bulk:", yaml);
+        Assert.Contains("/api/orders/bulk-delete:", yaml);
+        Assert.Contains("operationId: bulkCreateOrder", yaml);
+        Assert.Contains("operationId: bulkDeleteOrder", yaml);
+        // Bulk-delete body should be an array of the key type (int → integer/int32).
+        Assert.Contains("items: { type: integer, format: int32 }", yaml);
+    }
+
+    [Fact]
     public void EmittedName_UsedForTagsAndRefs_ButSourceNameForRequestDtos()
     {
         // Class renamed to "OrderV1" via OpenApiNameOverride — requests still key

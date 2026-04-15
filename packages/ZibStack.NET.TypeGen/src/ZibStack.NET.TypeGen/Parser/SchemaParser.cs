@@ -42,6 +42,14 @@ internal static class SchemaParser
 
         var (targets, outputDir) = ReadGenerateTypesArgs(generateAttr);
 
+        var baseSymbol = symbol.BaseType;
+        // Treat `object` / `ValueType` as "no base" — no inheritance to express.
+        var baseFullName = baseSymbol is not null
+                           && baseSymbol.SpecialType != SpecialType.System_Object
+                           && baseSymbol.SpecialType != SpecialType.System_ValueType
+            ? baseSymbol.ToDisplayString()
+            : null;
+
         var cls = new SchemaClass
         {
             CSharpFullName = symbol.ToDisplayString(),
@@ -54,7 +62,26 @@ internal static class SchemaParser
             TsIgnore = HasAttr(symbol, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(symbol, OpenApiIgnoreAttr),
             Crud = ReadCrudApi(symbol),
+            BaseClassFullName = baseFullName,
         };
+
+        // If the base is itself [GenerateTypes]-annotated, emitters will express
+        // the relationship via allOf / extends — keep `cls.Properties` to declared-only.
+        // If not, inline inherited properties into this class so they aren't lost.
+        var inlineInherited = baseSymbol is not null
+            && baseFullName is not null
+            && !HasGenerateTypes(baseSymbol);
+
+        if (inlineInherited)
+        {
+            for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
+                foreach (var member in b.GetMembers().OfType<IPropertySymbol>())
+                {
+                    if (member.IsStatic || member.IsIndexer) continue;
+                    if (member.DeclaredAccessibility != Accessibility.Public) continue;
+                    cls.Properties.Add(ParseProperty(member));
+                }
+        }
 
         foreach (var member in symbol.GetMembers().OfType<IPropertySymbol>())
         {

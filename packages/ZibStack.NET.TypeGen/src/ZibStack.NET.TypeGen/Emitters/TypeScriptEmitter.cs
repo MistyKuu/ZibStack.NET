@@ -98,6 +98,9 @@ internal static class TypeScriptEmitter
     private static HashSet<string> CollectClassReferences(SchemaClass cls, IReadOnlyDictionary<string, string> nameLookup)
     {
         var acc = new HashSet<string>();
+        // Pick up the base class so FilePerClass mode imports it for `extends`.
+        if (cls.BaseClassFullName is { } bfn && nameLookup.TryGetValue(bfn, out var bn))
+            acc.Add(bn);
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
@@ -129,11 +132,18 @@ internal static class TypeScriptEmitter
     private static void EmitClass(StringBuilder sb, SchemaClass cls, TypeScriptSettings ts, IReadOnlyDictionary<string, string> nameLookup)
     {
         if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) return;
-        var keyword = ts.UseInterfaces ? "interface" : "type";
+        // Only express inheritance when the base is in the emit set — otherwise its
+        // properties were pre-inlined by the parser and there's nothing to extend.
+        var baseTs = cls.BaseClassFullName is { } bfn && nameLookup.TryGetValue(bfn, out var bn) ? bn : null;
+
         if (ts.UseInterfaces)
-            sb.AppendLine($"export interface {cls.EmittedName} {{");
+            sb.AppendLine(baseTs is null
+                ? $"export interface {cls.EmittedName} {{"
+                : $"export interface {cls.EmittedName} extends {baseTs} {{");
         else
-            sb.AppendLine($"export type {cls.EmittedName} = {{");
+            sb.AppendLine(baseTs is null
+                ? $"export type {cls.EmittedName} = {{"
+                : $"export type {cls.EmittedName} = {baseTs} & {{");
 
         foreach (var prop in cls.Properties)
         {

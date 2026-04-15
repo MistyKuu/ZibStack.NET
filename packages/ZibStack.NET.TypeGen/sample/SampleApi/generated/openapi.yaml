@@ -9,14 +9,25 @@ paths:
     get:
       tags: [Order]
       operationId: listOrder
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based).
+          schema:
+            type: integer
+            format: int32
+        - name: pageSize
+          in: query
+          description: Items per page.
+          schema:
+            type: integer
+            format: int32
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Order' }
+              schema: { $ref: '#/components/schemas/PaginatedResponseOfOrder' }
     post:
       tags: [Order]
       operationId: createOrder
@@ -153,3 +164,16 @@ components:
         - Shipped
         - Delivered
         - Cancelled
+    PaginatedResponseOfOrder:
+      type: object
+      required: [items, totalCount, page, pageSize, totalPages, hasNextPage, hasPreviousPage]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Order' }
+        totalCount: { type: integer, format: int32 }
+        page: { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        totalPages: { type: integer, format: int32 }
+        hasNextPage: { type: boolean }
+        hasPreviousPage: { type: boolean }

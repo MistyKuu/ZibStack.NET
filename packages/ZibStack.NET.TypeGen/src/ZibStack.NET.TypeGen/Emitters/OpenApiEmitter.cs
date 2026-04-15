@@ -23,6 +23,10 @@ internal static class OpenApiEmitter
         var oa = settings.OpenApi;
         var emitJson = oa.OutputPath.EndsWith(".json", System.StringComparison.OrdinalIgnoreCase);
 
+        // Stamp global flags onto classes so emitter helpers can read them without
+        // threading settings through every call.
+        foreach (var cls in model.Classes) cls.QueryDsl = settings.HasQueryDsl;
+
         // Resolve emitted schema names — ['Order' if no override, otherwise OpenApiSchemaName].
         // Stored back so $ref resolution works across classes referencing each other.
         foreach (var cls in model.Classes)
@@ -98,6 +102,9 @@ internal static class OpenApiEmitter
             EmitEnumYaml(sb, en, indent: "    ");
         }
 
+        // PaginatedResponseOf{Class} auxiliary schemas for every GetList-enabled CRUD class.
+        EmitPaginatedWrappersYaml(sb, model, indent: "    ");
+
         return sb.ToString();
     }
 
@@ -141,6 +148,15 @@ internal static class OpenApiEmitter
 
             if (collectionVerbs.Count > 0) EmitPathBlockYaml(sb, collectionPath, collectionVerbs);
             if (itemVerbs.Count > 0) EmitPathBlockYaml(sb, itemPath, itemVerbs);
+
+            // Bulk ops sit on separate sub-paths — the Dto generator puts them under
+            // /bulk and /bulk-delete. Emit only if their flag bit is set.
+            if ((ops & CrudOperations.BulkCreate) != 0)
+                EmitPathBlockYaml(sb, collectionPath + "/bulk",
+                    new() { ("post", b => EmitBulkCreateOpYaml(b, cls)) });
+            if ((ops & CrudOperations.BulkDelete) != 0)
+                EmitPathBlockYaml(sb, collectionPath + "/bulk-delete",
+                    new() { ("post", b => EmitBulkDeleteOpYaml(b, cls, keyType)) });
         }
     }
 
@@ -158,14 +174,116 @@ internal static class OpenApiEmitter
     {
         sb.AppendLine($"      tags: [{cls.EmittedName}]");
         sb.AppendLine($"      operationId: list{cls.EmittedName}");
+        EmitListQueryParamsYaml(sb, cls);
         sb.AppendLine("      responses:");
         sb.AppendLine("        '200':");
         sb.AppendLine("          description: OK");
         sb.AppendLine("          content:");
         sb.AppendLine("            application/json:");
+        sb.AppendLine($"              schema: {{ $ref: '#/components/schemas/{PaginatedSchemaName(cls)}' }}");
+    }
+
+    private static string PaginatedSchemaName(SchemaClass cls) => $"PaginatedResponseOf{cls.EmittedName}";
+
+    private static void EmitListQueryParamsYaml(StringBuilder sb, SchemaClass cls)
+    {
+        // page + pageSize are always emitted by the Dto generator — match them unconditionally.
+        // filter/sort/select/count only exist when ZibStack.NET.Query is referenced.
+        sb.AppendLine("      parameters:");
+        EmitQueryParamYaml(sb, "page", "integer", "int32", "Page number (1-based).");
+        EmitQueryParamYaml(sb, "pageSize", "integer", "int32", "Items per page.");
+        if (cls.QueryDsl)
+        {
+            EmitQueryParamYaml(sb, "filter", "string", null, "Filter DSL — 'Field>value,Field2=*text'.");
+            EmitQueryParamYaml(sb, "sort", "string", null, "Sort DSL — '-Field,Field2' (prefix '-' for desc).");
+            EmitQueryParamYaml(sb, "select", "string", null, "Projection — 'Field1,Field2'.");
+            EmitQueryParamYaml(sb, "count", "boolean", null, "When true, returns only { count: int }.");
+        }
+    }
+
+    private static void EmitQueryParamYaml(StringBuilder sb, string name, string typeKey, string? fmtKey, string description)
+    {
+        sb.AppendLine($"        - name: {name}");
+        sb.AppendLine("          in: query");
+        sb.AppendLine($"          description: {YamlString(description)}");
+        sb.AppendLine("          schema:");
+        sb.AppendLine($"            type: {typeKey}");
+        if (fmtKey != null) sb.AppendLine($"            format: {fmtKey}");
+    }
+
+    private static void EmitBulkCreateOpYaml(StringBuilder sb, SchemaClass cls)
+    {
+        var req = $"Create{cls.SourceName}Request";
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: bulkCreate{cls.EmittedName}");
+        sb.AppendLine("      requestBody:");
+        sb.AppendLine("        required: true");
+        sb.AppendLine("        content:");
+        sb.AppendLine("          application/json:");
+        sb.AppendLine("            schema:");
+        sb.AppendLine("              type: array");
+        sb.AppendLine($"              items: {{ $ref: '#/components/schemas/{req}' }}");
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '201':");
+        sb.AppendLine("          description: Created");
+        sb.AppendLine("          content:");
+        sb.AppendLine("            application/json:");
         sb.AppendLine("              schema:");
         sb.AppendLine("                type: array");
         sb.AppendLine($"                items: {{ $ref: '#/components/schemas/{cls.EmittedName}' }}");
+    }
+
+    private static void EmitBulkDeleteOpYaml(StringBuilder sb, SchemaClass cls, (string TypeKey, string? FmtKey) keyType)
+    {
+        sb.AppendLine($"      tags: [{cls.EmittedName}]");
+        sb.AppendLine($"      operationId: bulkDelete{cls.EmittedName}");
+        sb.AppendLine("      requestBody:");
+        sb.AppendLine("        required: true");
+        sb.AppendLine("        content:");
+        sb.AppendLine("          application/json:");
+        sb.AppendLine("            schema:");
+        sb.AppendLine("              type: array");
+        sb.AppendLine($"              items: {{ type: {keyType.TypeKey}{(keyType.FmtKey is null ? "" : $", format: {keyType.FmtKey}")} }}");
+        sb.AppendLine("      responses:");
+        sb.AppendLine("        '204':");
+        sb.AppendLine("          description: No Content");
+    }
+
+    /// <summary>
+    /// For each CRUD class with GetList enabled, emits a <c>PaginatedResponseOf{Class}</c>
+    /// schema whose shape mirrors <c>ZibStack.NET.Dto.PaginatedResponse&lt;T&gt;</c> at runtime.
+    /// Called from the components/schemas block so list endpoints can <c>$ref</c> to it.
+    /// </summary>
+    private static void EmitPaginatedWrappersYaml(StringBuilder sb, SchemaModel model, string indent)
+    {
+        foreach (var cls in model.Classes)
+        {
+            if (cls.Crud is null || (cls.Crud.Operations & CrudOperations.GetList) == 0) continue;
+            if ((cls.Targets & TypeTarget.OpenApi) == 0 || cls.OpenApiIgnore) continue;
+            EmitPaginatedSchemaYaml(sb, cls, indent);
+        }
+    }
+
+    private static void EmitPaginatedSchemaYaml(StringBuilder sb, SchemaClass cls, string indent)
+    {
+        sb.AppendLine($"{indent}{PaginatedSchemaName(cls)}:");
+        sb.AppendLine($"{indent}  type: object");
+        sb.AppendLine($"{indent}  required: [items, totalCount, page, pageSize, totalPages, hasNextPage, hasPreviousPage]");
+        sb.AppendLine($"{indent}  properties:");
+        sb.AppendLine($"{indent}    items:");
+        sb.AppendLine($"{indent}      type: array");
+        sb.AppendLine($"{indent}      items: {{ $ref: '#/components/schemas/{cls.EmittedName}' }}");
+        foreach (var (n, t, f) in new[] {
+            ("totalCount", "integer", "int32"),
+            ("page", "integer", "int32"),
+            ("pageSize", "integer", "int32"),
+            ("totalPages", "integer", "int32"),
+        })
+        {
+            sb.AppendLine($"{indent}    {n}: {{ type: {t}, format: {f} }}");
+        }
+        sb.AppendLine($"{indent}    hasNextPage: {{ type: boolean }}");
+        sb.AppendLine($"{indent}    hasPreviousPage: {{ type: boolean }}");
     }
 
     private static void EmitCreateOpYaml(StringBuilder sb, SchemaClass cls)
@@ -277,23 +395,38 @@ internal static class OpenApiEmitter
 
     private static void EmitClassYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
     {
+        // Base in the emit set → allOf [{ $ref: base }, { type: object, properties: new-only }].
+        var baseRef = cls.BaseClassFullName is { } bfn && nameByCSharp.TryGetValue(bfn, out var bn) ? bn : null;
+        if (baseRef is not null)
+        {
+            sb.AppendLine($"{indent}{cls.EmittedName}:");
+            sb.AppendLine($"{indent}  allOf:");
+            sb.AppendLine($"{indent}    - $ref: '#/components/schemas/{baseRef}'");
+            sb.AppendLine($"{indent}    - type: object");
+            EmitClassBodyYaml(sb, cls, nameByCSharp, indent + "      ");
+            return;
+        }
         sb.AppendLine($"{indent}{cls.EmittedName}:");
         sb.AppendLine($"{indent}  type: object");
+        EmitClassBodyYaml(sb, cls, nameByCSharp, indent + "  ");
+    }
 
+    private static void EmitClassBodyYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
+    {
         var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
         var required = emittedProps.Where(p => !IsEffectivelyNullable(p)).ToList();
         if (required.Count > 0)
         {
-            sb.AppendLine($"{indent}  required:");
+            sb.AppendLine($"{indent}required:");
             foreach (var p in required)
-                sb.AppendLine($"{indent}    - {p.OpenApiNameOverride ?? p.SourceName}");
+                sb.AppendLine($"{indent}  - {p.OpenApiNameOverride ?? p.SourceName}");
         }
 
         if (emittedProps.Count > 0)
         {
-            sb.AppendLine($"{indent}  properties:");
+            sb.AppendLine($"{indent}properties:");
             foreach (var p in emittedProps)
-                EmitPropertyYaml(sb, p, nameByCSharp, indent + "    ");
+                EmitPropertyYaml(sb, p, nameByCSharp, indent + "  ");
         }
     }
 
@@ -322,6 +455,20 @@ internal static class OpenApiEmitter
                 if (IsEffectivelyNullable(prop))
                     sb.AppendLine($"{indent}  nullable: true");
                 sb.AppendLine($"{indent}  items:");
+                if (items?.RefTarget != null)
+                    sb.AppendLine($"{indent}    $ref: '#/components/schemas/{items.RefTarget}'");
+                else
+                {
+                    sb.AppendLine($"{indent}    type: {items?.TypeKey ?? "object"}");
+                    if (items?.FmtKey != null) sb.AppendLine($"{indent}    format: {items.FmtKey}");
+                }
+            }
+            else if (typeKey == "dict")
+            {
+                sb.AppendLine($"{indent}  type: object");
+                if (IsEffectivelyNullable(prop))
+                    sb.AppendLine($"{indent}  nullable: true");
+                sb.AppendLine($"{indent}  additionalProperties:");
                 if (items?.RefTarget != null)
                     sb.AppendLine($"{indent}    $ref: '#/components/schemas/{items.RefTarget}'");
                 else
@@ -413,6 +560,14 @@ internal static class OpenApiEmitter
             first = false;
             EmitEnumJson(sb, en, "      ");
         }
+        foreach (var cls in model.Classes)
+        {
+            if (cls.Crud is null || (cls.Crud.Operations & CrudOperations.GetList) == 0) continue;
+            if (cls.OpenApiIgnore || (cls.Targets & TypeTarget.OpenApi) == 0) continue;
+            if (!first) sb.AppendLine(",");
+            first = false;
+            EmitPaginatedSchemaJson(sb, cls, "      ");
+        }
         if (!first) sb.AppendLine();
 
         sb.AppendLine("    }");
@@ -423,31 +578,53 @@ internal static class OpenApiEmitter
 
     private static void EmitClassJson(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
     {
-        sb.AppendLine($"{indent}{JsonString(cls.EmittedName)}: {{");
-        sb.Append($"{indent}  \"type\": \"object\"");
+        // Inheritance: emit allOf[{$ref: base}, {type: object, ...}] when the base is
+        // in the model. Otherwise fall back to a single {type: object, ...} block.
+        var baseRef = cls.BaseClassFullName is { } bfn && nameByCSharp.TryGetValue(bfn, out var bn) ? bn : null;
         var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
         var required = emittedProps.Where(p => !IsEffectivelyNullable(p)).ToList();
+
+        sb.AppendLine($"{indent}{JsonString(cls.EmittedName)}: {{");
+        if (baseRef is not null)
+        {
+            sb.AppendLine($"{indent}  \"allOf\": [");
+            sb.AppendLine($"{indent}    {{ \"$ref\": \"#/components/schemas/{baseRef}\" }},");
+            sb.Append($"{indent}    {{ \"type\": \"object\"");
+            WriteRequiredAndPropsJson(sb, emittedProps, required, nameByCSharp, indent + "    ");
+            sb.AppendLine();
+            sb.AppendLine($"{indent}    }}");
+            sb.AppendLine($"{indent}  ]");
+        }
+        else
+        {
+            sb.Append($"{indent}  \"type\": \"object\"");
+            WriteRequiredAndPropsJson(sb, emittedProps, required, nameByCSharp, indent + "  ");
+            sb.AppendLine();
+        }
+        sb.Append($"{indent}}}");
+    }
+
+    private static void WriteRequiredAndPropsJson(StringBuilder sb, List<SchemaProperty> emittedProps, List<SchemaProperty> required, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
+    {
         if (required.Count > 0)
         {
             sb.AppendLine(",");
-            sb.Append($"{indent}  \"required\": [");
+            sb.Append($"{indent}\"required\": [");
             sb.Append(string.Join(", ", required.Select(r => JsonString(r.OpenApiNameOverride ?? r.SourceName))));
             sb.Append(']');
         }
         if (emittedProps.Count > 0)
         {
             sb.AppendLine(",");
-            sb.AppendLine($"{indent}  \"properties\": {{");
+            sb.AppendLine($"{indent}\"properties\": {{");
             for (int i = 0; i < emittedProps.Count; i++)
             {
-                EmitPropertyJson(sb, emittedProps[i], nameByCSharp, indent + "    ");
+                EmitPropertyJson(sb, emittedProps[i], nameByCSharp, indent + "  ");
                 if (i < emittedProps.Count - 1) sb.AppendLine(",");
                 else sb.AppendLine();
             }
-            sb.AppendLine($"{indent}  }}");
+            sb.Append($"{indent}}}");
         }
-        else sb.AppendLine();
-        sb.Append($"{indent}}}");
     }
 
     private static void EmitPropertyJson(StringBuilder sb, SchemaProperty prop, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
@@ -477,6 +654,20 @@ internal static class OpenApiEmitter
             }
             sb.Append(" }");
         }
+        else if (typeKey == "dict")
+        {
+            sb.Append("\"type\": \"object\"");
+            if (nullable) sb.Append(", \"nullable\": true");
+            sb.Append(", \"additionalProperties\": { ");
+            if (items?.RefTarget != null)
+                sb.Append($"\"$ref\": \"#/components/schemas/{items.RefTarget}\"");
+            else
+            {
+                sb.Append($"\"type\": \"{items?.TypeKey ?? "object"}\"");
+                if (items?.FmtKey != null) sb.Append($", \"format\": \"{items.FmtKey}\"");
+            }
+            sb.Append(" }");
+        }
         else
         {
             sb.Append($"\"type\": \"{typeKey}\"");
@@ -491,6 +682,23 @@ internal static class OpenApiEmitter
         if (prop.Maximum is double maxVal) sb.Append($", \"maximum\": {FormatNumber(maxVal)}");
         if (prop.Pattern is string pat) sb.Append($", \"pattern\": {JsonString(pat)}");
         sb.Append(" }");
+    }
+
+    private static void EmitPaginatedSchemaJson(StringBuilder sb, SchemaClass cls, string indent)
+    {
+        sb.AppendLine($"{indent}{JsonString(PaginatedSchemaName(cls))}: {{");
+        sb.AppendLine($"{indent}  \"type\": \"object\",");
+        sb.AppendLine($"{indent}  \"required\": [\"items\", \"totalCount\", \"page\", \"pageSize\", \"totalPages\", \"hasNextPage\", \"hasPreviousPage\"],");
+        sb.AppendLine($"{indent}  \"properties\": {{");
+        sb.AppendLine($"{indent}    \"items\": {{ \"type\": \"array\", \"items\": {{ \"$ref\": \"#/components/schemas/{cls.EmittedName}\" }} }},");
+        sb.AppendLine($"{indent}    \"totalCount\": {{ \"type\": \"integer\", \"format\": \"int32\" }},");
+        sb.AppendLine($"{indent}    \"page\": {{ \"type\": \"integer\", \"format\": \"int32\" }},");
+        sb.AppendLine($"{indent}    \"pageSize\": {{ \"type\": \"integer\", \"format\": \"int32\" }},");
+        sb.AppendLine($"{indent}    \"totalPages\": {{ \"type\": \"integer\", \"format\": \"int32\" }},");
+        sb.AppendLine($"{indent}    \"hasNextPage\": {{ \"type\": \"boolean\" }},");
+        sb.AppendLine($"{indent}    \"hasPreviousPage\": {{ \"type\": \"boolean\" }}");
+        sb.AppendLine($"{indent}  }}");
+        sb.Append($"{indent}}}");
     }
 
     private static void EmitEnumJson(StringBuilder sb, SchemaEnum en, string indent)
@@ -532,6 +740,11 @@ internal static class OpenApiEmitter
 
             if (coll.Count > 0) pathEntries.Add((route, coll));
             if (item.Count > 0) pathEntries.Add((itemPath, item));
+
+            if ((ops & CrudOperations.BulkCreate) != 0)
+                pathEntries.Add((route + "/bulk", new() { ("post", BuildBulkCreateJson(cls)) }));
+            if ((ops & CrudOperations.BulkDelete) != 0)
+                pathEntries.Add((route + "/bulk-delete", new() { ("post", BuildBulkDeleteJson(cls, keyType)) }));
         }
 
         for (int i = 0; i < pathEntries.Count; i++)
@@ -552,8 +765,49 @@ internal static class OpenApiEmitter
 
     private static string BuildListJson(SchemaClass cls) =>
         $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"list{cls.EmittedName}\", " +
+        $"\"parameters\": [{BuildListQueryParamsJson(cls)}], " +
         $"\"responses\": {{ \"200\": {{ \"description\": \"OK\", \"content\": {{ \"application/json\": " +
+        $"{{ \"schema\": {{ \"$ref\": \"#/components/schemas/{PaginatedSchemaName(cls)}\" }} }} }} }} }} }}";
+
+    private static string BuildListQueryParamsJson(SchemaClass cls)
+    {
+        var parts = new List<string>
+        {
+            QueryParamJson("page", "integer", "int32", "Page number (1-based)."),
+            QueryParamJson("pageSize", "integer", "int32", "Items per page."),
+        };
+        if (cls.QueryDsl)
+        {
+            parts.Add(QueryParamJson("filter", "string", null, "Filter DSL."));
+            parts.Add(QueryParamJson("sort", "string", null, "Sort DSL."));
+            parts.Add(QueryParamJson("select", "string", null, "Projection."));
+            parts.Add(QueryParamJson("count", "boolean", null, "Returns only { count } when true."));
+        }
+        return string.Join(", ", parts);
+    }
+
+    private static string QueryParamJson(string name, string typeKey, string? fmtKey, string description)
+    {
+        var fmt = fmtKey is null ? "" : $", \"format\": \"{fmtKey}\"";
+        return $"{{ \"name\": \"{name}\", \"in\": \"query\", \"description\": {JsonString(description)}, " +
+               $"\"schema\": {{ \"type\": \"{typeKey}\"{fmt} }} }}";
+    }
+
+    private static string BuildBulkCreateJson(SchemaClass cls) =>
+        $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"bulkCreate{cls.EmittedName}\", " +
+        $"\"requestBody\": {{ \"required\": true, \"content\": {{ \"application/json\": {{ \"schema\": " +
+        $"{{ \"type\": \"array\", \"items\": {{ \"$ref\": \"#/components/schemas/Create{cls.SourceName}Request\" }} }} }} }} }}, " +
+        $"\"responses\": {{ \"201\": {{ \"description\": \"Created\", \"content\": {{ \"application/json\": " +
         $"{{ \"schema\": {{ \"type\": \"array\", \"items\": {{ \"$ref\": \"#/components/schemas/{cls.EmittedName}\" }} }} }} }} }} }} }}";
+
+    private static string BuildBulkDeleteJson(SchemaClass cls, (string TypeKey, string? FmtKey) kt)
+    {
+        var fmt = kt.FmtKey is null ? "" : $", \"format\": \"{kt.FmtKey}\"";
+        return $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"bulkDelete{cls.EmittedName}\", " +
+               $"\"requestBody\": {{ \"required\": true, \"content\": {{ \"application/json\": {{ \"schema\": " +
+               $"{{ \"type\": \"array\", \"items\": {{ \"type\": \"{kt.TypeKey}\"{fmt} }} }} }} }} }}, " +
+               $"\"responses\": {{ \"204\": {{ \"description\": \"No Content\" }} }} }}";
+    }
 
     private static string BuildCreateJson(SchemaClass cls) =>
         $"{{ \"tags\": [\"{cls.EmittedName}\"], \"operationId\": \"create{cls.EmittedName}\", " +
@@ -636,6 +890,18 @@ internal static class OpenApiEmitter
             return ("array", null, null, new OpenApiTypeMapping(inner.TypeKey, inner.FmtKey, inner.RefTarget));
         }
 
+        // Dictionary<K, V> → type: object with additionalProperties describing V.
+        // OpenAPI only supports string keys, so K is ignored (same constraint as
+        // JSON itself). Non-string key dicts still emit valid OpenAPI — the $ref
+        // simply won't round-trip exact typing, but the shape is accurate enough
+        // for consumers that serialize dicts to JSON objects.
+        var dict = ExtractTwoGenericArgs(t, "Dictionary", "IDictionary", "IReadOnlyDictionary");
+        if (dict != null)
+        {
+            var valueInner = MapCSharpToOpenApi(dict.Value.V, nameByCSharp);
+            return ("dict", null, null, new OpenApiTypeMapping(valueInner.TypeKey, valueInner.FmtKey, valueInner.RefTarget));
+        }
+
         return t switch
         {
             "string" => ("string", null, null, null),
@@ -652,6 +918,21 @@ internal static class OpenApiEmitter
             "System.TimeOnly" or "TimeOnly" or "System.TimeSpan" or "TimeSpan" => ("string", "time", null, null),
             _ => ("object", null, null, null),
         };
+    }
+
+    private static (string K, string V)? ExtractTwoGenericArgs(string typeName, params string[] names)
+    {
+        var inner = ExtractGeneric(typeName, names);
+        if (inner is null) return null;
+        int depth = 0;
+        for (int i = 0; i < inner.Length; i++)
+        {
+            if (inner[i] == '<') depth++;
+            else if (inner[i] == '>') depth--;
+            else if (inner[i] == ',' && depth == 0)
+                return (inner.Substring(0, i).Trim(), inner.Substring(i + 1).Trim());
+        }
+        return null;
     }
 
     private static string? ExtractGeneric(string typeName, params string[] names)

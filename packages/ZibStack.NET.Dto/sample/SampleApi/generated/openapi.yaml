@@ -9,14 +9,45 @@ paths:
     get:
       tags: [Player]
       operationId: listPlayer
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based).
+          schema:
+            type: integer
+            format: int32
+        - name: pageSize
+          in: query
+          description: Items per page.
+          schema:
+            type: integer
+            format: int32
+        - name: filter
+          in: query
+          description: Filter DSL — 'Field>value,Field2=*text'.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: Sort DSL — '-Field,Field2' (prefix '-' for desc).
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: Projection — 'Field1,Field2'.
+          schema:
+            type: string
+        - name: count
+          in: query
+          description: "When true, returns only { count: int }."
+          schema:
+            type: boolean
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Player' }
+              schema: { $ref: '#/components/schemas/PaginatedResponseOfPlayer' }
     post:
       tags: [Player]
       operationId: createPlayer
@@ -84,18 +115,82 @@ paths:
       responses:
         '204':
           description: No Content
+  /api/players/bulk:
+    post:
+      tags: [Player]
+      operationId: bulkCreatePlayer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/CreatePlayerRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Player' }
+  /api/players/bulk-delete:
+    post:
+      tags: [Player]
+      operationId: bulkDeletePlayer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { type: integer, format: int32 }
+      responses:
+        '204':
+          description: No Content
   /api/teams:
     get:
       tags: [TeamResponse]
       operationId: listTeamResponse
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based).
+          schema:
+            type: integer
+            format: int32
+        - name: pageSize
+          in: query
+          description: Items per page.
+          schema:
+            type: integer
+            format: int32
+        - name: filter
+          in: query
+          description: Filter DSL — 'Field>value,Field2=*text'.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: Sort DSL — '-Field,Field2' (prefix '-' for desc).
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: Projection — 'Field1,Field2'.
+          schema:
+            type: string
+        - name: count
+          in: query
+          description: "When true, returns only { count: int }."
+          schema:
+            type: boolean
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/TeamResponse' }
+              schema: { $ref: '#/components/schemas/PaginatedResponseOfTeamResponse' }
     post:
       tags: [TeamResponse]
       operationId: createTeamResponse
@@ -249,3 +344,29 @@ components:
         UpdatedAt:
           type: string
           format: date-time
+    PaginatedResponseOfPlayer:
+      type: object
+      required: [items, totalCount, page, pageSize, totalPages, hasNextPage, hasPreviousPage]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+        totalCount: { type: integer, format: int32 }
+        page: { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        totalPages: { type: integer, format: int32 }
+        hasNextPage: { type: boolean }
+        hasPreviousPage: { type: boolean }
+    PaginatedResponseOfTeamResponse:
+      type: object
+      required: [items, totalCount, page, pageSize, totalPages, hasNextPage, hasPreviousPage]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TeamResponse' }
+        totalCount: { type: integer, format: int32 }
+        page: { type: integer, format: int32 }
+        pageSize: { type: integer, format: int32 }
+        totalPages: { type: integer, format: int32 }
+        hasNextPage: { type: boolean }
+        hasPreviousPage: { type: boolean }

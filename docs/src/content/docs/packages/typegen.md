@@ -147,7 +147,7 @@ The emitters translate C# types to target-language equivalents. Defaults:
 | `System.DateOnly` | `string` | `string` (format `date`) |
 | `T?` (nullable) | optional `?` | `nullable: true` + not in `required` |
 | `List<T>`, `T[]` | `T[]` | `type: array, items: ...` |
-| `Dictionary<K, V>` | `Record<K, V>` | not yet (object) |
+| `Dictionary<K, V>` | `Record<K, V>` | `type: object, additionalProperties: V` |
 | User DTO | `TypeName` | `$ref: '#/components/schemas/TypeName'` |
 | `enum` | `export enum` (numeric values) | `type: string, enum: [...]` |
 
@@ -301,16 +301,32 @@ What's read from `[CrudApi]`:
 - `KeyProperty` — path parameter name (default `Id`); type inferred from the property
 - `Operations` — bitmask controlling which verbs emit (default = `GetById | GetList | Create | Update | Delete`)
 
+**What's emitted automatically:**
+- GET-list response is a `PaginatedResponseOf{Class}` wrapper (matches the runtime
+  `PaginatedResponse<T>` shape: `items`, `totalCount`, `page`, `pageSize`, `totalPages`,
+  `hasNextPage`, `hasPreviousPage`). The wrapper schema is added to `components/schemas`.
+- `page`/`pageSize` query params on list endpoints; `filter`/`sort`/`select`/`count` as
+  well when `ZibStack.NET.Query` is in the compilation (detected by metadata presence).
+- Bulk endpoints when flags are set — `POST /{resource}/bulk` (array of requests) and
+  `POST /{resource}/bulk-delete` (array of keys).
+
 **Limitations (MVP):**
 - Pluralization is naive `+"s"`. For irregular nouns (`Bus`, `Octopus`, `Person`) use an explicit `Route`.
-- `$ref`s point at `{Class}`, `Create{Class}Request`, `Update{Class}Request` by convention.
-  TypeGen doesn't emit those request schemas automatically — add `[GenerateTypes]` on the
-  request/response DTOs yourself (or Dto's `[CreateDto]`/`[UpdateDto]` keep them in sync).
-  `[CrudApi]` without `[GenerateTypes]` triggers diagnostic `TG0014`.
-- Authorization policies (`AuthorizePolicy`, per-op policies) don't map to OpenAPI
-  `security`/`components.securitySchemes` yet.
-- Bulk operations (`BulkCreate`, `BulkDelete`) and query-DSL params (`filter`/`sort`/`select`)
-  are out of scope for this iteration.
+- Request DTOs are referenced as `Create{Class}Request` / `Update{Class}Request` — TypeGen
+  doesn't emit those schemas itself. Add `[GenerateTypes]` on the request DTOs (Dto's
+  `[CreateDto]`/`[UpdateDto]` keep them as companion types). `[CrudApi]` without
+  `[GenerateTypes]` triggers diagnostic `TG0014`.
+- Authorization policies don't map to `security`/`securitySchemes` yet.
+
+## Dictionaries, inheritance
+
+- `Dictionary<string, V>` (and `IDictionary` / `IReadOnlyDictionary`) emits as
+  `{ type: object, additionalProperties: <V-schema> }`. Non-string keys are tolerated
+  but key typing isn't preserved — OpenAPI only supports string keys.
+- **Inheritance**: when the base class also carries `[GenerateTypes]`, the child emits as
+  `allOf: [ { $ref: Base }, { type: object, properties: <new-only> } ]` in OpenAPI and
+  `export interface Child extends Base { ...new-only }` in TypeScript. When the base
+  isn't in the model, inherited properties are flattened (inlined) into the child.
 
 ## Why OpenAPI 3.0 (not 3.1)
 
@@ -325,12 +341,8 @@ You can override via `OpenApiSettings.OpenApiVersion`.
 
 - **Generic types** are out of scope (diagnostic `TG0003`). Apply `[GenerateTypes]`
   to closed types only.
-- **Inheritance** across DTOs is emitted as flat types — base-class properties are
-  inlined, no `extends` in TypeScript or `allOf` in OpenAPI yet.
 - **Authorization on emitted paths** isn't yet mapped from `[CrudApi]` policies
   to OpenAPI `security` / `securitySchemes`.
-- **Dictionary in OpenAPI** emits as plain `object` — needs
-  `additionalProperties` mapping in a follow-up.
 See [project_typegen_backlog on GitHub](https://github.com/MistyKuu/ZibStack.NET)
 for the full roadmap (Python, Kotlin, Swift, Go, Dart, JSON Schema, `[CrudApi]`
 path integration, and the configurator parser).
