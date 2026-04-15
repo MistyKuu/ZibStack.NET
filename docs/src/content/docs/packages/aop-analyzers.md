@@ -18,7 +18,7 @@ Four families, all under the `ZibStack.Aop` category:
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
 | **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
 | **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor — or, in the case of `base.Method()` over an aspect-decorated virtual, recurse infinitely. | Warning / Error |
-| **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1003`) | Architectural rules you declare on a base type, enforced on every concrete derivative — required aspects, required interface implementations, required methods. | Warning |
+| **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1005`) | Architectural rules you declare on a base type / scoped type, enforced on derivatives or on the call site — required aspects, interfaces, methods, constructors, and namespace-scoped usage. | Warning |
 
 ## Tier 1 — Placement
 
@@ -377,6 +377,77 @@ class can ship a virtual default implementation without tripping the analyzer.
 
 No code fix — generating method stubs is too opinionated about body shape; the analyzer
 just points you at the missing method.
+
+### `AOP1004` — Type missing constructor required by base/interface (Warning)
+
+For DI-activated bases where the framework new's-up the derivative with specific
+dependencies. The runtime would otherwise fail with "no matching constructor"
+during DI resolution.
+
+```csharp
+[RequireConstructor(typeof(IServiceProvider),
+                    Reason = "Plugins are activated by the host with the request scope")]
+public abstract class Plugin { }
+
+public class GoodPlugin : Plugin
+{
+    public GoodPlugin(IServiceProvider sp) { }     // ✅
+}
+
+public class BrokenPlugin : Plugin
+{
+    public BrokenPlugin() { }
+//  ^^^^^^^^^^^^
+//  ⚠ AOP1004: 'BrokenPlugin' derives from 'Plugin' which requires a public
+//             constructor '(System.IServiceProvider)'.
+}
+```
+
+Pass an empty parameter list to require a parameterless ctor:
+`[RequireConstructor]`. Apply multiple times for alternative shapes — each missing
+shape is reported separately. **Public** instance constructors only count as
+satisfying the rule (private/protected ctors don't help an external activator).
+
+### `AOP1005` — Type used outside its allowed scope (Warning)
+
+The "convention enforcement" counterpart of `[RequireAspect]`: instead of "every
+derivative must do X", it says "only callers in scope X may touch this type at
+all". Use it for internal-but-public engine helpers, test-only constructors, or
+to carve out a private API surface inside a single library.
+
+```csharp
+namespace MyApp.Internal
+{
+    [ScopeTo("MyApp.Internal.**", Reason = "Engine bypass — public API is in MyApp.Public")]
+    public class SecretEngine
+    {
+        public void DoMagic() { }
+    }
+}
+
+namespace MyApp.Internal.Things
+{
+    var e = new SecretEngine();        // ✅ allowed under MyApp.Internal.**
+}
+
+namespace MyApp.Public.Api
+{
+    var e = new SecretEngine();        // ⚠ AOP1005 — call-site namespace 'MyApp.Public.Api'
+                                       //   not in allowed scope 'MyApp.Internal.**'
+}
+```
+
+**Pattern syntax:**
+- `"MyApp.Internal"` — exact namespace match only (sub-namespaces don't satisfy)
+- `"MyApp.Internal.**"` — that namespace plus any sub-namespace
+
+Apply multiple times to allow several scopes. Self-references inside the scoped
+type itself are always allowed (the type can call its own static members regardless
+of scope). Detection covers `new T()` (object creation) and `T.Member(...)` /
+`instance.Member(...)` (method invocations).
+
+No code fix — the right repair depends entirely on user intent (move the call,
+broaden the scope, or split the type).
 
 ## Code Fix Summary
 

@@ -206,4 +206,24 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "A base type or interface declared with [RequireMethod(\"X\")] expects every concrete derivative to declare a method named X (and matching the optional return type / parameter list). Use this for plug-in conventions called by reflection where the framework cannot enforce the contract through inheritance.");
+
+    public const string MissingRequiredConstructorId = "AOP1004";
+    public static readonly DiagnosticDescriptor MissingRequiredConstructor = new(
+        MissingRequiredConstructorId,
+        title: "Type is missing a constructor required by its base/interface",
+        messageFormat: "'{0}' derives from '{1}' which requires a public constructor '{2}'{3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A base type or interface declared with [RequireConstructor(typeof(...))] expects every concrete derivative to expose a public constructor with the configured parameter list. Use this for DI-activated bases where a missing matching ctor turns into a runtime resolution exception instead of a compile-time error.");
+
+    public const string OutOfScopeUsageId = "AOP1005";
+    public static readonly DiagnosticDescriptor OutOfScopeUsage = new(
+        OutOfScopeUsageId,
+        title: "Type is used outside its allowed scope",
+        messageFormat: "'{0}' may only be used from {1} (call-site namespace: '{2}'){3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A type declared with [ScopeTo(\"NS\")] restricts which namespaces may reference it. Use this to carve out a private API surface inside a single library or to gate test-only helpers behind an explicit scope rule.");
 }
