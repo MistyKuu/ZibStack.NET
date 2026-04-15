@@ -59,6 +59,7 @@ internal static class TypeScriptEmitter
                 if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) continue;
                 var sb = new StringBuilder();
                 EmitBanner(sb, ts);
+                EmitImports(sb, CollectClassReferences(cls, tsNameByCSharp), cls.EmittedName);
                 EmitClass(sb, cls, ts, tsNameByCSharp);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.TypeScript,
@@ -84,6 +85,39 @@ internal static class TypeScriptEmitter
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    private static void EmitImports(StringBuilder sb, IEnumerable<string> refs, string selfName)
+    {
+        var sorted = refs.Where(r => r != selfName).Distinct().OrderBy(r => r, System.StringComparer.Ordinal).ToList();
+        if (sorted.Count == 0) return;
+        foreach (var r in sorted)
+            sb.AppendLine($"import {{ {r} }} from './{r}';");
+        sb.AppendLine();
+    }
+
+    private static HashSet<string> CollectClassReferences(SchemaClass cls, IReadOnlyDictionary<string, string> nameLookup)
+    {
+        var acc = new HashSet<string>();
+        foreach (var prop in cls.Properties)
+        {
+            if (prop.TsIgnore) continue;
+            // Explicit TsType override is an opaque literal — user owns any imports themselves.
+            if (prop.TsTypeOverride != null) continue;
+            CollectRefs(prop.CSharpTypeFullName, nameLookup, acc);
+        }
+        return acc;
+    }
+
+    private static void CollectRefs(string cSharpType, IReadOnlyDictionary<string, string> nameLookup, HashSet<string> acc)
+    {
+        var t = cSharpType.TrimEnd('?');
+        if (nameLookup.TryGetValue(t, out var mapped)) { acc.Add(mapped); return; }
+        if (t.EndsWith("[]")) { CollectRefs(t.Substring(0, t.Length - 2), nameLookup, acc); return; }
+        var listInner = ExtractGeneric(t, "List", "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection");
+        if (listInner != null) { CollectRefs(listInner, nameLookup, acc); return; }
+        var dict = ExtractTwoGenericArgs(t, "Dictionary", "IDictionary", "IReadOnlyDictionary");
+        if (dict != null) { CollectRefs(dict.Value.K, nameLookup, acc); CollectRefs(dict.Value.V, nameLookup, acc); return; }
+    }
 
     private static void EmitBanner(StringBuilder sb, TypeScriptSettings ts)
     {

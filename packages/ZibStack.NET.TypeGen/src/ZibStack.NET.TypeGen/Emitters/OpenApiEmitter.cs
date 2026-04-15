@@ -48,11 +48,25 @@ internal static class OpenApiEmitter
             ? EmitJson(model, oa, nameByCSharp)
             : EmitYaml(model, oa, nameByCSharp);
 
-        // Split path into dir + filename for the EmittedFile contract.
+        // Split path into dir + filename. If the user gave only a filename, route it
+        // under the first emitting class's OutputDir so `[GenerateTypes(OutputDir="generated")]`
+        // keeps the schema next to its TypeScript siblings instead of dumping in the root.
         var path = oa.OutputPath.Replace('\\', '/');
         var lastSlash = path.LastIndexOf('/');
-        var dir = lastSlash >= 0 ? path.Substring(0, lastSlash) : ".";
-        var file = lastSlash >= 0 ? path.Substring(lastSlash + 1) : path;
+        string dir;
+        string file;
+        if (lastSlash >= 0)
+        {
+            dir = path.Substring(0, lastSlash);
+            file = path.Substring(lastSlash + 1);
+        }
+        else
+        {
+            var firstCls = model.Classes.FirstOrDefault(c => !c.OpenApiIgnore && (c.Targets & TypeTarget.OpenApi) != 0);
+            var firstEn = model.Enums.FirstOrDefault(e => !e.OpenApiIgnore && (e.Targets & TypeTarget.OpenApi) != 0);
+            dir = firstCls?.OutputDir ?? firstEn?.OutputDir ?? ".";
+            file = path;
+        }
 
         return new[] { new EmittedFile(TypeTarget.OpenApi, dir, file, content) };
     }
@@ -116,9 +130,13 @@ internal static class OpenApiEmitter
         var (typeKey, fmtKey, refTarget, items) = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
         if (refTarget != null)
         {
-            // OpenAPI 3.1 supports nullable as a type union with "null" — use that for refs.
+            // OpenAPI 3.0: nullable $ref needs allOf wrapping — a bare $ref can't carry siblings.
             if (IsEffectivelyNullable(prop))
-                sb.AppendLine($"{indent}  oneOf: [{{ $ref: '#/components/schemas/{refTarget}' }}, {{ type: 'null' }}]");
+            {
+                sb.AppendLine($"{indent}  nullable: true");
+                sb.AppendLine($"{indent}  allOf:");
+                sb.AppendLine($"{indent}    - $ref: '#/components/schemas/{refTarget}'");
+            }
             else
                 sb.AppendLine($"{indent}  $ref: '#/components/schemas/{refTarget}'");
         }
@@ -127,6 +145,8 @@ internal static class OpenApiEmitter
             if (typeKey == "array")
             {
                 sb.AppendLine($"{indent}  type: array");
+                if (IsEffectivelyNullable(prop))
+                    sb.AppendLine($"{indent}  nullable: true");
                 sb.AppendLine($"{indent}  items:");
                 if (items?.RefTarget != null)
                     sb.AppendLine($"{indent}    $ref: '#/components/schemas/{items.RefTarget}'");
@@ -138,11 +158,10 @@ internal static class OpenApiEmitter
             }
             else
             {
-                if (IsEffectivelyNullable(prop))
-                    sb.AppendLine($"{indent}  type: [{typeKey}, 'null']");
-                else
-                    sb.AppendLine($"{indent}  type: {typeKey}");
+                sb.AppendLine($"{indent}  type: {typeKey}");
                 if (fmtKey != null) sb.AppendLine($"{indent}  format: {fmtKey}");
+                if (IsEffectivelyNullable(prop))
+                    sb.AppendLine($"{indent}  nullable: true");
             }
         }
 
@@ -245,13 +264,19 @@ internal static class OpenApiEmitter
         var name = prop.OpenApiNameOverride ?? prop.SourceName;
         sb.Append($"{indent}{JsonString(name)}: {{ ");
         var (typeKey, fmtKey, refTarget, items) = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
+        var nullable = IsEffectivelyNullable(prop);
         if (refTarget != null)
         {
-            sb.Append($"\"$ref\": \"#/components/schemas/{refTarget}\"");
+            if (nullable)
+                sb.Append($"\"nullable\": true, \"allOf\": [{{ \"$ref\": \"#/components/schemas/{refTarget}\" }}]");
+            else
+                sb.Append($"\"$ref\": \"#/components/schemas/{refTarget}\"");
         }
         else if (typeKey == "array")
         {
-            sb.Append("\"type\": \"array\", \"items\": { ");
+            sb.Append("\"type\": \"array\"");
+            if (nullable) sb.Append(", \"nullable\": true");
+            sb.Append(", \"items\": { ");
             if (items?.RefTarget != null)
                 sb.Append($"\"$ref\": \"#/components/schemas/{items.RefTarget}\"");
             else
@@ -265,6 +290,7 @@ internal static class OpenApiEmitter
         {
             sb.Append($"\"type\": \"{typeKey}\"");
             if (fmtKey != null) sb.Append($", \"format\": \"{fmtKey}\"");
+            if (nullable) sb.Append(", \"nullable\": true");
         }
         if (prop.OpenApiDescription != null)
             sb.Append($", \"description\": {JsonString(prop.OpenApiDescription)}");

@@ -34,10 +34,12 @@ public class OpenApiEmitterTests
     }
 
     [Fact]
-    public void EmitsOpenApi31ByDefault()
+    public void EmitsOpenApi30ByDefault()
     {
+        // Pinned to 3.0.3 because Microsoft.OpenApi.Readers 1.6.x (used by our
+        // validation tests) doesn't support 3.1 yet. Revisit when that lib updates.
         var yaml = OpenApiEmitter.Emit(ModelWith(Cls("Order")), new GlobalSettings()).Single().Content;
-        Assert.Contains("openapi: 3.1.0", yaml);
+        Assert.Contains("openapi: 3.0.3", yaml);
     }
 
     [Fact]
@@ -119,12 +121,13 @@ public class OpenApiEmitterTests
     }
 
     [Fact]
-    public void NullablePrimitive_EmitsTypeUnionWithNull()
+    public void NullablePrimitive_EmitsNullableTrue()
     {
         var cls = Cls("Order", props: new[] { ("Note", "string", true) });
         var yaml = OpenApiEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
-        // OpenAPI 3.1 uses [type, 'null'] union.
-        Assert.Contains("type: [string, 'null']", yaml);
+        // OpenAPI 3.0 uses `nullable: true` as a sibling of `type`.
+        Assert.Contains("type: string", yaml);
+        Assert.Contains("nullable: true", yaml);
     }
 
     [Fact]
@@ -173,7 +176,7 @@ public class OpenApiEmitterTests
         var file = OpenApiEmitter.Emit(ModelWith(cls), settings).Single();
         Assert.Equal("openapi.json", file.FileName);
         Assert.StartsWith("{", file.Content.TrimStart());
-        Assert.Contains("\"openapi\": \"3.1.0\"", file.Content);
+        Assert.Contains("\"openapi\": \"3.0.3\"", file.Content);
         Assert.Contains("\"Order\":", file.Content);
     }
 

@@ -42,7 +42,7 @@ internal sealed class OpenApiSettings
     public string Title { get; set; } = "API";
     public string Version { get; set; } = "1.0.0";
     public string? Description { get; set; }
-    public string OpenApiVersion { get; set; } = "3.1.0";
+    public string OpenApiVersion { get; set; } = "3.0.3";
 }
 
 /// <summary>

@@ -218,6 +218,85 @@ public class TypeScriptEmitterTests
 
     // ── enums ──
 
+    // ── cross-file imports (regression: missing in initial MVP) ──
+
+    [Fact]
+    public void FilePerClass_ReferencedUserDto_GetsImport()
+    {
+        // Order references OrderItem in a property type. With file-per-class layout
+        // the TS compiler needs `import { OrderItem } from './OrderItem';` at the top
+        // of Order.ts or the TSC call in the consumer project fails.
+        var item = Cls("OrderItem");
+        var order = Cls("Order", props: new[] { ("Item", "OrderItem", false) });
+        var files = TypeScriptEmitter.Emit(ModelWith(order, item), new GlobalSettings());
+        var orderTs = files.First(f => f.FileName == "Order.ts").Content;
+
+        Assert.Contains("import { OrderItem } from './OrderItem';", orderTs);
+    }
+
+    [Fact]
+    public void FilePerClass_ReferencedEnum_GetsImport()
+    {
+        var model = new SchemaModel();
+        model.Classes.Add(Cls("Order", props: new[] { ("Status", "OrderStatus", false) }));
+        var en = new SchemaEnum
+        {
+            CSharpFullName = "OrderStatus", SourceName = "OrderStatus",
+            EmittedName = "OrderStatus", Targets = TypeTarget.TypeScript, OutputDir = ".",
+        };
+        en.Members.Add(new SchemaEnumMember { Name = "Pending", Value = 0 });
+        model.Enums.Add(en);
+
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings());
+        var orderTs = files.First(f => f.FileName == "Order.ts").Content;
+
+        Assert.Contains("import { OrderStatus } from './OrderStatus';", orderTs);
+    }
+
+    [Fact]
+    public void FilePerClass_ArrayOfReferencedDto_GetsImport()
+    {
+        var item = Cls("OrderItem");
+        var order = Cls("Order", props: new[]
+            { ("Items", "System.Collections.Generic.List<OrderItem>", false) });
+        var files = TypeScriptEmitter.Emit(ModelWith(order, item), new GlobalSettings());
+        var orderTs = files.First(f => f.FileName == "Order.ts").Content;
+
+        Assert.Contains("import { OrderItem } from './OrderItem';", orderTs);
+    }
+
+    [Fact]
+    public void FilePerClass_NoCrossReferences_NoImports()
+    {
+        var cls = Cls("Simple", props: new[] { ("Id", "int", false), ("Name", "string", false) });
+        var ts = TypeScriptEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.DoesNotContain("import ", ts);
+    }
+
+    [Fact]
+    public void FilePerClass_SelfReference_DoesNotImportItself()
+    {
+        var node = Cls("TreeNode", props: new[] { ("Parent", "TreeNode", true) });
+        var ts = TypeScriptEmitter.Emit(ModelWith(node), new GlobalSettings()).Single().Content;
+
+        Assert.DoesNotContain("import { TreeNode }", ts);
+    }
+
+    [Fact]
+    public void SingleFileLayout_NoImports_EvenWithCrossReferences()
+    {
+        var settings = new GlobalSettings
+        {
+            TypeScript = { FileLayout = TypeScriptFileLayout.SingleFile, SingleFileName = "models.ts" },
+        };
+        var item = Cls("OrderItem");
+        var order = Cls("Order", props: new[] { ("Item", "OrderItem", false) });
+        var ts = TypeScriptEmitter.Emit(ModelWith(order, item), settings).Single().Content;
+
+        Assert.DoesNotContain("import ", ts);
+    }
+
     [Fact]
     public void Enum_EmitsWithNumericValues()
     {

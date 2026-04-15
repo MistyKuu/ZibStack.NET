@@ -16,6 +16,11 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Real OpenAPI parser — integration tests round-trip the emitter's YAML/JSON
+         through this so we catch anything that merely LOOKS like valid output but
+         isn't a legal OpenAPI document. -->
+    <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.22" />
+    
   </ItemGroup>
 
   <ItemGroup>
