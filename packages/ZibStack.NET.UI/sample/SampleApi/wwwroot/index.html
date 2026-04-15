@@ -200,25 +200,39 @@ public partial class Order
     public byte[]? Signature { get; set; }
 }`,
 
-'fluent-config': `// Fluent IDtoConfigurator — central project-wide config without any
-// Dto attribute markers on the model itself. Mix with attributes per class.
+'fluent-config': `// Fluent IDtoConfigurator — DTO generation driven from a central config
+// file, ZERO Dto-side attribute markers on the model. UI attributes added
+// so the playground populates the right-side Data / UI panels too — open
+// the DTOs tab to see the generated CreateArticleRequest / UpdateArticleRequest
+// / ArticleResponse / ArticleQuery records.
 
+using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
 
 namespace Demo;
 
-// MODEL: zero Dto attributes on the class. DTO generation is fully driven
-// by the IDtoConfigurator below. Validation attributes still flow through.
-public class Article
+// MODEL: no [CreateDto]/[UpdateDto]/[ResponseDto]/[QueryDto] markers — fluent
+// DSL fully drives that. Validation + UI attributes work as normal.
+[UiForm]
+[UiTable(DefaultSort = "PublishedAt")]
+public partial class Article
 {
+    [UiFormIgnore] [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
     [ZRequired] [ZMaxLength(200)]
+    [UiFormField(Label = "Title")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Title { get; set; }
 
     [ZMaxLength(10000)]
+    [UiFormField(Label = "Body")]
+    [TextArea(Rows = 6)]
+    [UiTableColumn(Filterable = false)]
     public string? Body { get; set; }
 
+    [UiFormField(Label = "Published")]
+    [UiTableColumn(Sortable = true)]
     public DateTime PublishedAt { get; set; }
 }
 
@@ -246,29 +260,42 @@ internal sealed class DtoConfig : IDtoConfigurator
     }
 }`,
 
-'fluent-mixed': `// Mixed mode — keep [CrudApi] as the discoverable marker on the class
-// (it has runtime endpoint-registration semantics), but pull options +
-// per-property overrides from a central fluent config.
+'fluent-mixed': `// Mixed mode — keep [CrudApi] as the discoverable marker on the class,
+// override its options + add per-property overrides from a central fluent
+// config. UI attributes light up Data + UI panels on the right; open the
+// DTOs / Endpoints tabs to see the fluent-driven generated output.
 
+using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
 
 namespace Demo;
 
-[CrudApi]   // marker stays on the class — visible at-a-glance signal
+[CrudApi]   // marker stays — visible at-a-glance signal + endpoint trigger
+[UiForm]
+[UiTable(DefaultSort = "Name")]
 public partial class Player
 {
+    [UiFormIgnore] [UiTableColumn(IsVisible = false)]
     public int Id { get; set; }
 
     [ZRequired] [ZMinLength(2)] [ZMaxLength(50)]
+    [UiFormField(Label = "Name")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public required string Name { get; set; }
 
     [ZRange(1, 100)]
+    [UiFormField(Label = "Level")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
     public int Level { get; set; }
 
     [DtoOnly(DtoTarget.Create)]   // attribute + fluent coexist freely
+    [UiFormField(Label = "Password")]
+    [PasswordInput]
     public required string Password { get; set; }
 
     [ZEmail]
+    [UiFormField(Label = "Email")]
+    [UiTableColumn(Filterable = true)]
     public string? Email { get; set; }
 }
 
