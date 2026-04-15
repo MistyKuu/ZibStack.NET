@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ZibStack.NET.Aop\ZibStack.NET.Aop.csproj" />
+    <ProjectReference Include="..\..\src\ZibStack.NET.Aop.Analyzers\ZibStack.NET.Aop.Analyzers.csproj" />
   </ItemGroup>
 
 </Project>

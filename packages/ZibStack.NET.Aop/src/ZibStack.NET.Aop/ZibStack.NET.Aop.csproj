@@ -34,10 +34,21 @@
          package need the runtime types (AspectAttribute, IAspectHandler, etc.).
          Without this NuGet would not pull it in automatically. -->
     <ProjectReference Include="..\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
+
+    <!-- Build the analyzer alongside this generator so its DLL exists at pack time.
+         Bundled into the same NuGet package below; not referenced as an assembly. -->
+    <ProjectReference Include="..\ZibStack.NET.Aop.Analyzers\ZibStack.NET.Aop.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Bundle the analyzer DLL so installing ZibStack.NET.Aop also turns on
+         the AOP0xxx diagnostics. No separate package install required. -->
+    <None Include="..\ZibStack.NET.Aop.Analyzers\bin\$(Configuration)\netstandard2.0\ZibStack.NET.Aop.Analyzers.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <!-- Auto-enable interceptor namespaces in consumer projects on restore. -->
     <None Include="build\ZibStack.NET.Aop.props" Pack="true" PackagePath="build\" />
     <None Include="buildTransitive\ZibStack.NET.Aop.props" Pack="true" PackagePath="buildTransitive\" />
