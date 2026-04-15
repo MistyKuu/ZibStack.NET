@@ -27,8 +27,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         // .Property(...).TsType(...)) configures the emitted TS interface.
         b.ForType<Article>()
             .WithGeneratedTypes(TypeTarget.TypeScript)
-            .TsName("ArticleDto")
-            .Property(p => p.Body).TsType("string | null");
+            .TsName("ArticleDto1");
         
         // Player: demonstrate per-property mapping overrides.
         b.ForType<Player>()
