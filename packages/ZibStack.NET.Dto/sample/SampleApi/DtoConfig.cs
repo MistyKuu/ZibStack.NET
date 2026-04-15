@@ -29,6 +29,11 @@ internal sealed class DtoConfig : IDtoConfigurator
             .CreateDto()
             .UpdateDto()
             .ResponseDto()
-            .QueryDto(q => { q.DefaultSort = "PublishedAt"; q.DefaultSortDirection = SortDirection.Desc; });
+            .QueryDto(q => { q.DefaultSort = "PublishedAt"; q.DefaultSortDirection = SortDirection.Desc; })
+            // Per-property fluent overrides (Phase 1C). Equivalent to scattering
+            // [DtoIgnore]/[DtoName] across the model — kept centralized here instead.
+            .Property(p => p.Id).IgnoreIn(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)
+            .Property(p => p.Body).RenameTo("content")
+            .Property(p => p.PublishedAt).IgnoreIn(DtoTarget.Create);
     }
 }
