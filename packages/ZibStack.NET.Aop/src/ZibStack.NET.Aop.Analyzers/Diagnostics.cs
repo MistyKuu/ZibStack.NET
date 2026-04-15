@@ -77,4 +77,78 @@ public static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    // ── Tier 2: Per-aspect semantic checks (AOP0010-AOP0017) ────────────────
+
+    public const string CacheNonReturningId = "AOP0010";
+    public static readonly DiagnosticDescriptor CacheNonReturning = new(
+        CacheNonReturningId,
+        title: "[Cache] on a method that returns nothing",
+        messageFormat: "[Cache] on '{0}' has no effect — the method returns void or non-generic Task. Cache only methods that produce a value.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public const string RetryMaxAttemptsId = "AOP0011";
+    public static readonly DiagnosticDescriptor RetryMaxAttempts = new(
+        RetryMaxAttemptsId,
+        title: "[Retry] MaxAttempts must be positive",
+        messageFormat: "[Retry(MaxAttempts = {0})] is invalid — MaxAttempts must be at least 1 (it includes the first call).",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public const string RetryDelayId = "AOP0012";
+    public static readonly DiagnosticDescriptor RetryDelay = new(
+        RetryDelayId,
+        title: "[Retry] DelayMs must be non-negative",
+        messageFormat: "[Retry(DelayMs = {0})] is invalid — DelayMs cannot be negative.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public const string RetryBackoffId = "AOP0013";
+    public static readonly DiagnosticDescriptor RetryBackoff = new(
+        RetryBackoffId,
+        title: "[Retry] BackoffMultiplier should be at least 1.0",
+        messageFormat: "[Retry(BackoffMultiplier = {0})] shrinks the delay between retries. Use 1.0 for constant delay or >1.0 for exponential backoff.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public const string TimeoutValueId = "AOP0014";
+    public static readonly DiagnosticDescriptor TimeoutValue = new(
+        TimeoutValueId,
+        title: "[Timeout] TimeoutMs must be positive",
+        messageFormat: "[Timeout(TimeoutMs = {0})] is invalid — TimeoutMs must be greater than 0.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public const string TimeoutNoCancellationTokenId = "AOP0015";
+    public static readonly DiagnosticDescriptor TimeoutNoCancellationToken = new(
+        TimeoutNoCancellationTokenId,
+        title: "[Timeout] on a method that cannot observe cancellation",
+        messageFormat: "[Timeout] on '{0}' will fire the token but the method has no CancellationToken parameter to observe it. Add a CancellationToken parameter or remove [Timeout].",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public const string ValidateNoParametersId = "AOP0016";
+    public static readonly DiagnosticDescriptor ValidateNoParameters = new(
+        ValidateNoParametersId,
+        title: "[Validate] on a parameterless method has no effect",
+        messageFormat: "[Validate] on '{0}' has no effect — there are no parameters to validate.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    public const string ValidateNoAnnotationsId = "AOP0017";
+    public static readonly DiagnosticDescriptor ValidateNoAnnotations = new(
+        ValidateNoAnnotationsId,
+        title: "[Validate] cannot find any DataAnnotations to enforce",
+        messageFormat: "[Validate] on '{0}' will be a no-op — none of the parameters or their reachable property graph carry DataAnnotations attributes.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true);
 }
