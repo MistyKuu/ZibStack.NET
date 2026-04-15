@@ -383,6 +383,109 @@ public class Svc
 
     // ── AddCancellationTokenCodeFix (AOP0015) ───────────────────────────────
 
+    // ── AddRequiredConstructorCodeFix (AOP1004) ────────────────────────────
+
+    [Fact]
+    public async Task MissingConstructor_FixedByAddingStub()
+    {
+        var test = @"
+using System;
+using ZibStack.NET.Aop;
+
+[RequireConstructor(typeof(IServiceProvider))]
+public abstract class Plugin { }
+
+public class {|#0:BrokenPlugin|} : Plugin
+{
+}
+" + AopStubsRequireConstructor;
+
+        var fixedCode = @"
+using System;
+using ZibStack.NET.Aop;
+
+[RequireConstructor(typeof(IServiceProvider))]
+public abstract class Plugin { }
+
+public class BrokenPlugin : Plugin
+{
+    public BrokenPlugin(System.IServiceProvider p0)
+    {
+        throw new global::System.NotImplementedException();
+    }
+}
+" + AopStubsRequireConstructor;
+
+        var test1 = new CSharpCodeFixTest<RequireConstructorAnalyzer, AddRequiredConstructorCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        test1.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.MissingRequiredConstructor)
+                .WithLocation(0)
+                .WithArguments("BrokenPlugin", "Plugin", "(System.IServiceProvider)", "."));
+
+        await test1.RunAsync();
+    }
+
+    [Fact]
+    public async Task MissingParameterlessConstructor_FixedByAddingStub()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+
+[RequireConstructor]
+public abstract class Activator { }
+
+public class {|#0:NeedsArg|} : Activator
+{
+    public NeedsArg(int x) { }
+}
+" + AopStubsRequireConstructor;
+
+        var fixedCode = @"
+using ZibStack.NET.Aop;
+
+[RequireConstructor]
+public abstract class Activator { }
+
+public class NeedsArg : Activator
+{
+    public NeedsArg()
+    {
+        throw new global::System.NotImplementedException();
+    }
+    public NeedsArg(int x) { }
+}
+" + AopStubsRequireConstructor;
+
+        var test1 = new CSharpCodeFixTest<RequireConstructorAnalyzer, AddRequiredConstructorCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        test1.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.MissingRequiredConstructor)
+                .WithLocation(0)
+                .WithArguments("NeedsArg", "Activator", "()", "."));
+
+        await test1.RunAsync();
+    }
+
+    private const string AopStubsRequireConstructor = @"
+namespace ZibStack.NET.Aop
+{
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Interface, Inherited = true, AllowMultiple = true)]
+    public sealed class RequireConstructorAttribute : System.Attribute
+    {
+        public System.Type[] ParameterTypes { get; }
+        public string? Reason { get; set; }
+        public RequireConstructorAttribute(params System.Type[] parameterTypes) { ParameterTypes = parameterTypes; }
+    }
+}
+";
+
     [Fact]
     public async Task TimeoutWithoutCT_FixedByAddingCT()
     {

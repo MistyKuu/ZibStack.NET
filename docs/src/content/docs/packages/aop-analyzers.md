@@ -408,6 +408,9 @@ Pass an empty parameter list to require a parameterless ctor:
 shape is reported separately. **Public** instance constructors only count as
 satisfying the rule (private/protected ctors don't help an external activator).
 
+**Code fix:** "Add constructor (...)" — inserts a stub `public TypeName(p0, p1, ...)`
+at the top of the class body with `throw new NotImplementedException()` placeholder.
+
 ### `AOP1005` — Type used outside its allowed scope (Warning)
 
 The "convention enforcement" counterpart of `[RequireAspect]`: instead of "every
@@ -451,7 +454,7 @@ broaden the scope, or split the type).
 
 ## Code Fix Summary
 
-Eleven of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+Twelve of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
 
 | Diagnostic | Code fix |
 |---|---|
@@ -466,6 +469,7 @@ Eleven of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / 
 | `AOP0016` | Remove `[Validate]` from parameterless method |
 | `AOP1001` | Add `[Aspect]` attribute |
 | `AOP1002` | Implement {Interface} (append to base list) |
+| `AOP1004` | Add stub constructor matching the required signature (body: `throw new NotImplementedException()`) |
 
 The remaining diagnostics are intentionally fix-less — repairing them either requires an API redesign (`AOP0003`/`AOP0006`), depends on user intent (`AOP0017`), or describes legitimate code that should just be reviewed (`AOP0020`/`AOP0021`).
 

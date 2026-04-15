@@ -4,6 +4,8 @@ A collection of .NET source generators and utilities for common application conc
 
 **[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)** | **[Live Playground](https://zibstack-net.onrender.com/index.html)**
 
+<a href="https://buymeacoffee.com/mistykuu" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
+
 ## Three tiers — pick your buy-in
 
 ZibStack is designed so you can adopt as little or as much as you want. Start at Tier 1, move deeper only if it fits your project.
