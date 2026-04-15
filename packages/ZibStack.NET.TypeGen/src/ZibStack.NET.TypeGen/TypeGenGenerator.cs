@@ -108,8 +108,11 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     // Synthesize Create/Update/Response companion schemas from Dto's attributes.
                     // Roslyn doesn't let TypeGen see Dto's generated records in the same pass,
                     // so we use shared/DtoSemantics.cs (single source of truth with Dto) to
-                    // recreate the schemas ourselves. $refs from [CrudApi] paths resolve cleanly.
-                    if ((cls.Targets & TypeTarget.OpenApi) != 0 && !cls.OpenApiIgnore)
+                    // recreate the schemas ourselves. Output targets the SAME emitters the
+                    // parent does — TypeScript companions when parent is TS, OpenAPI when
+                    // parent is OpenAPI, etc. $refs / cross-file imports resolve cleanly.
+                    if ((cls.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python)) != 0
+                        && !cls.OpenApiIgnore)
                     {
                         SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Create);
                         SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Update);
@@ -122,8 +125,12 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // Fluent-only discovery: any b.ForType<T>().WithGeneratedTypes(...) registers T
             // for emission even if it has no [GenerateTypes] attribute. Lets users keep
             // model files free of generation markers — central config in TypeGenConfig.cs.
+            // Two-pass: discovery + companion synthesis FIRST so synthesized aux schemas
+            // exist; THEN apply foreign-name overrides like b.ForType<CreateArticleRequest>()
+            // .TsName(...) that target those synthesized schemas by simple name.
             if (config is not null)
             {
+                // First pass — opt-in discovery + companion synthesis.
                 foreach (var kvp in config.PerType)
                 {
                     if (kvp.Value.FluentTargets is not int fluentTargets) continue;
@@ -131,7 +138,28 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     if (model.Classes.Any(c => c.CSharpFullName == kvp.Key)) continue;
 
                     var sym = compilation.GetTypeByMetadataName(kvp.Key);
-                    if (sym is null) continue;   // type unresolvable (e.g. another generator's output)
+                    if (sym is null)
+                    {
+                        // Fallback path for Dto-generated companion types (Create{X}Request /
+                        // Update{X}Request / {X}Response). Roslyn won't resolve them as
+                        // symbols (cross-generator visibility), but the synthesis pass that
+                        // ran earlier may have already added a SchemaClass with this simple
+                        // name. Apply this entry's overrides directly — ApplyFluentToClass
+                        // can't be used because it looks up by CSharpFullName, while the
+                        // fluent key here is the bare syntactic name without namespace.
+                        var existingAux = model.Classes.FirstOrDefault(c =>
+                            c.SourceName == kvp.Key || c.EmittedName == kvp.Key);
+                        if (existingAux is not null)
+                        {
+                            existingAux.Targets |= (TypeTarget)fluentTargets;
+                            existingAux.TsNameOverride ??= kvp.Value.TsName;
+                            existingAux.OpenApiNameOverride ??= kvp.Value.OpenApiName;
+                            if (kvp.Value.Ignore) { existingAux.TsIgnore = true; existingAux.OpenApiIgnore = true; }
+                            existingAux.TsIgnore |= kvp.Value.TsIgnore;
+                            existingAux.OpenApiIgnore |= kvp.Value.OpenApiIgnore;
+                        }
+                        continue;
+                    }
 
                     var dir = !string.IsNullOrEmpty(kvp.Value.OutputDir) ? kvp.Value.OutputDir!
                             : !string.IsNullOrEmpty(config.Settings.TypeScript.OutputDir) ? config.Settings.TypeScript.OutputDir!
@@ -140,6 +168,36 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     if (aux is null) continue;
                     ApplyFluentToClass(aux, config);
                     model.Classes.Add(aux);
+
+                    // Same companion-synthesis the attribute path runs — fluent-discovered
+                    // classes get Create/Update/Response companions in the same target set.
+                    // Force=true bypasses the [CreateDto]/[CrudApi] attribute gate; for
+                    // fluent-discovered types we trust the user's intent (Dto-side fluent
+                    // may be driving DTO generation without attributes either).
+                    if ((aux.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python)) != 0
+                        && !aux.OpenApiIgnore)
+                    {
+                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Create, force: true);
+                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Update, force: true);
+                        SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Response, force: true);
+                    }
+                }
+
+                // Second pass — overrides without WithGeneratedTypes. Targets synthesized
+                // aux schemas added by the discovery pass (and by the attribute pipeline).
+                // Match by simple name since Dto-generated companions can't be resolved as
+                // symbols (fluent stores syntactic name as fallback for those).
+                foreach (var kvp in config.PerType)
+                {
+                    if (kvp.Value.FluentTargets is not null) continue;
+                    var existingAux = model.Classes.FirstOrDefault(c =>
+                        c.SourceName == kvp.Key || c.EmittedName == kvp.Key);
+                    if (existingAux is null) continue;
+                    existingAux.TsNameOverride ??= kvp.Value.TsName;
+                    existingAux.OpenApiNameOverride ??= kvp.Value.OpenApiName;
+                    if (kvp.Value.Ignore) { existingAux.TsIgnore = true; existingAux.OpenApiIgnore = true; }
+                    existingAux.TsIgnore |= kvp.Value.TsIgnore;
+                    existingAux.OpenApiIgnore |= kvp.Value.OpenApiIgnore;
                 }
             }
 
@@ -225,9 +283,13 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
     /// Only fires when the parent carries a Dto attribute that would make the Dto
     /// generator produce that variant in real code (checked via <c>HasDtoAttributeFor</c>).
     /// </summary>
-    private static void SynthesizeAuxiliaryForVariant(SchemaModel model, SchemaClass parent, INamedTypeSymbol parentSymbol, Shared.DtoTarget variant)
+    private static void SynthesizeAuxiliaryForVariant(SchemaModel model, SchemaClass parent, INamedTypeSymbol parentSymbol, Shared.DtoTarget variant, bool force = false)
     {
-        if (!Shared.DtoSemantics.HasDtoAttributeFor(parentSymbol, variant)) return;
+        // Attribute path requires a Dto attribute to be present (CreateDto / CrudApi /
+        // etc.) — that's the signal "Dto will generate this companion, we should sync".
+        // Fluent path passes force=true: caller has already opted in by listing the
+        // type in IDtoConfigurator, so we trust the intent regardless of attributes.
+        if (!force && !Shared.DtoSemantics.HasDtoAttributeFor(parentSymbol, variant)) return;
 
         var schemaName = Shared.DtoSemantics.GetDefaultDtoName(parent.SourceName, variant);
         // Dedupe: if the user handwrote their own [GenerateTypes] partial, renamed a
@@ -244,7 +306,9 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             CSharpFullName = $"{GetNamespace(parent.CSharpFullName)}.{schemaName}",
             SourceName = schemaName,
             EmittedName = schemaName,
-            Targets = TypeTarget.OpenApi,
+            // Inherit parent's targets so the companion gets emitted by every emitter
+            // the parent does (TS / OpenAPI / Python). Was hard-coded OpenApi only.
+            Targets = parent.Targets,
             OutputDir = parent.OutputDir,
         };
 

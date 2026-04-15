@@ -171,10 +171,13 @@ internal static class ConfiguratorParser
 
             case "ForType":
                 var typeName = ResolveForTypeArg(first, semantic);
-                // Silent skip when the type symbol can't be resolved — almost always a partial
-                // compilation in the IDE (mid-edit), not actually-broken code. The full build's
-                // generator pass will succeed and pick this up. Reporting TG0012 here would
-                // spam the editor with false positives that disappear on the next keystroke.
+                // If symbol resolution fails (Dto-generated companion types like
+                // Create{X}Request that another generator emits in the same pass —
+                // Roslyn doesn't let us see them) — fall back to the raw syntactic
+                // name. The generator's downstream scan tries to match it against
+                // synthesized aux schemas in the model.
+                if (typeName is null)
+                    typeName = ExtractSyntacticTypeName(first);
                 if (typeName is null) return;
                 if (!parsed.PerType.TryGetValue(typeName, out var overrides))
                     parsed.PerType[typeName] = overrides = new PerTypeOverrides();
@@ -197,6 +200,20 @@ internal static class ConfiguratorParser
         },
         _ => null,
     };
+
+    /// <summary>
+    /// Reads the type-argument's identifier text without consulting the semantic
+    /// model. Used as a fallback when a type can't be resolved (typically because
+    /// another source generator hasn't emitted it in this compilation pass).
+    /// Returns the simple name only — namespace context is unknown at this stage,
+    /// downstream code matches by simple name against synthesized aux schemas.
+    /// </summary>
+    private static string? ExtractSyntacticTypeName(InvocationExpressionSyntax inv)
+    {
+        if (inv.Expression is not MemberAccessExpressionSyntax { Name: GenericNameSyntax g }) return null;
+        if (g.TypeArgumentList.Arguments.Count != 1) return null;
+        return g.TypeArgumentList.Arguments[0].ToString();
+    }
 
     private static string? ResolveForTypeArg(InvocationExpressionSyntax inv, SemanticModel sm)
     {

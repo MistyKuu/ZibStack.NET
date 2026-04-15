@@ -22,12 +22,17 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
 
         
         b.TypeScript(ts => { ts.OutputDir = "generated"; });
-        // Article has NO [GenerateTypes] attribute on the class — fluent discovery
-        // via .WithGeneratedTypes(...) opts it in. The remaining chain (TsName,
-        // .Property(...).TsType(...)) configures the emitted TS interface.
+        // Article: fluent discovery for the parent class triggers companion synthesis
+        // (Create/Update/Response). With TS target, all four companions emit as .ts files.
         b.ForType<Article>()
-            .WithGeneratedTypes(TypeTarget.TypeScript)
-            .TsName("ArticleDto1");
+            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi);
+
+        // Refine the synthesized CreateArticleRequest schema by name. The lookup
+        // path here is by SourceName since Roslyn can't see Dto-generated symbols —
+        // parser stores the syntactic name and the generator matches it against any
+        // aux schema already in the model (added by Article's synthesis above).
+        b.ForType<CreateArticleRequest>()
+            .TsName("ArticleDto");
         
         // Player: demonstrate per-property mapping overrides.
         b.ForType<Player>()
