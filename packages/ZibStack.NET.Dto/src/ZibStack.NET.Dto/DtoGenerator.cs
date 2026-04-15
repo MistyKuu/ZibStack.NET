@@ -49,6 +49,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("ApiStyle.g.cs", ApiStyleSource);
             ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
+            ctx.AddSource("IDtoConfigurator.g.cs", ConfiguratorSource);
         });
 
         // Detect available serializers and emit PatchField + converters
@@ -459,6 +460,65 @@ public partial class DtoGenerator : IIncrementalGenerator
                 queryInfo.HasEfCore = hasEf;
                 var source = GenerateQueryDtoSource(queryInfo);
                 spc.AddSource($"{queryInfo.FullyQualifiedName}.Query.Model.g.cs", source);
+            }
+        });
+
+        // ── Fluent IDtoConfigurator pipeline ──────────────────────────────────
+        // Parses the user's IDtoConfigurator.Configure(IDtoBuilder) method body and
+        // emits the same Create/Update/Response/Query DTOs that attribute markers
+        // would, so users can drop [CreateDto]/[UpdateDto]/[ResponseDto]/[QueryDto]
+        // /[CreateOrUpdateDto] from their classes and configure everything in one
+        // DtoConfig.cs file. Per-property [DtoIgnore]/[DtoOnly]/[DtoName]/[Flatten]
+        // attributes still apply on top — the fluent overrides come later in Phase 2.
+        var fluentConfig = context.CompilationProvider.Select(static (compilation, _) =>
+            DtoConfiguratorParser.Parse(compilation, _ => { }));
+
+        context.RegisterSourceOutput(fluentConfig.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen),
+            static (spc, pair) =>
+        {
+            var ((((parsed, hasFluent), hasDsl), hasEf), hasTg) = pair;
+            if (parsed is null) return;
+
+            var nestedSeen = new HashSet<string>();
+            foreach (var tc in parsed.ByType.Values)
+            {
+                if (tc.Symbol is null) continue;
+
+                if (tc.Create)
+                {
+                    var info = BuildDtoClassInfoFromFluent(tc.Symbol, DtoKind.Create, tc, nestedSeen);
+                    if (info is not null)
+                    {
+                        info.HasTypeGen = hasTg;
+                        spc.AddSource($"{info.FullyQualifiedName}.Create.Fluent.g.cs", GenerateSource(info, hasFluent));
+                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
+                    }
+                }
+                if (tc.Update)
+                {
+                    var info = BuildDtoClassInfoFromFluent(tc.Symbol, DtoKind.Update, tc, nestedSeen);
+                    if (info is not null)
+                    {
+                        info.HasTypeGen = hasTg;
+                        spc.AddSource($"{info.FullyQualifiedName}.Update.Fluent.g.cs", GenerateSource(info, hasFluent));
+                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
+                    }
+                }
+                if (tc.CreateOrUpdate)
+                {
+                    var info = BuildDtoClassInfoFromFluent(tc.Symbol, DtoKind.Combined, tc, nestedSeen);
+                    if (info is not null)
+                    {
+                        info.HasTypeGen = hasTg;
+                        spc.AddSource($"{info.FullyQualifiedName}.Combined.Fluent.g.cs", GenerateSource(info, hasFluent));
+                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
+                    }
+                }
+                // Phase 1: Response/Query fluent paths emit nothing yet — those
+                // require splitting GetResponseDtoInfo/GetQueryDtoInfo into reusable
+                // cores like BuildDtoClassInfoCore. For now users still annotate
+                // [ResponseDto]/[QueryDto] for those.
+                _ = hasDsl; _ = hasEf;
             }
         });
 

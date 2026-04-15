@@ -46,6 +46,19 @@ public partial class DtoGenerator
             else updateValidator = validator;
         }
 
+        return BuildDtoClassInfoCore(symbol, kind, nameArg, createValidator, updateValidator);
+    } catch { return null; } }
+
+    /// <summary>
+    /// Shared core: walks the symbol's properties and builds a <see cref="DtoClassInfo"/>.
+    /// Both attribute-driven (<see cref="GetDtoInfo"/>) and fluent-driven (the
+    /// IDtoConfigurator pipeline) paths call this with their respective values.
+    /// </summary>
+    internal static DtoClassInfo? BuildDtoClassInfoCore(
+        INamedTypeSymbol symbol, DtoKind kind,
+        string? nameOverride, string? createValidator, string? updateValidator)
+    { try {
+
         var seen = new HashSet<string>();
         var autoNested = new List<DtoClassInfo>();
         var properties = CollectProperties(symbol, kind, seen, autoNested);
@@ -105,7 +118,7 @@ public partial class DtoGenerator
             classNameWithGenerics,
             ns,
             SanitizeHintName(symbol.ToDisplayString().Replace(".", "_")),
-            nameArg is not null ? nameArg + genericParams : defaultName,
+            nameOverride is not null ? nameOverride + genericParams : defaultName,
             kind,
             properties,
             createValidator,
