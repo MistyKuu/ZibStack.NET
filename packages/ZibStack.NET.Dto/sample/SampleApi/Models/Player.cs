@@ -19,7 +19,7 @@ namespace ZibStack.NET.Dto.Sample.Models;
 // Per-property mapping tweaks (Salary → string for precision, Password hidden from
 // contract, Team → $ref to Team) are applied fluently in TypeGenConfig.cs so you
 // can see both styles — attributes on the class, DSL in the configurator — in one demo.
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi | TypeTarget.Python,
                OutputDir = "generated")]
 public partial class Player
 {

@@ -26,16 +26,17 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         // here means the entity itself is NOT emitted as TS / OpenAPI. It's only here to
         // anchor companion lookups below. (You CAN still chain config like .TsName(...)
         // / .Property(...) which would apply IF the type ever does get emitted.)
-   
+  
         // Explicit per-companion opt-in. Synthesizes ONLY the Create variant from
         // Article's properties — UpdateArticleRequest / ArticleResponse are NOT emitted
         // because they aren't listed.
         b.ForType<CreateArticleRequest>()
             .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi)
-            .TsName("ArticleDto");
+            .TsName("ArticleDtao");
 
         // Player: demonstrate per-property mapping overrides.
         b.ForType<Player>()
+            .WithGeneratedTypes(TypeTarget.Python)
             // decimal → number (OpenAPI default) loses precision on the wire; force
             // string so JSON parsers don't round-trip through float64.
             .Property(x => x.Salary)

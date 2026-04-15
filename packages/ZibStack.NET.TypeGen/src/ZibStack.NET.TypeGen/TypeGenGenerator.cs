@@ -148,10 +148,14 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                         // and synthesize that single variant.
                         if (TryParseCompanionName(kvp.Key, out var parentName, out var variant))
                         {
-                            // Try to find parent by simple name in the fluent config.
+                            // Try parent from fluent set first; otherwise scan the user's
+                            // assembly. The assembly scan means users can write just
+                            // b.ForType<CreateArticleRequest>().WithGeneratedTypes(TS) —
+                            // no need for a separate b.ForType<Article>() anchor line.
                             var parentEntry = config.PerType.FirstOrDefault(e =>
                                 e.Value.Symbol is not null && e.Value.Symbol.Name == parentName);
-                            var parentSym = parentEntry.Value?.Symbol;
+                            var parentSym = parentEntry.Value?.Symbol
+                                ?? FindTypeInAssembly(compilation.Assembly.GlobalNamespace, parentName);
                             if (parentSym is not null)
                             {
                                 // Synthesize from parent symbol — needs a transient SchemaClass
@@ -292,6 +296,25 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         if (o.Ignore) { en.TsIgnore = true; en.OpenApiIgnore = true; }
         en.TsIgnore |= o.TsIgnore;
         en.OpenApiIgnore |= o.OpenApiIgnore;
+    }
+
+    /// <summary>
+    /// Walks the user's assembly looking for a type with matching simple name.
+    /// Used by the fluent companion-synthesis fallback when the parent type isn't
+    /// listed in the fluent config — lets users write a single
+    /// <c>b.ForType&lt;CreateArticleRequest&gt;().WithGeneratedTypes(TS)</c> entry
+    /// without needing a separate <c>b.ForType&lt;Article&gt;()</c> anchor line.
+    /// </summary>
+    private static INamedTypeSymbol? FindTypeInAssembly(INamespaceSymbol ns, string simpleName)
+    {
+        foreach (var t in ns.GetTypeMembers())
+            if (t.Name == simpleName) return t;
+        foreach (var nested in ns.GetNamespaceMembers())
+        {
+            var found = FindTypeInAssembly(nested, simpleName);
+            if (found is not null) return found;
+        }
+        return null;
     }
 
     /// <summary>
