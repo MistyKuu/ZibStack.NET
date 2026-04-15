@@ -1,5 +1,6 @@
 using ZibStack.NET.Core;
 using ZibStack.NET.Dto;
+using ZibStack.NET.TypeGen;
 using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
 
@@ -13,6 +14,12 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [UiFormGroup("contact", Label = "Contact", Order = 2)]
 [ColumnPermission("Salary", "finance.read")]
 [ZValidate]
+// TypeGen: emits Player.ts + /api/players paths in openapi.yaml.
+// Per-property mapping tweaks (Salary → string for precision, Password hidden from
+// contract, Team → $ref to Team) are applied fluently in TypeGenConfig.cs so you
+// can see both styles — attributes on the class, DSL in the configurator — in one demo.
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+               OutputDir = "generated")]
 public partial class Player
 {
     [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]

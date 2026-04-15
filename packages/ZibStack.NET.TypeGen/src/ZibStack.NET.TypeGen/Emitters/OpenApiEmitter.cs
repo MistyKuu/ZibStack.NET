@@ -583,7 +583,10 @@ internal static class OpenApiEmitter
             return ("$ref", null, refName, null);
         var inferred = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
         if (prop.OpenApiTypeOverride is { } typeOverride)
-            return (typeOverride, inferred.FmtKey, null, null);
+            // Drop the inferred format — it was chosen to match the inferred type
+            // (e.g. "double" for number) and doesn't carry over to the override.
+            // The user's explicit OpenApiFormat (if any) is appended later by the caller.
+            return (typeOverride, null, null, null);
         return inferred;
     }
 
