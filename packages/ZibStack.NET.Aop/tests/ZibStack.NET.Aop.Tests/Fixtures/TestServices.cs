@@ -1,3 +1,5 @@
+using ZibStack.NET.Aop;
+
 namespace ZibStack.NET.Aop.Tests.Fixtures;
 
 // ── Method-level aspect ─────────────────────────────────────────────────────
@@ -155,6 +157,121 @@ public class ClassLevelMixedService
     public int GetInstance(int id) { InstanceCallCount++; return id; }
 }
 #pragma warning restore AOP0001
+
+// ── AOP0002 ground truth: private method with method-level aspect ────────────
+//
+// Suppress AOP0002 because we INTENTIONALLY put [Record] on a private method to
+// verify the analyzer's runtime claim. The wrapper exposes a public method that
+// internally calls the private one, so the test can actually invoke it.
+
+#pragma warning disable AOP0002
+public class PrivateAspectService
+{
+    public int CallCount;
+
+    [Record]
+    private int Hidden(int id)
+    {
+        CallCount++;
+        return id;
+    }
+
+    public int CallHidden(int id) => Hidden(id);
+}
+#pragma warning restore AOP0002
+
+// ── AOP0006 ground truth: operator with aspect ───────────────────────────────
+
+#pragma warning disable AOP0006
+public class BoxAspect
+{
+    public static int OperatorCallCount;
+    public int Value;
+
+    [Record]
+    public static BoxAspect operator +(BoxAspect a, BoxAspect b)
+    {
+        OperatorCallCount++;
+        return new BoxAspect { Value = a.Value + b.Value };
+    }
+}
+#pragma warning restore AOP0006
+
+// ── AOP0010 ground truth: [Cache] on void method ─────────────────────────────
+
+#pragma warning disable AOP0010
+public class CacheVoidService
+{
+    public int CallCount;
+
+    [Cache(DurationSeconds = 60)]
+    public void DoWork()
+    {
+        CallCount++;
+    }
+}
+#pragma warning restore AOP0010
+
+// ── AOP0015 ground truth: [Timeout] without CancellationToken parameter ─────
+//
+// The aspect creates a cancellation token internally, but with no CT parameter
+// to forward it to, the method body cannot observe cancellation — so the
+// timeout fires logically but the method runs to completion anyway.
+
+#pragma warning disable AOP0015
+public class TimeoutNoTokenService
+{
+    public int CompletedCallCount;
+
+    [Timeout(TimeoutMs = 50)]
+    public async Task<int> SlowAsync()
+    {
+        // No CancellationToken parameter to observe — the 200ms delay finishes
+        // even though the [Timeout] is set to 50ms. Compare with
+        // TimeoutTestService.SlowAsync which DOES take a CT and IS cancelled.
+        await Task.Delay(200);
+        CompletedCallCount++;
+        return 42;
+    }
+}
+#pragma warning restore AOP0015
+
+// ── AOP0020 ground truth: aspect method passed as delegate ──────────────────
+
+public class DelegateService
+{
+    public int InvokeCount;
+
+    [Record]
+    public int Direct(int id)
+    {
+        InvokeCount++;
+        return id;
+    }
+}
+
+// ── AOP0021 ground truth: base.Method() call ─────────────────────────────────
+
+public class BaseAspectMethodService
+{
+    [Record]
+    public virtual int Process(int x) => x * 2;
+}
+
+#pragma warning disable AOP0021
+public class DerivedBaseCallService : BaseAspectMethodService
+{
+    public int OverrideInvokeCount;
+
+    public override int Process(int x)
+    {
+        OverrideInvokeCount++;
+        // base.Process is what AOP0021 warns about — runtime experiment proved this
+        // recurses infinitely (interceptor → @this.Process → override → base → loop).
+        return base.Process(x);
+    }
+}
+#pragma warning restore AOP0021
 
 // ── Built-in [Retry] ───────────────────────────────────────────────────────────
 

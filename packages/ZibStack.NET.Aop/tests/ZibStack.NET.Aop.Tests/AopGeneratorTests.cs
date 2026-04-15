@@ -344,6 +344,129 @@ public class AopBehaviorTests
         Assert.Equal(1, ClassLevelMixedService.StaticCallCount);
         Assert.Empty(_handler.Calls);                                   // ← AOP0001 claim
     }
+
+    // ── AOP0002 ground truth: private method with method-level aspect ────────
+
+    [Fact]
+    public void PrivateMethod_WithAspect_HandlerNotCalled()
+    {
+        var svc = new PrivateAspectService();
+        svc.CallCount = 0;
+        _handler.Reset();
+
+        _ = svc.CallHidden(7);   // calls private Hidden() internally
+
+        Assert.Equal(1, svc.CallCount);                // Hidden() ran
+        Assert.Empty(_handler.Calls);                   // ← AOP0002 claim — handler not called
+    }
+
+    // ── AOP0006 ground truth: operator with aspect ──────────────────────────
+
+    [Fact]
+    public void Operator_WithAspect_HandlerNotCalled()
+    {
+        BoxAspect.OperatorCallCount = 0;
+        _handler.Reset();
+
+        var c = new BoxAspect { Value = 1 } + new BoxAspect { Value = 2 };
+
+        Assert.Equal(3, c.Value);                       // operator ran
+        Assert.Equal(1, BoxAspect.OperatorCallCount);
+        Assert.Empty(_handler.Calls);                   // ← AOP0006 claim — handler not called
+    }
+
+    // ── AOP0010 ground truth: [Cache] on void method ────────────────────────
+    //
+    // The original analyzer message claimed "[Cache] has no effect" for void/Task
+    // methods. Behavioral test proved the OPPOSITE: the cache DOES intercept —
+    // every call after the first is short-circuited and the body never re-runs.
+    // The hazard is silent side-effect suppression, not "no effect". Updated
+    // AOP0010 message reflects this; this test pins the actual behavior.
+
+    [Fact]
+    public void CacheOnVoidMethod_SuppressesSubsequentCalls()
+    {
+        var svc = new CacheVoidService();
+        svc.CallCount = 0;
+
+        svc.DoWork();
+        svc.DoWork();
+        svc.DoWork();
+
+        Assert.Equal(1, svc.CallCount);   // ← reality: only first call executes the body
+    }
+
+    // ── AOP0015 ground truth: [Timeout] without CT parameter ────────────────
+    //
+    // The original analyzer message claimed the method "will complete anyway"
+    // because there's no CT to observe. Behavioral test proved the OPPOSITE:
+    // [Timeout(50)] over a 200ms body throws TimeoutException to the caller after
+    // ~50ms — the body DOES get aborted externally, it just keeps running in
+    // background. Updated AOP0015 message reflects "leaks the running call",
+    // not "has no effect".
+
+    [Fact]
+    public async Task TimeoutWithoutCT_AbortsToCallerButLeaksTheCall()
+    {
+        var svc = new TimeoutNoTokenService();
+        svc.CompletedCallCount = 0;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() => svc.SlowAsync());
+        sw.Stop();
+
+        // The caller sees TimeoutException after ~50ms, NOT the 200ms the body needed.
+        Assert.True(sw.ElapsedMilliseconds < 150,
+            $"Caller should see TimeoutException quickly, got {sw.ElapsedMilliseconds}ms");
+
+        // The body is still running in background — wait long enough and the counter
+        // bumps even though we already got the exception. (Race-prone assertion: give
+        // it 300ms to finish.)
+        await Task.Delay(300);
+        Assert.Equal(1, svc.CompletedCallCount);   // ← background completion proves the leak
+    }
+
+    // ── AOP0020 ground truth: aspect method invoked through a delegate ─────
+
+    [Fact]
+    public void AspectMethodAsDelegate_HandlerNotCalledWhenInvokedViaDelegate()
+    {
+        var svc = new DelegateService();
+        svc.InvokeCount = 0;
+        _handler.Reset();
+
+        // Direct call — interceptor fires (sanity check).
+        _ = svc.Direct(1);
+        Assert.Single(_handler.Calls.Where(c => c.Phase == "Before"));
+
+        // Now via delegate — interceptor should NOT fire (this is what AOP0020 warns).
+        // Suppress the analyzer here since we're INTENTIONALLY exercising the bypass.
+        _handler.Reset();
+#pragma warning disable AOP0020
+        Func<int, int> f = svc.Direct;
+#pragma warning restore AOP0020
+        _ = f(2);
+        _ = f(3);
+
+        Assert.Equal(3, svc.InvokeCount);   // 1 direct + 2 via delegate
+        Assert.Empty(_handler.Calls);        // ← AOP0020 claim — delegate path bypasses
+    }
+
+    // ── AOP0021 ground truth: NOT runnable, infinite recursion at runtime ───
+    //
+    // The original AOP0021 analyzer message claimed that base.Method() to an aspect-
+    // decorated virtual method "bypasses the interceptor". A runtime experiment proved
+    // the OPPOSITE: the call IS intercepted, and because the interceptor body invokes
+    // the target through `@this.Method(...)` (virtual dispatch) it lands back in the
+    // override, which calls `base.Method()` again — guaranteed StackOverflowException.
+    //
+    // SOE crashes the test process before any assertions can fire, so we can't run the
+    // scenario in this suite. The behavior is still verifiable by hand: enable
+    // DerivedBaseCallService.Process and watch the test host die. The fixture remains
+    // compiled so the AOP0021 analyzer always has a real call site to flag.
+    //
+    // The analyzer descriptor and message were updated to reflect the actual mechanism
+    // (recursion, not bypass) and bumped to Error severity — see Diagnostics.BaseCall.
 }
 
 // ── Pure runtime tests (no generator needed) ────────────────────────────────

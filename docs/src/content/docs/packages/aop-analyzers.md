@@ -17,7 +17,7 @@ Four families, all under the `ZibStack.Aop` category:
 |---|---|---|
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
 | **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
-| **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor. | Warning / Info |
+| **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor — or, in the case of `base.Method()` over an aspect-decorated virtual, recurse infinitely. | Warning / Error |
 | **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1003`) | Architectural rules you declare on a base type, enforced on every concrete derivative — required aspects, required interface implementations, required methods. | Warning |
 
 ## Tier 1 — Placement
@@ -115,7 +115,7 @@ Reported on the attribute application itself, so the squiggle lands precisely on
 
 | ID | Severity | Trigger | Code fix |
 |---|---|---|---|
-| `AOP0010` | Warning | `[Cache]` on `void` or non-generic `Task` method — there's nothing to cache | Remove `[Cache]` |
+| `AOP0010` | Warning | `[Cache]` on `void` / non-generic `Task` — silently suppresses subsequent calls (including side effects in the body) after the first | Remove `[Cache]` |
 
 ```csharp
 [Cache]                              // ❌ AOP0010
@@ -152,7 +152,7 @@ public int C() => 1;
 | ID | Severity | Trigger | Code fix |
 |---|---|---|---|
 | `AOP0014` | Error | `TimeoutMs <= 0` | Set `TimeoutMs = 30000` |
-| `AOP0015` | Warning | Method has no `CancellationToken` parameter — the timeout fires but the method can't observe it | Add `CancellationToken cancellationToken = default` parameter |
+| `AOP0015` | Warning | Method has no `CancellationToken` parameter — `[Timeout]` aborts to the caller (TimeoutException) but the body keeps running in background until it finishes naturally (resource leak) | Add `CancellationToken cancellationToken = default` parameter |
 
 ```csharp
 [Timeout(TimeoutMs = 0)]             // ❌ AOP0014
@@ -210,9 +210,13 @@ public class Caller
 }
 ```
 
-### `AOP0021` — `base.Method()` bypasses the aspect on the override (Info)
+### `AOP0021` — `base.Method()` to an aspect-decorated virtual method causes infinite recursion (Error)
 
-`base.X()` deliberately uses non-virtual dispatch and skips interceptors targeting the call expression. If `X` has an aspect, the base call goes straight through.
+This was originally documented as "bypasses the aspect on the override". A behavioral
+test proved the OPPOSITE: the call IS intercepted, and because the interceptor body
+invokes the target via `@this.Method(...)` (virtual dispatch) it lands back in the
+override, which calls `base.Method()` again — guaranteed `StackOverflowException` at
+runtime. The diagnostic was bumped to **Error** and the message rewritten.
 
 ```csharp
 public class Base
@@ -223,9 +227,11 @@ public class Base
 
 public class Derived : Base
 {
-    public override int GetOrder(int id) => base.GetOrder(id);   // ℹ AOP0021
+    public override int GetOrder(int id) => base.GetOrder(id);   // ❌ AOP0021 — guaranteed SOE
 }
 ```
+
+Either remove the override, remove the aspect, or reshape the call to avoid `base.`.
 
 ## Tier 4 — Convention Enforcement
 

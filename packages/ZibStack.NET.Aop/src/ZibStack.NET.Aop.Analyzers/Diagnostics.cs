@@ -83,11 +83,12 @@ public static class Diagnostics
     public const string CacheNonReturningId = "AOP0010";
     public static readonly DiagnosticDescriptor CacheNonReturning = new(
         CacheNonReturningId,
-        title: "[Cache] on a method that returns nothing",
-        messageFormat: "[Cache] on '{0}' has no effect — the method returns void or non-generic Task. Cache only methods that produce a value.",
+        title: "[Cache] on a void/Task method silently suppresses subsequent calls",
+        messageFormat: "[Cache] on '{0}' (returns void or non-generic Task) suppresses every call after the first — including any side effects in the body. If the side effects must fire each call, remove [Cache]. If you meant 'memoize this call once', this is the right shape.",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        description: "Verified by behavioral test: [Cache] applied to a void method runs the body once, then short-circuits subsequent calls without re-executing. The original 'has no effect' wording was wrong — the cache DOES intercept, it just has no return value to store. The actual hazard is silent side-effect suppression.");
 
     public const string RetryMaxAttemptsId = "AOP0011";
     public static readonly DiagnosticDescriptor RetryMaxAttempts = new(
@@ -128,11 +129,12 @@ public static class Diagnostics
     public const string TimeoutNoCancellationTokenId = "AOP0015";
     public static readonly DiagnosticDescriptor TimeoutNoCancellationToken = new(
         TimeoutNoCancellationTokenId,
-        title: "[Timeout] on a method that cannot observe cancellation",
-        messageFormat: "[Timeout] on '{0}' will fire the token but the method has no CancellationToken parameter to observe it. Add a CancellationToken parameter or remove [Timeout].",
+        title: "[Timeout] without a CancellationToken parameter leaks the running call",
+        messageFormat: "[Timeout] on '{0}' aborts to the caller (TimeoutException is thrown after the deadline) but the method body cannot observe cancellation and keeps running in the background until it finishes naturally. Add a CancellationToken parameter and forward it to your awaits to cancel cooperatively.",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
+        isEnabledByDefault: true,
+        description: "Verified by behavioral test: [Timeout(50)] on a Task<int> method that does Task.Delay(200) without observing the token throws TimeoutException to the caller after ~50ms, but the inner Task.Delay completes in the background. The hazard is resource leak / dangling work, not 'timeout has no effect'.");
 
     public const string ValidateNoParametersId = "AOP0016";
     public static readonly DiagnosticDescriptor ValidateNoParameters = new(
@@ -166,11 +168,12 @@ public static class Diagnostics
     public const string BaseCallId = "AOP0021";
     public static readonly DiagnosticDescriptor BaseCall = new(
         BaseCallId,
-        title: "base.Method() bypasses the aspect on the override",
-        messageFormat: "base.{0}() does not run the interceptor for this method. If '{0}' is overridden, the base call goes straight to the base implementation without the aspect.",
+        title: "base.Method() to an aspect-decorated virtual method causes infinite recursion",
+        messageFormat: "base.{0}() recurses infinitely at runtime — the interceptor IS bound to this call site and dispatches `@this.{0}(...)` virtually back to the override, which calls base again. Either remove the override, remove the aspect, or reshape the call to avoid `base.`.",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Info,
-        isEnabledByDefault: true);
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Generated interceptors invoke the target through `@this.Method(args)` to preserve generic-virtual-call semantics. For a `base.Method()` call from inside an override, that re-dispatches virtually back to the override, producing guaranteed StackOverflowException at runtime. Verified by behavioral experiment in AopGeneratorTests.");
 
     // ── Convention enforcement (AOP1001-AOP1099) ────────────────────────────
 
