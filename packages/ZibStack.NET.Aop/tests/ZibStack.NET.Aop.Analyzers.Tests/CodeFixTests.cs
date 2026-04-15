@@ -229,6 +229,41 @@ public class Svc
     }
 
     [Fact]
+    public async Task ValidateNoAnnotations_FixedByRemovingValidate()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+
+public class Svc
+{
+    [{|#0:Validate|}]
+    public int Sum(int a, int b) => a + b;
+}
+" + AopStubs;
+
+        var fixedCode = @"
+using ZibStack.NET.Aop;
+
+public class Svc
+{
+    public int Sum(int a, int b) => a + b;
+}
+" + AopStubs;
+
+        var test1 = new CSharpCodeFixTest<BuiltInAspectArgumentAnalyzer, RemoveAttributeCodeFix, DefaultVerifier>
+        {
+            TestCode = test,
+            FixedCode = fixedCode,
+        };
+        test1.ExpectedDiagnostics.Add(
+            new DiagnosticResult(Diagnostics.ValidateNoAnnotations)
+                .WithLocation(0)
+                .WithArguments("Sum"));
+
+        await test1.RunAsync();
+    }
+
+    [Fact]
     public async Task ValidateNoParams_FixedByRemovingValidate()
     {
         var test = @"

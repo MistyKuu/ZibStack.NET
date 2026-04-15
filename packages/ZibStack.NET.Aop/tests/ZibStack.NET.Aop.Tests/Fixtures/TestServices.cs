@@ -212,6 +212,35 @@ public class CacheVoidService
 }
 #pragma warning restore AOP0010
 
+// ── Polly add-on package fixtures ───────────────────────────────────────────
+
+public class PollyRetryService
+{
+    public int CallCount;
+
+    [PollyRetry(MaxRetryAttempts = 3, DelayMs = 1)]
+    public int FlakyMethod(int succeedOnAttempt)
+    {
+        CallCount++;
+        if (CallCount < succeedOnAttempt)
+            throw new InvalidOperationException($"attempt {CallCount} failed");
+        return CallCount;
+    }
+}
+
+public class PollyCircuitBreakerService
+{
+    public int CallCount;
+
+    [PollyCircuitBreaker(FailureThreshold = 0.5, MinimumThroughput = 2,
+                         SamplingDurationSeconds = 30, BreakDurationSeconds = 60)]
+    public int AlwaysFails()
+    {
+        CallCount++;
+        throw new InvalidOperationException("always fails");
+    }
+}
+
 // ── TimeoutHandler ground truth: handler doesn't use any CT internally ──────
 //
 // Used by Timeout_AbortsToCallerButLeaksTheCall — the body completes in the

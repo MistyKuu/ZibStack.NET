@@ -240,4 +240,196 @@ namespace MyApp.Public
 
         await Verify.VerifyAnalyzerAsync(test);
     }
+
+    // ── AUDIT: edge cases that could produce false positives or false negatives ──
+
+    [Fact]
+    public async Task ScopedType_UsedFromLambda_OutOfScope_Reports()
+    {
+        // Lambda body referring to the scoped type — analyzer should fire normally
+        // (ContainingSymbol resolution walks through the synthesized lambda method
+        // to its real ContainingType). Use a separate-statement form so each
+        // operation gets its own clean span without overlap.
+        var test = @"
+using System;
+using ZibStack.NET.Aop;
+
+namespace MyApp.Internal
+{
+    [ScopeTo(""MyApp.Internal.**"")]
+    public class SecretEngine { public void DoMagic() { } }
+}
+
+namespace MyApp.Public
+{
+    using MyApp.Internal;
+    public class Caller
+    {
+        public Action MakeLambda() => () =>
+        {
+            var e = {|#0:new SecretEngine()|};
+            {|#1:e.DoMagic()|};
+        };
+    }
+}
+" + AopStubs;
+
+        await Verify.VerifyAnalyzerAsync(test,
+            Verify.Diagnostic(Diagnostics.OutOfScopeUsage)
+                .WithLocation(0)
+                .WithArguments("SecretEngine", "'MyApp.Internal.**'", "MyApp.Public", "."),
+            Verify.Diagnostic(Diagnostics.OutOfScopeUsage)
+                .WithLocation(1)
+                .WithArguments("SecretEngine", "'MyApp.Internal.**'", "MyApp.Public", "."));
+    }
+
+    [Fact]
+    public async Task ScopedType_NameOf_NoDiagnostic()
+    {
+        // nameof(T) is a string literal at compile time — no actual reference to the
+        // type at runtime, no security/scope concern. Should NOT fire.
+        var test = @"
+using ZibStack.NET.Aop;
+
+namespace MyApp.Internal
+{
+    [ScopeTo(""MyApp.Internal.**"")]
+    public class SecretEngine { }
+}
+
+namespace MyApp.Public
+{
+    using MyApp.Internal;
+    public class Caller
+    {
+        public string GetName() => nameof(SecretEngine);
+    }
+}
+" + AopStubs;
+
+        await Verify.VerifyAnalyzerAsync(test);
+    }
+
+    [Fact]
+    public async Task ScopedType_TypeOf_NoDiagnostic()
+    {
+        // typeof(T) is a metadata reference (no construction, no member call).
+        // Current analyzer scope (ObjectCreation + Invocation) doesn't catch it,
+        // and that's intentional — scope rules are about USAGE, not reflection.
+        var test = @"
+using System;
+using ZibStack.NET.Aop;
+
+namespace MyApp.Internal
+{
+    [ScopeTo(""MyApp.Internal.**"")]
+    public class SecretEngine { }
+}
+
+namespace MyApp.Public
+{
+    using MyApp.Internal;
+    public class Caller
+    {
+        public Type Get() => typeof(SecretEngine);
+    }
+}
+" + AopStubs;
+
+        await Verify.VerifyAnalyzerAsync(test);
+    }
+
+    [Fact]
+    public async Task ScopedType_GenericMethodInvocation_OutOfScope_Reports()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+
+namespace MyApp.Internal
+{
+    [ScopeTo(""MyApp.Internal.**"")]
+    public static class SecretEngine
+    {
+        public static T Process<T>(T x) => x;
+    }
+}
+
+namespace MyApp.Public
+{
+    using MyApp.Internal;
+    public class Caller
+    {
+        public int Use() => {|#0:SecretEngine.Process<int>(5)|};
+    }
+}
+" + AopStubs;
+
+        var expected = Verify.Diagnostic(Diagnostics.OutOfScopeUsage)
+            .WithLocation(0)
+            .WithArguments("SecretEngine", "'MyApp.Internal.**'", "MyApp.Public", ".");
+
+        await Verify.VerifyAnalyzerAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task ScopedType_AsParameterType_NoDiagnostic_NotCovered()
+    {
+        // Parameter / field / property TYPE references aren't construction or
+        // invocation, so the current analyzer doesn't fire for them. Documented
+        // as a SCOPE LIMITATION — extending coverage to type references would
+        // require IConversionOperation / ITypeOfOperation analysis and would
+        // change the analyzer's contract. For now this stays uncovered.
+        var test = @"
+using ZibStack.NET.Aop;
+
+namespace MyApp.Internal
+{
+    [ScopeTo(""MyApp.Internal.**"")]
+    public class SecretEngine { }
+}
+
+namespace MyApp.Public
+{
+    using MyApp.Internal;
+    public class Caller
+    {
+        public void Use(SecretEngine engine) { }
+    }
+}
+" + AopStubs;
+
+        await Verify.VerifyAnalyzerAsync(test);
+    }
+
+    [Fact]
+    public async Task ScopedType_LinqQuery_OutOfScope_Reports()
+    {
+        var test = @"
+using System.Collections.Generic;
+using System.Linq;
+using ZibStack.NET.Aop;
+
+namespace MyApp.Internal
+{
+    [ScopeTo(""MyApp.Internal.**"")]
+    public class SecretEngine { public int GetValue() => 42; }
+}
+
+namespace MyApp.Public
+{
+    using MyApp.Internal;
+    public class Caller
+    {
+        public IEnumerable<int> Use(IEnumerable<SecretEngine> engines) =>
+            engines.Select(e => {|#0:e.GetValue()|});
+    }
+}
+" + AopStubs;
+
+        var expected = Verify.Diagnostic(Diagnostics.OutOfScopeUsage)
+            .WithLocation(0)
+            .WithArguments("SecretEngine", "'MyApp.Internal.**'", "MyApp.Public", ".");
+
+        await Verify.VerifyAnalyzerAsync(test, expected);
+    }
 }

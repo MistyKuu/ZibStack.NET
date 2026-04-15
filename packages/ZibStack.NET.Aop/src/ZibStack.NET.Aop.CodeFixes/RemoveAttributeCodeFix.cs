@@ -33,7 +33,12 @@ public sealed class RemoveAttributeCodeFix : CodeFixProvider
         ImmutableArray.Create(
             Diagnostics.StaticMethodId,
             Diagnostics.CacheNonReturningId,
-            Diagnostics.ValidateNoParametersId);
+            Diagnostics.ValidateNoParametersId,
+            // AOP0017 (Validate without DataAnnotations on params) is Info-severity —
+            // sometimes the developer wants the contract anyway as a marker. Offering
+            // the same "remove the attribute" fix is appropriate when they decide the
+            // hint is right.
+            Diagnostics.ValidateNoAnnotationsId);
 
     public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
 

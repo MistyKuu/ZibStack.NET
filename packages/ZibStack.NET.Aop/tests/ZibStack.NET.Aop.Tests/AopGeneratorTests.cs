@@ -454,6 +454,76 @@ public class AopBehaviorTests
         Assert.Empty(_handler.Calls);        // ← AOP0020 claim — delegate path bypasses
     }
 
+    // ── Polly add-on behavioral verification ────────────────────────────────
+    //
+    // Confirms the main AOP generator's interceptor wires the Polly handlers
+    // through the same pipeline as built-in aspects — i.e. nothing about
+    // optional packages prevents `[PollyRetry]` etc. from actually running at
+    // runtime. Each test uses an isolated DI container with PollyRetryHandler
+    // / PollyCircuitBreakerHandler registered, so the Polly resilience pipeline
+    // is built inline (no Microsoft.Extensions.Resilience required).
+
+    [Fact]
+    public void PollyRetry_RetriesUntilSuccess()
+    {
+        // Build a fresh DI scope just for this test — we need PollyRetryHandler
+        // available alongside the existing RecordingHandler from AopFixture.
+        var services = new ServiceCollection();
+        services.AddSingleton(new RecordingHandler());
+        services.AddSingleton(new AroundRecordingHandler());
+        services.AddAopPolly();
+        var sp = services.BuildServiceProvider();
+        var prevProvider = AspectServiceProvider.ServiceProvider;
+        AspectServiceProvider.ServiceProvider = sp;
+        try
+        {
+            var svc = new PollyRetryService();
+            svc.CallCount = 0;
+
+            // Succeed on attempt 3 — handler should retry twice (default MaxRetryAttempts=3).
+            var result = svc.FlakyMethod(succeedOnAttempt: 3);
+
+            Assert.Equal(3, result);
+            Assert.Equal(3, svc.CallCount);
+        }
+        finally
+        {
+            AspectServiceProvider.ServiceProvider = prevProvider;
+        }
+    }
+
+    [Fact]
+    public void PollyCircuitBreaker_TripsAfterFailures()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new RecordingHandler());
+        services.AddSingleton(new AroundRecordingHandler());
+        services.AddAopPolly();
+        var sp = services.BuildServiceProvider();
+        var prevProvider = AspectServiceProvider.ServiceProvider;
+        AspectServiceProvider.ServiceProvider = sp;
+        try
+        {
+            var svc = new PollyCircuitBreakerService();
+            svc.CallCount = 0;
+
+            // First two calls bubble the underlying InvalidOperationException, then the
+            // breaker opens and subsequent calls throw BrokenCircuitException without
+            // invoking the body.
+            Assert.Throws<InvalidOperationException>(() => svc.AlwaysFails());
+            Assert.Throws<InvalidOperationException>(() => svc.AlwaysFails());
+
+            var beforeBreaker = svc.CallCount;
+            // Third call: breaker now open, body must NOT run.
+            Assert.ThrowsAny<Exception>(() => svc.AlwaysFails());
+            Assert.Equal(beforeBreaker, svc.CallCount);   // body did not execute
+        }
+        finally
+        {
+            AspectServiceProvider.ServiceProvider = prevProvider;
+        }
+    }
+
     // ── AOP0021 ground truth: NOT runnable, infinite recursion at runtime ───
     //
     // The original AOP0021 analyzer message claimed that base.Method() to an aspect-
