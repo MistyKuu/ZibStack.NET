@@ -152,6 +152,99 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
 
+    // ── Tier 2 (extension): optional-package aspect arg checks (AOP0030+) ───
+    //
+    // ZibStack.NET.Aop.Polly and ZibStack.NET.Aop.HybridCache are runtime-only
+    // packages that ship no analyzers of their own. Their attributes derive
+    // from AspectAttribute, so Tier 1 placement checks already cover them.
+    // The per-property checks below live in the main AOP analyzer DLL — they
+    // light up automatically when consumers install Polly / HybridCache, and
+    // are silent otherwise (typeof lookups just don't resolve).
+
+    public const string PollyRetryMaxAttemptsId = "AOP0030";
+    public static readonly DiagnosticDescriptor PollyRetryMaxAttempts = new(
+        PollyRetryMaxAttemptsId,
+        title: "[PollyRetry] MaxRetryAttempts must be at least 1",
+        messageFormat: "[PollyRetry(MaxRetryAttempts = {0})] is invalid — MaxRetryAttempts must be >= 1.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyRetryDelayId = "AOP0031";
+    public static readonly DiagnosticDescriptor PollyRetryDelay = new(
+        PollyRetryDelayId,
+        title: "[PollyRetry] DelayMs must be non-negative",
+        messageFormat: "[PollyRetry(DelayMs = {0})] is invalid — DelayMs cannot be negative.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string HttpRetryMaxAttemptsId = "AOP0032";
+    public static readonly DiagnosticDescriptor HttpRetryMaxAttempts = new(
+        HttpRetryMaxAttemptsId,
+        title: "[HttpRetry] MaxRetryAttempts must be at least 1",
+        messageFormat: "[HttpRetry(MaxRetryAttempts = {0})] is invalid — MaxRetryAttempts must be >= 1.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string HttpRetryDelayId = "AOP0033";
+    public static readonly DiagnosticDescriptor HttpRetryDelay = new(
+        HttpRetryDelayId,
+        title: "[HttpRetry] DelayMs must be non-negative",
+        messageFormat: "[HttpRetry(DelayMs = {0})] is invalid — DelayMs cannot be negative.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyCircuitBreakerThresholdId = "AOP0034";
+    public static readonly DiagnosticDescriptor PollyCircuitBreakerThreshold = new(
+        PollyCircuitBreakerThresholdId,
+        title: "[PollyCircuitBreaker] FailureThreshold must be in (0, 1]",
+        messageFormat: "[PollyCircuitBreaker(FailureThreshold = {0})] is invalid — FailureThreshold is a probability (open the breaker when X percent of calls fail), so it must satisfy 0 < FailureThreshold <= 1.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyCircuitBreakerThroughputId = "AOP0035";
+    public static readonly DiagnosticDescriptor PollyCircuitBreakerThroughput = new(
+        PollyCircuitBreakerThroughputId,
+        title: "[PollyCircuitBreaker] MinimumThroughput must be at least 1",
+        messageFormat: "[PollyCircuitBreaker(MinimumThroughput = {0})] is invalid — MinimumThroughput must be >= 1 (otherwise the breaker would open on a single sample).",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyCircuitBreakerSamplingId = "AOP0036";
+    public static readonly DiagnosticDescriptor PollyCircuitBreakerSampling = new(
+        PollyCircuitBreakerSamplingId,
+        title: "[PollyCircuitBreaker] SamplingDurationSeconds must be positive",
+        messageFormat: "[PollyCircuitBreaker(SamplingDurationSeconds = {0})] is invalid — SamplingDurationSeconds must be > 0.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyCircuitBreakerBreakId = "AOP0037";
+    public static readonly DiagnosticDescriptor PollyCircuitBreakerBreak = new(
+        PollyCircuitBreakerBreakId,
+        title: "[PollyCircuitBreaker] BreakDurationSeconds must be positive",
+        messageFormat: "[PollyCircuitBreaker(BreakDurationSeconds = {0})] is invalid — BreakDurationSeconds must be > 0.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyRateLimiterPermitsId = "AOP0038";
+    public static readonly DiagnosticDescriptor PollyRateLimiterPermits = new(
+        PollyRateLimiterPermitsId,
+        title: "[PollyRateLimiter] PermitLimit must be at least 1",
+        messageFormat: "[PollyRateLimiter(PermitLimit = {0})] is invalid — PermitLimit must be >= 1.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyRateLimiterWindowId = "AOP0039";
+    public static readonly DiagnosticDescriptor PollyRateLimiterWindow = new(
+        PollyRateLimiterWindowId,
+        title: "[PollyRateLimiter] WindowSeconds must be positive",
+        messageFormat: "[PollyRateLimiter(WindowSeconds = {0})] is invalid — WindowSeconds must be > 0.",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string PollyRateLimiterQueueId = "AOP0040";
+    public static readonly DiagnosticDescriptor PollyRateLimiterQueue = new(
+        PollyRateLimiterQueueId,
+        title: "[PollyRateLimiter] QueueLimit must be non-negative",
+        messageFormat: "[PollyRateLimiter(QueueLimit = {0})] is invalid — QueueLimit cannot be negative (use 0 to reject overflow immediately).",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public const string HybridCacheDurationId = "AOP0041";
+    public static readonly DiagnosticDescriptor HybridCacheDuration = new(
+        HybridCacheDurationId,
+        title: "[HybridCache] DurationSeconds must be non-negative",
+        messageFormat: "[HybridCache(DurationSeconds = {0})] is invalid — DurationSeconds cannot be negative (use 0 for unlimited TTL).",
+        category: Category, defaultSeverity: DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     // ── Tier 3: Call-site analysis (AOP0020-AOP0021) ────────────────────────
 
     public const string DelegateConversionId = "AOP0020";

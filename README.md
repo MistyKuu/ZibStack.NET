@@ -140,11 +140,14 @@ app.Services.UseAop();               // bridges DI into the aspect runtime
 ```
 
 **Compile-time analyzers + code fixes (bundled, no extra install):**
-19 Roslyn diagnostics catch broken aspect placements before you build —
+31 Roslyn diagnostics catch broken aspect placements before you build —
 `[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`, `[Log]` on a
 `private` method, method group conversions that bypass the interceptor,
-`base.Method()` calls that recurse infinitely, and more. Plus a set of
-declarative architecture rules: `[RequireAspect(typeof(LogAttribute))]`,
+`base.Method()` calls that recurse infinitely, plus argument validation
+for the optional Polly + HybridCache packages
+(`[PollyRetry(MaxRetryAttempts = 0)]`, `[PollyCircuitBreaker(FailureThreshold = 1.5)]`,
+`[HybridCache(DurationSeconds = -1)]` — all caught at compile time).
+Plus a set of declarative architecture rules: `[RequireAspect(typeof(LogAttribute))]`,
 `[RequireImplementation(typeof(IDisposable))]`, `[RequireMethod("Configure")]`,
 `[RequireConstructor(typeof(IServiceProvider))]`, `[ScopeTo("MyApp.Internal.**")]`
 — declared once on a base or scoped type, enforced everywhere a derivative

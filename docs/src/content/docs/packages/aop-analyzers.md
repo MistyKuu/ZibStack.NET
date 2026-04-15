@@ -16,7 +16,7 @@ Four families, all under the `ZibStack.Aop` category:
 | Family | Covers | Severity |
 |---|---|---|
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
-| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0014`, `AOP0016`–`AOP0017`) | Per-aspect semantic checks of the values you pass. Built-in aspects only (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`). | Error / Warning / Info |
+| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0014`, `AOP0016`–`AOP0017`, `AOP0030`–`AOP0041`) | Per-aspect semantic checks of the values you pass. Covers core aspects (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`) AND optional add-on packages (`[PollyRetry]`, `[HttpRetry]`, `[PollyCircuitBreaker]`, `[PollyRateLimiter]`, `[HybridCache]`). The optional checks fire only when those packages are referenced — silent otherwise. | Error / Warning / Info |
 | **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor — or, in the case of `base.Method()` over an aspect-decorated virtual, recurse infinitely. | Warning / Error |
 | **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1005`) | Architectural rules you declare on a base type / scoped type, enforced on derivatives or on the call site — required aspects, interfaces, methods, constructors, and namespace-scoped usage. | Warning |
 
@@ -165,6 +165,43 @@ public Task<int> A() => Task.FromResult(1);
 > `CancellationToken` parameter to the method does not change this — the handler
 > ignores it. (An earlier `AOP0015` analyzer used to suggest adding the
 > parameter; it was removed because the suggestion was misleading.)
+
+### `[PollyRetry]` / `[HttpRetry]` (optional package: `ZibStack.NET.Aop.Polly`)
+
+| ID | Severity | Trigger |
+|---|---|---|
+| `AOP0030` | Error | `[PollyRetry(MaxRetryAttempts <= 0)]` |
+| `AOP0031` | Error | `[PollyRetry(DelayMs < 0)]` |
+| `AOP0032` | Error | `[HttpRetry(MaxRetryAttempts <= 0)]` |
+| `AOP0033` | Error | `[HttpRetry(DelayMs < 0)]` |
+
+### `[PollyCircuitBreaker]` (optional)
+
+| ID | Severity | Trigger |
+|---|---|---|
+| `AOP0034` | Error | `FailureThreshold` not in `(0, 1]` (it's a probability — open the breaker when X percent of calls fail) |
+| `AOP0035` | Error | `MinimumThroughput < 1` |
+| `AOP0036` | Error | `SamplingDurationSeconds <= 0` |
+| `AOP0037` | Error | `BreakDurationSeconds <= 0` |
+
+### `[PollyRateLimiter]` (optional)
+
+| ID | Severity | Trigger |
+|---|---|---|
+| `AOP0038` | Error | `PermitLimit <= 0` |
+| `AOP0039` | Error | `WindowSeconds <= 0` |
+| `AOP0040` | Error | `QueueLimit < 0` (use `0` to reject overflow immediately) |
+
+### `[HybridCache]` (optional package: `ZibStack.NET.Aop.HybridCache`)
+
+| ID | Severity | Trigger |
+|---|---|---|
+| `AOP0041` | Error | `DurationSeconds < 0` (use `0` for unlimited TTL) |
+
+> **No Polly/HybridCache package needed for these analyzers.** They live in the main
+> `ZibStack.NET.Aop` analyzer DLL and identify their target attributes by full name.
+> If you don't reference Polly or HybridCache, the corresponding checks just don't
+> resolve any matches — zero false positives, zero overhead.
 
 ### `[Validate]`
 
