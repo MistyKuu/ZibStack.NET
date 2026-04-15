@@ -234,7 +234,12 @@ Declarative architecture rules. You annotate a base class or interface with
 also carry `[X]`. Same idea as Metalama's architecture validation — but as one focused
 attribute, no fabrics, no compile-time API.
 
-### `AOP1001` — Type missing aspect required by base/interface (Warning)
+### `AOP1001` — Type / method missing aspect required by base or interface (Warning)
+
+The `[RequireAspect]` attribute is **placement-based** — where you put it determines
+what must satisfy the rule:
+
+#### On a class or interface — every concrete derivative needs the aspect
 
 ```csharp
 [RequireAspect(typeof(LogAttribute), Reason = "All Topics must be audited")]
@@ -249,7 +254,7 @@ public class OrderPlaced : Topic { }
 public class PaymentMade : Topic { }   // ✅ ok
 ```
 
-Works the same way for interfaces:
+Same for interfaces:
 
 ```csharp
 [RequireAspect(typeof(TraceAttribute), Reason = "All command handlers must be traceable")]
@@ -260,11 +265,49 @@ public class CreateOrderHandler : ICommandHandler { }
 //   ⚠ AOP1001: requires [Trace]
 ```
 
-**Code fix:** "Add [Aspect]" — inserts the attribute on its own line above the type
-declaration with the right indentation.
+#### On a method — every override / interface implementation needs the aspect
+
+```csharp
+public interface ICommandHandler
+{
+    [RequireAspect(typeof(TraceAttribute))]
+    Task HandleAsync(object cmd);
+}
+
+public class CreateOrderHandler : ICommandHandler
+{
+    public Task HandleAsync(object cmd) => ...;
+    //          ^^^^^^^^^^^
+    //   ⚠ AOP1001: 'HandleAsync' implements 'ICommandHandler.HandleAsync' which requires [Trace]
+}
+
+public class CancelOrderHandler : ICommandHandler
+{
+    [Trace]
+    public Task HandleAsync(object cmd) => ...;   // ✅
+}
+```
+
+#### Class-level aspect satisfies a method-level requirement
+
+This avoids false positives when the developer uses the class-level shortcut: putting
+`[Trace]` on the impl class propagates to every public/internal method, so a
+method-level `[RequireAspect(typeof(TraceAttribute))]` is satisfied automatically.
+
+```csharp
+[Trace]                                            // class-level → propagates to HandleAsync
+public class RefundOrderHandler : ICommandHandler
+{
+    public Task HandleAsync(object cmd) => ...;    // ✅ satisfied via class-level [Trace]
+}
+```
+
+**Code fix:** "Add [Aspect]" — inserts the attribute on its own line above the
+declaration with matching indentation.
 
 **Notes:**
-- Abstract intermediate classes are exempt; only concrete derivatives are flagged.
+- Abstract intermediate classes / abstract methods are exempt; only concrete usage sites
+  are flagged.
 - Multiple `[RequireAspect]` attributes on a single base produce one diagnostic per
   missing aspect — fix them one at a time with the light-bulb.
 - The same requirement reachable via two paths (e.g. base class **and** interface) is

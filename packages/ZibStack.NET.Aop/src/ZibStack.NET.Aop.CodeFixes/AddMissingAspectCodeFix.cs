@@ -36,36 +36,81 @@ public sealed class AddMissingAspectCodeFix : CodeFixProvider
             return;
 
         var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var typeDecl = node.AncestorsAndSelf().OfType<TypeDeclarationSyntax>().FirstOrDefault();
-        if (typeDecl is null) return;
+
+        // Same fix shape for either a class/interface declaration or a method
+        // declaration — both inherit MemberDeclarationSyntax which exposes AttributeLists
+        // and LeadingTrivia in identical ways.
+        var memberDecl = node.AncestorsAndSelf()
+            .OfType<MemberDeclarationSyntax>()
+            .FirstOrDefault(m => m is BaseTypeDeclarationSyntax or MethodDeclarationSyntax);
+        if (memberDecl is null) return;
 
         context.RegisterCodeFix(
             CodeAction.Create(
                 title: $"Add [{shortName}] attribute",
-                createChangedDocument: ct => AddAttributeAsync(context.Document, typeDecl, shortName, ct),
+                createChangedDocument: ct => AddAttributeAsync(context.Document, memberDecl, shortName, ct),
                 equivalenceKey: $"AOP_AddRequired_{shortName}"),
             diagnostic);
     }
 
-    private static async Task<Document> AddAttributeAsync(Document document, TypeDeclarationSyntax typeDecl, string shortName, CancellationToken ct)
+    private static async Task<Document> AddAttributeAsync(Document document, MemberDeclarationSyntax memberDecl, string shortName, CancellationToken ct)
     {
         var attribute = SyntaxFactory.Attribute(SyntaxFactory.ParseName(shortName));
-        var newAttrList = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(attribute))
-            // Mimic how a developer would type it — own line directly above the type, with
-            // matching leading trivia (so indentation lines up).
-            .WithLeadingTrivia(typeDecl.GetLeadingTrivia())
-            // Hard-code "\n" rather than Environment.NewLine — the analyzer SDK bans
-            // Environment access (RS1035) and Roslyn's formatter normalizes either way.
-            .WithTrailingTrivia(SyntaxFactory.EndOfLine("\n"));
 
-        // The new attribute list inherits the leading trivia from the type, so strip it
-        // off the type itself or we'd end up with the comment/attributes block printed twice.
-        var newTypeDecl = typeDecl
+        // Detect line-ending and indent from the member's existing leading trivia so we
+        // match the source's style instead of fighting it on Windows (where Roslyn's
+        // Formatter would normalize to CRLF and break LF-only test expectations).
+        var leading = memberDecl.GetLeadingTrivia();
+        var newline = ExtractNewline(leading);
+        var indent = ExtractIndent(leading);
+
+        // Move the member's leading trivia (newline + indent that positioned the member)
+        // onto the new attribute list, so the attribute appears where the member used to
+        // start. Then re-emit newline + indent as the attribute list's trailing trivia so
+        // the original member content lands on the next line at the same column.
+        var newAttrList = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(attribute))
+            .WithLeadingTrivia(leading)
+            .WithTrailingTrivia(newline, indent);
+
+        // Strip the member's own leading trivia — otherwise it would print twice (once on
+        // the attr list, once on the modifier the trivia originally sat on).
+        var newMemberDecl = memberDecl
             .WithLeadingTrivia(SyntaxFactory.TriviaList())
-            .WithAttributeLists(typeDecl.AttributeLists.Insert(0, newAttrList));
+            .WithAttributeLists(memberDecl.AttributeLists.Insert(0, newAttrList));
 
         var root = await document.GetSyntaxRootAsync(ct).ConfigureAwait(false);
-        var newRoot = root!.ReplaceNode(typeDecl, newTypeDecl);
+        var newRoot = root!.ReplaceNode(memberDecl, newMemberDecl);
         return document.WithSyntaxRoot(newRoot);
+    }
+
+    /// <summary>
+    /// Returns the first end-of-line trivia found in <paramref name="leading"/>, or a
+    /// LF fallback when none is present (top-of-file member).
+    /// </summary>
+    private static SyntaxTrivia ExtractNewline(SyntaxTriviaList leading)
+    {
+        foreach (var trivia in leading)
+        {
+            if (trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+                return trivia;
+        }
+        return SyntaxFactory.LineFeed;
+    }
+
+    /// <summary>
+    /// Returns the trailing whitespace of <paramref name="leading"/> — i.e. the indent
+    /// applied to the member's first token — or empty trivia if the member is not indented.
+    /// </summary>
+    private static SyntaxTrivia ExtractIndent(SyntaxTriviaList leading)
+    {
+        for (int i = leading.Count - 1; i >= 0; i--)
+        {
+            var trivia = leading[i];
+            if (trivia.IsKind(SyntaxKind.WhitespaceTrivia))
+                return trivia;
+            if (trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+                break;
+        }
+        return SyntaxFactory.Whitespace(string.Empty);
     }
 }

@@ -36,6 +36,7 @@ public sealed class RequireAspectAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSymbolAction(AnalyzeNamedType, SymbolKind.NamedType);
+        context.RegisterSymbolAction(AnalyzeMethod, SymbolKind.Method);
     }
 
     private static void AnalyzeNamedType(SymbolAnalysisContext ctx)
@@ -77,6 +78,117 @@ public sealed class RequireAspectAnalyzer : DiagnosticAnalyzer
 
             ReportMissing(ctx, type, kvp.Value.Source, requiredAspect, kvp.Value.Reason);
         }
+    }
+
+    private static void AnalyzeMethod(SymbolAnalysisContext ctx)
+    {
+        var method = (IMethodSymbol)ctx.Symbol;
+
+        // Only ordinary instance methods. Abstract methods themselves are exempt — the
+        // rule applies to concrete overrides/implementations, not to the declaration.
+        if (method.MethodKind != MethodKind.Ordinary) return;
+        if (method.IsAbstract) return;
+        if (method.IsStatic) return;
+        if (method.IsImplicitlyDeclared) return;
+        // Same containing-type filters as AnalyzeNamedType — skip impossible cases early.
+        var containing = method.ContainingType;
+        if (containing is null) return;
+        if (containing.TypeKind != TypeKind.Class) return;
+        if (containing.IsAbstract) return;
+
+        var requirements = new Dictionary<INamedTypeSymbol, (ISymbol Source, string? Reason)>(SymbolEqualityComparer.Default);
+
+        // Walk the override chain: every base virtual/abstract method this method
+        // overrides may carry [RequireAspect].
+        for (var overridden = method.OverriddenMethod; overridden is not null; overridden = overridden.OverriddenMethod)
+            CollectFromMethod(overridden, requirements);
+
+        // Walk every interface this type implements; for each, find the corresponding
+        // interface member and collect its requirements. Covers both implicit (public
+        // method matching the interface) and explicit (`Type.Member()`) implementations.
+        foreach (var iface in containing.AllInterfaces)
+        {
+            foreach (var ifaceMember in iface.GetMembers().OfType<IMethodSymbol>())
+            {
+                if (ifaceMember.MethodKind != MethodKind.Ordinary) continue;
+                var impl = containing.FindImplementationForInterfaceMember(ifaceMember);
+                if (!SymbolEqualityComparer.Default.Equals(impl, method)) continue;
+                CollectFromMethod(ifaceMember, requirements);
+            }
+        }
+
+        if (requirements.Count == 0) return;
+
+        // Aspects considered "present" for satisfaction purposes:
+        //   1. Attributes directly on this method
+        //   2. Class-level aspects on the containing type — the AOP parser already
+        //      propagates these to public/internal methods, so they should satisfy a
+        //      method-level [RequireAspect] too. Otherwise users would get false
+        //      positives any time they used the class-level shortcut.
+        var presentAttributes = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        foreach (var attr in method.GetAttributes())
+            if (attr.AttributeClass is { } ac) presentAttributes.Add(ac);
+        foreach (var attr in containing.GetAttributes())
+            if (attr.AttributeClass is { } ac) presentAttributes.Add(ac);
+
+        foreach (var kvp in requirements)
+        {
+            var requiredAspect = kvp.Key;
+            if (presentAttributes.Contains(requiredAspect)) continue;
+            if (presentAttributes.Any(a => InheritsFrom(a, requiredAspect))) continue;
+
+            ReportMissingOnMethod(ctx, method, kvp.Value.Source, requiredAspect, kvp.Value.Reason);
+        }
+    }
+
+    private static void CollectFromMethod(
+        IMethodSymbol method,
+        Dictionary<INamedTypeSymbol, (ISymbol Source, string? Reason)> requirements)
+    {
+        foreach (var attr in method.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() != RequireAspectAttributeFullName) continue;
+            if (attr.ConstructorArguments.Length == 0) continue;
+            if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol aspectType) continue;
+
+            string? reason = null;
+            foreach (var named in attr.NamedArguments)
+                if (named.Key == "Reason" && named.Value.Value is string r) reason = r;
+
+            if (!requirements.ContainsKey(aspectType))
+                requirements[aspectType] = (method, reason);
+        }
+    }
+
+    private static void ReportMissingOnMethod(
+        SymbolAnalysisContext ctx,
+        IMethodSymbol derived,
+        ISymbol source,
+        INamedTypeSymbol requiredAspect,
+        string? reason)
+    {
+        var shortAspect = StripAttributeSuffix(requiredAspect.Name);
+        var reasonSuffix = string.IsNullOrEmpty(reason) ? "." : $". Reason: {reason}";
+
+        var loc = derived.Locations.FirstOrDefault(l => l.IsInSource) ?? derived.Locations.FirstOrDefault();
+        if (loc is null) return;
+
+        var sourceDisplay = source is IMethodSymbol m
+            ? $"{m.ContainingType.Name}.{m.Name}"
+            : source.Name;
+
+        var properties = ImmutableDictionary<string, string?>.Empty
+            .Add("RequiredAspectFullName", requiredAspect.ToDisplayString())
+            .Add("RequiredAspectShortName", shortAspect);
+
+        ctx.ReportDiagnostic(Diagnostic.Create(
+            Diagnostics.MissingRequiredAspect,
+            loc,
+            properties,
+            derived.Name,
+            sourceDisplay,
+            shortAspect,
+            reasonSuffix));
     }
 
     private static void CollectRequirementsFromAncestors(
