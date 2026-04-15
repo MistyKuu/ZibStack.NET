@@ -180,9 +180,13 @@ components:
           format: int32
         Name:
           type: string
+          minLength: 2
+          maxLength: 50
         Level:
           type: integer
           format: int32
+          minimum: 1
+          maximum: 100
         Email:
           type: string
           nullable: true
@@ -225,12 +229,16 @@ components:
           format: int32
         Name:
           type: string
+          maxLength: 100
         Description:
           type: string
           nullable: true
+          maxLength: 500
         MaxMembers:
           type: integer
           format: int32
+          minimum: 1
+          maximum: 100
         Players:
           type: array
           items:

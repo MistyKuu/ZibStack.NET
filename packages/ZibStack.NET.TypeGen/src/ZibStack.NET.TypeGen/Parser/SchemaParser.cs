@@ -135,7 +135,108 @@ internal static class SchemaParser
             }
         }
 
+        ReadValidationAttributes(prop, sp);
         return sp;
+    }
+
+    /// <summary>
+    /// Translates DataAnnotations / ZibStack.Validation attributes into the
+    /// corresponding OpenAPI schema constraints. Read by metadata name — no
+    /// binary dependency on either package. Both families map to the same
+    /// SchemaProperty fields so the emitter doesn't care which source produced
+    /// the constraint.
+    /// </summary>
+    private static void ReadValidationAttributes(IPropertySymbol prop, SchemaProperty sp)
+    {
+        foreach (var a in prop.GetAttributes())
+        {
+            var name = a.AttributeClass?.ToDisplayString();
+            if (name is null) continue;
+            switch (name)
+            {
+                // ── System.ComponentModel.DataAnnotations ──
+                case "System.ComponentModel.DataAnnotations.MinLengthAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is int min)
+                        sp.MinLength = min;
+                    break;
+                case "System.ComponentModel.DataAnnotations.MaxLengthAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is int max)
+                        sp.MaxLength = max;
+                    break;
+                case "System.ComponentModel.DataAnnotations.StringLengthAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is int sMax)
+                        sp.MaxLength = sMax;
+                    foreach (var na in a.NamedArguments)
+                        if (na.Key == "MinimumLength" && na.Value.Value is int sMin) sp.MinLength = sMin;
+                    break;
+                case "System.ComponentModel.DataAnnotations.RangeAttribute":
+                    ReadRangeCtorArgs(a, sp);
+                    break;
+                case "System.ComponentModel.DataAnnotations.RegularExpressionAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is string pat)
+                        sp.Pattern = pat;
+                    break;
+                case "System.ComponentModel.DataAnnotations.EmailAddressAttribute":
+                    sp.OpenApiFormat ??= "email";
+                    break;
+                case "System.ComponentModel.DataAnnotations.UrlAttribute":
+                    sp.OpenApiFormat ??= "uri";
+                    break;
+
+                // ── ZibStack.NET.Validation (Z*) ──
+                case "ZibStack.NET.Validation.ZMinLengthAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is int zMin)
+                        sp.MinLength = zMin;
+                    break;
+                case "ZibStack.NET.Validation.ZMaxLengthAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is int zMax)
+                        sp.MaxLength = zMax;
+                    break;
+                case "ZibStack.NET.Validation.ZRangeAttribute":
+                    ReadRangeCtorArgs(a, sp);
+                    break;
+                case "ZibStack.NET.Validation.ZMatchAttribute":
+                    if (a.ConstructorArguments.Length > 0 && a.ConstructorArguments[0].Value is string zPat)
+                        sp.Pattern = zPat;
+                    break;
+                case "ZibStack.NET.Validation.ZEmailAttribute":
+                    sp.OpenApiFormat ??= "email";
+                    break;
+                case "ZibStack.NET.Validation.ZUrlAttribute":
+                    sp.OpenApiFormat ??= "uri";
+                    break;
+                case "ZibStack.NET.Validation.ZNotEmptyAttribute":
+                    // Approximation — for strings "non-empty" includes whitespace rules
+                    // OpenAPI can't express, but minLength: 1 rules out empty strings / arrays.
+                    sp.MinLength ??= 1;
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Both <c>System.ComponentModel.DataAnnotations.RangeAttribute</c> and
+    /// ZibStack's <c>ZRangeAttribute</c> take (min, max) as positional args;
+    /// values may be int, double, or long depending on overload. Normalize to double.
+    /// </summary>
+    private static void ReadRangeCtorArgs(AttributeData a, SchemaProperty sp)
+    {
+        if (a.ConstructorArguments.Length < 2) return;
+        if (TryReadNumeric(a.ConstructorArguments[0].Value, out var min)) sp.Minimum = min;
+        if (TryReadNumeric(a.ConstructorArguments[1].Value, out var max)) sp.Maximum = max;
+    }
+
+    private static bool TryReadNumeric(object? value, out double result)
+    {
+        switch (value)
+        {
+            case int i: result = i; return true;
+            case long l: result = l; return true;
+            case double d: result = d; return true;
+            case float f: result = f; return true;
+            case decimal m: result = (double)m; return true;
+            default: result = 0; return false;
+        }
     }
 
     private static (TypeTarget Targets, string OutputDir) ReadGenerateTypesArgs(AttributeData attr)

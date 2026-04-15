@@ -244,6 +244,27 @@ compiles directly with `tsc` and the tooling in the consumer (`ts-node`, Vite,
 webpack) resolves everything without a barrel file. Switch to a single bundled
 file via `TypeScriptSettings.FileLayout = TypeScriptFileLayout.SingleFile`.
 
+## Validation attributes → OpenAPI constraints
+
+DataAnnotations and ZibStack.Validation attributes are translated to the
+matching schema constraints in the emitted OpenAPI document. No annotations
+need changing on the DTO — if the attribute is already there for runtime
+validation, TypeGen picks it up.
+
+| Attribute | OpenAPI constraint |
+|---|---|
+| `[MinLength(n)]`, `[ZMinLength(n)]` | `minLength: n` |
+| `[MaxLength(n)]`, `[ZMaxLength(n)]` | `maxLength: n` |
+| `[StringLength(max, MinimumLength=min)]` | `minLength: min`, `maxLength: max` |
+| `[Range(min, max)]`, `[ZRange(min, max)]` | `minimum: min`, `maximum: max` |
+| `[RegularExpression(pat)]`, `[ZMatch(pat)]` | `pattern: "pat"` |
+| `[EmailAddress]`, `[ZEmail]` | `format: email` |
+| `[Url]`, `[ZUrl]` | `format: uri` |
+| `[ZNotEmpty]` | `minLength: 1` (approximation for strings/arrays) |
+
+Attribute detection is by metadata name — no runtime dependency on either
+package. Explicit `[OpenApiProperty]` fields win (don't get overwritten).
+
 ## `[CrudApi]` → OpenAPI `paths:`
 
 If a class carries `[CrudApi]` (from `ZibStack.NET.Dto`), TypeGen contributes

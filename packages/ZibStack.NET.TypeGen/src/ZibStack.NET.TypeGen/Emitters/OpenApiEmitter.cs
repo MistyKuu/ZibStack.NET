@@ -346,7 +346,24 @@ internal static class OpenApiEmitter
             sb.AppendLine($"{indent}  description: {YamlString(prop.OpenApiDescription)}");
         if (prop.OpenApiExample != null)
             sb.AppendLine($"{indent}  example: {YamlScalar(prop.OpenApiExample)}");
+
+        // Validation-derived constraints — safe to emit even when not applicable
+        // to the type (OpenAPI readers ignore minLength on integers, etc.).
+        if (prop.MinLength is int minLen) sb.AppendLine($"{indent}  minLength: {minLen}");
+        if (prop.MaxLength is int maxLen) sb.AppendLine($"{indent}  maxLength: {maxLen}");
+        if (prop.Minimum is double minVal) sb.AppendLine($"{indent}  minimum: {FormatNumber(minVal)}");
+        if (prop.Maximum is double maxVal) sb.AppendLine($"{indent}  maximum: {FormatNumber(maxVal)}");
+        // Regex patterns commonly contain YAML-significant chars (|, *, ?, [, ~, &).
+        // Always double-quote them — safer than relying on YamlString's heuristic.
+        if (prop.Pattern is string pat)
+            sb.AppendLine($"{indent}  pattern: \"{pat.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"");
     }
+
+    /// <summary>Trim ".0" from whole-double values to keep YAML tidy (e.g. 100, not 100.0).</summary>
+    private static string FormatNumber(double v) =>
+        v == System.Math.Floor(v) && !double.IsInfinity(v)
+            ? ((long)v).ToString(CultureInfo.InvariantCulture)
+            : v.ToString(CultureInfo.InvariantCulture);
 
     private static void EmitEnumYaml(StringBuilder sb, SchemaEnum en, string indent)
     {
@@ -468,6 +485,11 @@ internal static class OpenApiEmitter
         }
         if (prop.OpenApiDescription != null)
             sb.Append($", \"description\": {JsonString(prop.OpenApiDescription)}");
+        if (prop.MinLength is int minLen) sb.Append($", \"minLength\": {minLen}");
+        if (prop.MaxLength is int maxLen) sb.Append($", \"maxLength\": {maxLen}");
+        if (prop.Minimum is double minVal) sb.Append($", \"minimum\": {FormatNumber(minVal)}");
+        if (prop.Maximum is double maxVal) sb.Append($", \"maximum\": {FormatNumber(maxVal)}");
+        if (prop.Pattern is string pat) sb.Append($", \"pattern\": {JsonString(pat)}");
         sb.Append(" }");
     }
 

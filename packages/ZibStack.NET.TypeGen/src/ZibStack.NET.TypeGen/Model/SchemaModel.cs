@@ -169,6 +169,23 @@ internal sealed class SchemaProperty
     /// <summary>Fluent-only — emit as <c>$ref</c> to a named external schema instead of the inferred shape.</summary>
     public string? OpenApiRefOverride { get; set; }
 
+    // ── constraints read from DataAnnotations / ZibStack.Validation attributes ──
+
+    /// <summary>Minimum string length / array item count (<c>[MinLength]</c>, <c>[StringLength(_, MinimumLength=_)]</c>, <c>[ZMinLength]</c>, <c>[ZNotEmpty]</c>).</summary>
+    public int? MinLength { get; set; }
+
+    /// <summary>Maximum string length / array item count (<c>[MaxLength]</c>, <c>[StringLength]</c>, <c>[ZMaxLength]</c>).</summary>
+    public int? MaxLength { get; set; }
+
+    /// <summary>Inclusive lower bound (<c>[Range]</c>, <c>[ZRange]</c>).</summary>
+    public double? Minimum { get; set; }
+
+    /// <summary>Inclusive upper bound (<c>[Range]</c>, <c>[ZRange]</c>).</summary>
+    public double? Maximum { get; set; }
+
+    /// <summary>Regex pattern (<c>[RegularExpression]</c>, <c>[ZMatch]</c>).</summary>
+    public string? Pattern { get; set; }
+
     public bool TsIgnore { get; set; }
     public bool OpenApiIgnore { get; set; }
 }
