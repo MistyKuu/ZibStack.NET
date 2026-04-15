@@ -306,6 +306,44 @@ public class AopBehaviorTests
 
         Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "PublicWork");
     }
+
+    // ── AOP0001 ground-truth: does the aspect actually fire on a static method? ──
+    //
+    // These tests are the source of truth for the analyzer claim. If they FAIL
+    // (handler.Calls non-empty for a static method), the analyzer is wrong.
+
+    [Fact]
+    public void StaticMethod_WithMethodLevelAspect_HandlerNotCalled()
+    {
+        StaticAspectService.CallCount = 0;
+        _handler.Reset();
+
+        StaticAspectService.GetValue(1);
+        StaticAspectService.GetValue(1);
+
+        Assert.Equal(2, StaticAspectService.CallCount);                // method ran twice
+        Assert.Empty(_handler.Calls);                                  // ← AOP0001 claim
+    }
+
+    [Fact]
+    public void StaticMethod_WithClassLevelAspect_HandlerNotCalled()
+    {
+        ClassLevelMixedService.StaticCallCount = 0;
+        ClassLevelMixedService.InstanceCallCount = 0;
+        _handler.Reset();
+
+        // Verify the class-level aspect fires for INSTANCE method first — sanity check
+        // that the fixture is actually wired to the analyzer / generator.
+        var svc = new ClassLevelMixedService();
+        _ = svc.GetInstance(1);
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "GetInstance");
+
+        // Now the actual AOP0001 claim for class-level + static.
+        _handler.Reset();
+        ClassLevelMixedService.GetStatic(1);
+        Assert.Equal(1, ClassLevelMixedService.StaticCallCount);
+        Assert.Empty(_handler.Calls);                                   // ← AOP0001 claim
+    }
 }
 
 // ── Pure runtime tests (no generator needed) ────────────────────────────────

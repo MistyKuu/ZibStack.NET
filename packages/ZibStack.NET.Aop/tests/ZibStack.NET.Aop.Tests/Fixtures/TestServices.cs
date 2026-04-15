@@ -120,6 +120,42 @@ public class MixedAccessService
     internal int InternalWork(int x) => x;
 }
 
+// ── Static method with aspect ───────────────────────────────────────────────
+//
+// Behavioral test fixture for the AOP0001 analyzer claim ("aspect on static
+// method has no effect"). If the handler IS called for these methods, the
+// analyzer is a false positive and must be removed. If it ISN'T called, the
+// analyzer is correct and the runtime silently ignores the aspect.
+//
+// AOP0001 is suppressed here because we intentionally apply [Record] to a static
+// method to verify the runtime behavior the analyzer claims about — disabling
+// the analyzer for these specific fixtures lets the test compile while still
+// keeping AOP0001 active everywhere else in the project.
+
+#pragma warning disable AOP0001
+public static class StaticAspectService
+{
+    public static int CallCount;
+
+    [Record]
+    public static int GetValue(int id)
+    {
+        CallCount++;
+        return id;
+    }
+}
+
+[Record]
+public class ClassLevelMixedService
+{
+    public static int StaticCallCount;
+    public static int InstanceCallCount;
+
+    public static int GetStatic(int id) { StaticCallCount++; return id; }
+    public int GetInstance(int id) { InstanceCallCount++; return id; }
+}
+#pragma warning restore AOP0001
+
 // ── Built-in [Retry] ───────────────────────────────────────────────────────────
 
 public class RetryTestService
@@ -222,16 +258,16 @@ public class MetricsTestService
 public class TimeoutTestService
 {
     [Timeout(TimeoutMs = 500)]
-    public async Task<int> FastAsync()
+    public async Task<int> FastAsync(CancellationToken cancellationToken = default)
     {
-        await Task.Delay(1);
+        await Task.Delay(1, cancellationToken);
         return 42;
     }
 
     [Timeout(TimeoutMs = 50)]
-    public async Task<int> SlowAsync()
+    public async Task<int> SlowAsync(CancellationToken cancellationToken = default)
     {
-        await Task.Delay(10_000);
+        await Task.Delay(10_000, cancellationToken);
         return 0;
     }
 }

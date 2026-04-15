@@ -12,7 +12,10 @@ public class Order
 
 public class OrderService
 {
+    // Instance method — interceptors need a receiver. AOP0001 catches the `static`
+    // form at compile time; flip back to `public static` to see the error fire.
     [Timing]
+    [Cache]
     public Order GetOrder(int id)
     {
         Thread.Sleep(50);
@@ -39,6 +42,12 @@ public class OrderService2
     [Cache(DurationSeconds = 60)]
     public string GetCachedData(int id) => $"data-{id}-{DateTime.UtcNow.Ticks}";
 
+    // CancellationToken parameter so the timeout can actually cut the call short
+    // (AOP0015 catches the missing-CT form at compile time).
     [Timeout(TimeoutMs = 5000)]
-    public async Task<string> SlowOperationAsync() { await Task.Delay(100); return "done"; }
+    public async Task<string> SlowOperationAsync(CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(100, cancellationToken);
+        return "done";
+    }
 }

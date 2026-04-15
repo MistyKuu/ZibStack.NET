@@ -1,0 +1,39 @@
+<!--
+  Aggregates the four ZibStack.NET.Aop project references into a single import so
+  in-repo consumers (samples, tests, downstream packages) can wire everything up
+  with one line:
+
+      <Import Project="..\..\src\ZibStack.NET.Aop.All.props" />
+
+  This solves the ProjectReference-vs-NuGet asymmetry: when ZibStack.NET.Aop is
+  installed via NuGet, its .nupkg already bundles all three analyzer DLLs under
+  analyzers/dotnet/cs/, so consumers get diagnostics + code fixes automatically.
+  But ProjectReference does NOT propagate transitive analyzer references — only
+  the one project you explicitly point at. Without this .props (or three explicit
+  ProjectReference entries), in-repo consumers would silently miss every AOP00xx
+  / AOP1xxx diagnostic.
+-->
+<Project>
+
+  <ItemGroup>
+    <!-- Source generator -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)ZibStack.NET.Aop\ZibStack.NET.Aop.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <!-- Diagnostics (AOP0001-AOP0021, AOP1001-AOP1003) -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)ZibStack.NET.Aop.Analyzers\ZibStack.NET.Aop.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <!-- Code fixes for the analyzers above -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)ZibStack.NET.Aop.CodeFixes\ZibStack.NET.Aop.CodeFixes.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+
+    <!-- Runtime types: AspectAttribute, IAspectHandler, AspectContext, the built-in
+         aspect attributes (Cache/Retry/Timeout/...), and the convention-enforcement
+         markers (RequireAspect/RequireImplementation/RequireMethod). Consumers need
+         this on the compile reference (NOT analyzer) path. -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
