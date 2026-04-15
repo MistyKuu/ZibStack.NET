@@ -162,6 +162,18 @@ public static class AopEmitter
 
         var indent = "            ";
 
+        // If the method has a CancellationToken parameter, create a linked CTS
+        // upfront so handlers can signal cancellation via AspectContext that the
+        // method body actually observes through its own awaits. The linked source
+        // means cancellation flows BOTH ways: caller-side cancellation still
+        // propagates, and handler-side cancellation (e.g. TimeoutHandler.CancelAfter)
+        // also reaches the body.
+        if (method.CancellationTokenParameterIndex.HasValue)
+        {
+            var ctParam = method.Parameters[method.CancellationTokenParameterIndex.Value];
+            sb.AppendLine($"{indent}using var __linkedCts = global::System.Threading.CancellationTokenSource.CreateLinkedTokenSource({ctParam.Name});");
+        }
+
         // Separate aspects into before/after handlers and around handlers
         var beforeAfterAspects = method.Aspects.Where(a => !a.IsAroundHandler).ToList();
         var aroundAspects = method.Aspects.Where(a => a.IsAroundHandler).ToList();
@@ -185,8 +197,12 @@ public static class AopEmitter
                 EmitRuntimeHandlerBefore(sb, classModel, method, aspect, indent);
         }
 
-        // Build the proceed chain for around handlers
-        var callArgs = string.Join(", ", method.Parameters.Select(p => p.Name));
+        // Build the proceed chain for around handlers. If the method has a CT param,
+        // pass `__linkedCts.Token` in its slot so the body sees cancellation that
+        // any handler signals via __linkedCts (e.g. TimeoutHandler.CancelAfter).
+        var callArgs = string.Join(", ",
+            method.Parameters.Select((p, i) =>
+                method.CancellationTokenParameterIndex == i ? "__linkedCts.Token" : p.Name));
         // Pass method-level type arguments explicitly. Inference usually works when a
         // method type parameter appears in the parameter list, but fails when it only
         // appears in the return type (e.g. `T Create<T>() where T : new()`), so we always
@@ -455,6 +471,14 @@ public static class AopEmitter
             sb.AppendLine($"{indent}    }}");
         }
         sb.AppendLine($"{indent}}};");
+
+        // Expose the CTS the outer interceptor created for methods with a CancellationToken
+        // parameter. Handlers (notably TimeoutHandler) read this to signal cooperative
+        // cancellation that the method body actually sees.
+        if (method.CancellationTokenParameterIndex.HasValue)
+        {
+            sb.AppendLine($"{indent}{ctxVar}.CancellationTokenSource = __linkedCts;");
+        }
 
         // Populate context.Properties with attribute named arguments (e.g. DurationSeconds, MaxAttempts, Roles)
         foreach (var kvp in aspect.Properties)

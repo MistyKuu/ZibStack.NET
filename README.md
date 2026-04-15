@@ -140,7 +140,7 @@ app.Services.UseAop();               // bridges DI into the aspect runtime
 ```
 
 **Compile-time analyzers + code fixes (bundled, no extra install):**
-31 Roslyn diagnostics catch broken aspect placements before you build —
+32 Roslyn diagnostics catch broken aspect placements before you build —
 `[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`, `[Log]` on a
 `private` method, method group conversions that bypass the interceptor,
 `base.Method()` calls that recurse infinitely, plus argument validation
@@ -152,7 +152,7 @@ Plus a set of declarative architecture rules: `[RequireAspect(typeof(LogAttribut
 `[RequireConstructor(typeof(IServiceProvider))]`, `[ScopeTo("MyApp.Internal.**")]`
 — declared once on a base or scoped type, enforced everywhere a derivative
 or call site exists (same idea as Metalama, scoped to focused attributes).
-23 of them ship an Alt+Enter code fix. Full reference:
+25 of them ship an Alt+Enter code fix. Full reference:
 [docs/packages/aop-analyzers](https://mistykuu.github.io/ZibStack.NET/packages/aop-analyzers/).
 
 ---

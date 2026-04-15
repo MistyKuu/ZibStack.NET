@@ -16,7 +16,7 @@ Four families, all under the `ZibStack.Aop` category:
 | Family | Covers | Severity |
 |---|---|---|
 | **Tier 1 — Placement** (`AOP0001`–`AOP0006`) | The mechanics of C# interceptors: where an aspect can be placed and what kind of method it can wrap. | Mostly Error |
-| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0014`, `AOP0016`–`AOP0017`, `AOP0030`–`AOP0041`) | Per-aspect semantic checks of the values you pass. Covers core aspects (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`) AND optional add-on packages (`[PollyRetry]`, `[HttpRetry]`, `[PollyCircuitBreaker]`, `[PollyRateLimiter]`, `[HybridCache]`). The optional checks fire only when those packages are referenced — silent otherwise. | Error / Warning / Info |
+| **Tier 2 — Attribute Arguments** (`AOP0010`–`AOP0017`, `AOP0030`–`AOP0041`) | Per-aspect semantic checks of the values you pass. Covers core aspects (`[Cache]`, `[Retry]`, `[Timeout]`, `[Validate]`) AND optional add-on packages (`[PollyRetry]`, `[HttpRetry]`, `[PollyCircuitBreaker]`, `[PollyRateLimiter]`, `[HybridCache]`). The optional checks fire only when those packages are referenced — silent otherwise. | Error / Warning / Info |
 | **Tier 3 — Call Sites** (`AOP0020`–`AOP0021`) | Code patterns that *look* like they would invoke the aspect but actually bypass the interceptor — or, in the case of `base.Method()` over an aspect-decorated virtual, recurse infinitely. | Warning / Error |
 | **Tier 4 — Convention Enforcement** (`AOP1001`–`AOP1005`) | Architectural rules you declare on a base type / scoped type, enforced on derivatives or on the call site — required aspects, interfaces, methods, constructors, and namespace-scoped usage. | Warning |
 
@@ -155,16 +155,21 @@ public int C() => 1;
 
 ```csharp
 [Timeout(TimeoutMs = 0)]             // ❌ AOP0014
-public Task<int> A() => Task.FromResult(1);
+public Task<int> A(CancellationToken ct) => Task.FromResult(1);
+
+[Timeout(TimeoutMs = 5000)]          // ⚠ AOP0015 — body has no CT to observe → leaks on timeout
+public Task<int> B() => Task.FromResult(1);
 ```
 
-> **Note on `[Timeout]` semantics:** the built-in `TimeoutHandler` does pure
-> `Task.WhenAny(work, Task.Delay(timeoutMs))` — it never signals cancellation to
-> the running call. The caller sees `TimeoutException` after the deadline, but
-> the body keeps running in the background until it finishes naturally. Adding a
-> `CancellationToken` parameter to the method does not change this — the handler
-> ignores it. (An earlier `AOP0015` analyzer used to suggest adding the
-> parameter; it was removed because the suggestion was misleading.)
+> **`[Timeout]` semantics — cooperative when CT param present:** if the method
+> declares a `CancellationToken` parameter, the generator threads a linked
+> `CancellationTokenSource` through it and `TimeoutHandler` calls
+> `CancelAfter(TimeoutMs)`. The body's awaits (e.g. `Task.Delay(ms, ct)`,
+> `HttpClient.GetAsync(url, ct)`) observe the cancellation and abort
+> cooperatively — no background leak. Without the CT param the handler falls
+> back to `Task.WhenAny`: the caller still sees `TimeoutException` promptly, but
+> the body has no signal channel and runs to completion in the background. AOP0015
+> warns about exactly that case.
 
 ### `[PollyRetry]` / `[HttpRetry]` (optional package: `ZibStack.NET.Aop.Polly`)
 
@@ -495,7 +500,7 @@ broaden the scope, or split the type).
 
 ## Code Fix Summary
 
-Twenty-three of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
+Twenty-five of the diagnostics ship a Roslyn code fix you can apply with Alt+Enter / Cmd+. :
 
 | Diagnostic | Code fix |
 |---|---|
@@ -506,6 +511,7 @@ Twenty-three of the diagnostics ship a Roslyn code fix you can apply with Alt+En
 | `AOP0012` | Set `DelayMs = 0` |
 | `AOP0013` | Set `BackoffMultiplier = 1.0` |
 | `AOP0014` | Set `TimeoutMs = 30000` |
+| `AOP0015` | Add `CancellationToken cancellationToken = default` parameter (then forward it to your awaits) |
 | `AOP0016` | Remove `[Validate]` from parameterless method |
 | `AOP1001` | Add `[Aspect]` attribute |
 | `AOP1002` | Implement {Interface} (append to base list) |

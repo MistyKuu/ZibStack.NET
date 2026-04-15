@@ -42,13 +42,14 @@ public class OrderService2
     [Cache(DurationSeconds = 60)]
     public string GetCachedData(int id) => $"data-{id}-{DateTime.UtcNow.Ticks}";
 
-    // [Timeout] aborts to the caller (TimeoutException after the deadline) but the
-    // body keeps running in background regardless of any CancellationToken — the
-    // current TimeoutHandler doesn't signal cancellation to anything.
+    // CancellationToken parameter is required for cooperative cancellation: the
+    // generator threads a linked CTS through it and TimeoutHandler.CancelAfter signals
+    // cancellation that the body sees through Task.Delay. Without the parameter,
+    // AOP0015 fires (timeout aborts to caller but body leaks).
     [Timeout(TimeoutMs = 5000)]
-    public async Task<string> SlowOperationAsync()
+    public async Task<string> SlowOperationAsync(CancellationToken cancellationToken = default)
     {
-        await Task.Delay(100);
+        await Task.Delay(100, cancellationToken);
         return "done";
     }
 }

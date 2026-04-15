@@ -198,6 +198,19 @@ public static class AopParser
         // Method-level type parameters (distinct from the enclosing class's).
         var methodTypeParameters = ExtractMethodTypeParameters(method);
 
+        // First CancellationToken parameter (if any) — emitter swaps a linked-token
+        // CTS in its place so handlers can signal cooperative cancellation that the
+        // method body actually observes through its own awaits.
+        int? ctIndex = null;
+        for (int i = 0; i < method.Parameters.Length; i++)
+        {
+            if (method.Parameters[i].Type.ToDisplayString() == "System.Threading.CancellationToken")
+            {
+                ctIndex = i;
+                break;
+            }
+        }
+
         return new InterceptedMethodModel(
             method.Name,
             returnTypeStr,
@@ -208,7 +221,8 @@ public static class AopParser
             aspects,
             hasComplexReturnType,
             sanitizedReturnType,
-            methodTypeParameters);
+            methodTypeParameters,
+            ctIndex);
     }
 
     private static IReadOnlyList<TypeParameterModel> ExtractMethodTypeParameters(IMethodSymbol method)

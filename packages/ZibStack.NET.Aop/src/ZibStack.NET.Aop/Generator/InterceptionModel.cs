@@ -114,6 +114,17 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
     /// </summary>
     public bool IsGenericMethod => MethodTypeParameters.Count > 0;
 
+    /// <summary>
+    /// Zero-based index of the first <see cref="System.Threading.CancellationToken"/>
+    /// parameter, or <c>null</c> if the method has no CT parameter. The emitter uses
+    /// this to decide whether to wire a linked CTS through to the call: when set, it
+    /// substitutes the original CT argument with a linked-cancel token sourced from
+    /// a CTS exposed via <see cref="AspectContext.CancellationTokenSource"/>, so
+    /// handlers like <c>TimeoutHandler</c> can signal cancellation that the body will
+    /// actually observe through its own awaits.
+    /// </summary>
+    public int? CancellationTokenParameterIndex { get; }
+
     public InterceptedMethodModel(
         string methodName,
         string returnType,
@@ -124,7 +135,8 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
         IReadOnlyList<AspectInfo> aspects,
         bool hasComplexReturnType = false,
         SanitizedTypeModel? sanitizedReturnType = null,
-        IReadOnlyList<TypeParameterModel>? methodTypeParameters = null)
+        IReadOnlyList<TypeParameterModel>? methodTypeParameters = null,
+        int? cancellationTokenParameterIndex = null)
     {
         MethodName = methodName;
         ReturnType = returnType;
@@ -136,6 +148,7 @@ public sealed class InterceptedMethodModel : IEquatable<InterceptedMethodModel>
         HasComplexReturnType = hasComplexReturnType;
         SanitizedReturnType = sanitizedReturnType;
         MethodTypeParameters = methodTypeParameters ?? System.Array.Empty<TypeParameterModel>();
+        CancellationTokenParameterIndex = cancellationTokenParameterIndex;
     }
 
     public bool Equals(InterceptedMethodModel? other)

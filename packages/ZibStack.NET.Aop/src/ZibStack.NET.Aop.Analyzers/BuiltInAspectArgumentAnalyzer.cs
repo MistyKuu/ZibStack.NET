@@ -28,6 +28,7 @@ public sealed class BuiltInAspectArgumentAnalyzer : DiagnosticAnalyzer
     private const string PollyRateLimiterAttributeFullName = "ZibStack.NET.Aop.PollyRateLimiterAttribute";
     private const string HybridCacheAttributeFullName = "ZibStack.NET.Aop.HybridCacheAttribute";
 
+    private const string CancellationTokenFullName = "System.Threading.CancellationToken";
     private const string DataAnnotationsNamespace = "System.ComponentModel.DataAnnotations";
     // ZibStack's own validation marker that should also count as "annotated".
     private const string ValidationAttributeFullName = "System.ComponentModel.DataAnnotations.ValidationAttribute";
@@ -39,6 +40,7 @@ public sealed class BuiltInAspectArgumentAnalyzer : DiagnosticAnalyzer
             Diagnostics.RetryDelay,
             Diagnostics.RetryBackoff,
             Diagnostics.TimeoutValue,
+            Diagnostics.TimeoutNoCancellationToken,
             Diagnostics.ValidateNoParameters,
             Diagnostics.ValidateNoAnnotations,
             Diagnostics.PollyRetryMaxAttempts,
@@ -232,10 +234,17 @@ public sealed class BuiltInAspectArgumentAnalyzer : DiagnosticAnalyzer
         {
             ReportOnAttribute(ctx, Diagnostics.TimeoutValue, attr, timeoutMs.Value);
         }
-        // No CancellationToken-presence check here — TimeoutHandler ignores any CT param
-        // anyway (it uses Task.WhenAny internally and never signals cancellation), so
-        // demanding a CT param would be a misleading false claim. See removal note in
-        // Diagnostics.cs (where AOP0015 used to live).
+
+        // AOP0015 — verified honest after the TimeoutHandler rewrite. The handler now
+        // uses ctx.CancellationTokenSource (wired by the generator) when the method
+        // has a CancellationToken parameter; otherwise it falls back to
+        // Task.WhenAny, which still aborts to the caller but leaks the body.
+        var hasCt = method.Parameters.Any(p =>
+            p.Type.ToDisplayString() == CancellationTokenFullName);
+        if (!hasCt)
+        {
+            ReportOnAttribute(ctx, Diagnostics.TimeoutNoCancellationToken, attr, method.Name);
+        }
     }
 
     // ── [Validate] ─────────────────────────────────────────────────────────

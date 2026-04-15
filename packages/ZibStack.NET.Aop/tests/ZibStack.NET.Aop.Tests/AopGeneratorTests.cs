@@ -407,6 +407,31 @@ public class AopBehaviorTests
     // (AOP0015 used to fire here suggesting "add a CT param" — that analyzer was
     // removed because the suggestion was misleading: the handler ignores any CT.)
 
+    // Cooperative path — proves the new handler+generator wiring works end-to-end:
+    // method has CT param → generator emits linked CTS → handler CancelAfter signals →
+    // body's Task.Delay observes → body throws → handler translates to TimeoutException
+    // → body does NOT complete in the background (no leak).
+
+    [Fact]
+    public async Task TimeoutWithCT_CooperativelyCancelsTheBody()
+    {
+        var svc = new TimeoutWithTokenService();
+        svc.CompletedCallCount = 0;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await Assert.ThrowsAsync<TimeoutException>(() => svc.SlowAsync());
+        sw.Stop();
+
+        // Caller sees TimeoutException promptly (~50ms timeout, allow a bit of slack).
+        Assert.True(sw.ElapsedMilliseconds < 150,
+            $"Caller should see TimeoutException quickly, got {sw.ElapsedMilliseconds}ms");
+
+        // Wait long enough that the original Task.Delay(200) WOULD have completed.
+        // If the body got cooperatively cancelled, CompletedCallCount stays 0.
+        await Task.Delay(300);
+        Assert.Equal(0, svc.CompletedCallCount);
+    }
+
     [Fact]
     public async Task Timeout_AbortsToCallerButLeaksTheCall()
     {

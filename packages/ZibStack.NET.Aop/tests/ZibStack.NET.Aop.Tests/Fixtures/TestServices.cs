@@ -241,13 +241,19 @@ public class PollyCircuitBreakerService
     }
 }
 
-// ── TimeoutHandler ground truth: handler doesn't use any CT internally ──────
+// ── TimeoutHandler ground truths: cooperative vs non-cooperative paths ──────
 //
-// Used by Timeout_AbortsToCallerButLeaksTheCall — the body completes in the
-// background even though the caller already saw a TimeoutException. This is
-// what TimeoutHandler does today (pure Task.WhenAny), and pinning it here
-// catches a regression if the handler is ever rewritten to actually cancel.
+// AOP0015 fires on TimeoutNoTokenService (no CT param) — pragma-suppress so the
+// project compiles; the test asserts the analyzer's claim is true at runtime
+// (body keeps running in background after caller sees TimeoutException).
+//
+// TimeoutWithTokenService verifies the cooperative path the rewritten handler
+// takes when the method DOES have a CT param: TimeoutHandler.CancelAfter signals
+// the linked CTS the generator wired in, the body's Task.Delay observes it,
+// the body throws OperationCanceledException → handler translates to
+// TimeoutException, and the body does NOT complete in background.
 
+#pragma warning disable AOP0015
 public class TimeoutNoTokenService
 {
     public int CompletedCallCount;
@@ -256,6 +262,23 @@ public class TimeoutNoTokenService
     public async Task<int> SlowAsync()
     {
         await Task.Delay(200);
+        CompletedCallCount++;
+        return 42;
+    }
+}
+#pragma warning restore AOP0015
+
+public class TimeoutWithTokenService
+{
+    public int CompletedCallCount;
+
+    [Timeout(TimeoutMs = 50)]
+    public async Task<int> SlowAsync(CancellationToken cancellationToken = default)
+    {
+        // Forward the token to the inner await — when TimeoutHandler signals the
+        // linked CTS via CancelAfter, this Task.Delay throws TaskCanceledException
+        // and the body never reaches CompletedCallCount++.
+        await Task.Delay(200, cancellationToken);
         CompletedCallCount++;
         return 42;
     }

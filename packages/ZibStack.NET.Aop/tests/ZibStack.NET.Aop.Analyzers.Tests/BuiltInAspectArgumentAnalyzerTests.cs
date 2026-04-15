@@ -255,8 +255,46 @@ public class Svc
         await Verify.VerifyAnalyzerAsync(test, expected);
     }
 
-    // AOP0015 was here — removed because TimeoutHandler doesn't actually use any
-    // CancellationToken. The previous test demanded a CT param the runtime ignores.
+    // ── AOP0015: [Timeout] without CancellationToken parameter ──
+
+    [Fact]
+    public async Task TimeoutWithoutCancellationToken_ReportsAOP0015()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+using System.Threading.Tasks;
+
+public class Svc
+{
+    [{|#0:Timeout(TimeoutMs = 5000)|}]
+    public Task<int> GetAsync() => Task.FromResult(1);
+}
+" + AopStubs;
+
+        var expected = Verify.Diagnostic(Diagnostics.TimeoutNoCancellationToken)
+            .WithLocation(0)
+            .WithArguments("GetAsync");
+
+        await Verify.VerifyAnalyzerAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task TimeoutWithCancellationToken_NoDiagnostic()
+    {
+        var test = @"
+using ZibStack.NET.Aop;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class Svc
+{
+    [Timeout(TimeoutMs = 5000)]
+    public Task<int> GetAsync(CancellationToken ct) => Task.FromResult(1);
+}
+" + AopStubs;
+
+        await Verify.VerifyAnalyzerAsync(test);
+    }
 
     // ── AOP0016: [Validate] on parameterless method ──
 

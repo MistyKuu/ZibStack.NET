@@ -126,13 +126,15 @@ public static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    // AOP0015 was here — TimeoutNoCancellationToken. Removed because the
-    // TimeoutHandler doesn't actually use any CancellationToken: it does pure
-    // Task.WhenAny(work, Task.Delay(timeoutMs)). Adding a CT param to satisfy
-    // the analyzer wouldn't change behavior — the handler would still ignore it
-    // and the body would still leak. The right fix is in the handler (create a
-    // CTS, signal it on timeout, propagate to a CT param if present), not in a
-    // misleading per-method warning.
+    public const string TimeoutNoCancellationTokenId = "AOP0015";
+    public static readonly DiagnosticDescriptor TimeoutNoCancellationToken = new(
+        TimeoutNoCancellationTokenId,
+        title: "[Timeout] without a CancellationToken parameter leaks the running call",
+        messageFormat: "[Timeout] on '{0}' aborts to the caller (TimeoutException is thrown after the deadline) but the method body has no CancellationToken parameter to observe — it keeps running in the background until natural completion. Add a CancellationToken parameter and forward it to your awaits to cooperatively cancel.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "When the method has a CancellationToken parameter, the generator threads a linked CTS through it and TimeoutHandler.CancelAfter signals cooperative cancellation. Without the parameter, only the outer Task.WhenAny path is available — the caller sees TimeoutException promptly, but the body has no signal channel and runs to completion in the background.");
 
     public const string ValidateNoParametersId = "AOP0016";
     public static readonly DiagnosticDescriptor ValidateNoParameters = new(
