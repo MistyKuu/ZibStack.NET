@@ -14,7 +14,18 @@
     <ProjectReference Include="..\..\..\ZibStack.NET.UI\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Query\src\ZibStack.NET.Query\ZibStack.NET.Query.csproj" />
+    <!-- TypeGen sees [CrudApi] already present on the Dto models and contributes
+         the matching `paths:` block to the generated openapi.yaml — this is the
+         canonical Dto + TypeGen integration demo. -->
+    <ProjectReference Include="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen.Abstractions\ZibStack.NET.TypeGen.Abstractions.csproj" />
   </ItemGroup>
+
+  <!-- Pick up the TypeGen post-build .ts/.yaml writer (NuGet consumers get this
+       auto via build/<pkg>.targets; in-repo ProjectReference users wire manually). -->
+  <Import Project="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen\build\ZibStack.NET.TypeGen.targets" />
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />

@@ -1,5 +1,6 @@
 using ZibStack.NET.Core;
 using ZibStack.NET.Dto;
+using ZibStack.NET.TypeGen;
 using ZibStack.NET.UI;
 using ZibStack.NET.Validation;
 
@@ -9,6 +10,12 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [UiForm]
 [UiTable(DefaultSort = "Name")]
 [ZValidate]
+// TypeGen discovers [CrudApi] via metadata name and contributes the matching
+// paths: block to generated/openapi.yaml (GET/POST/PATCH/DELETE). The TS
+// interface is emitted alongside so a frontend can type-check against the same
+// contract without a second tool.
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+               OutputDir = "generated")]
 public partial class Team
 {
     [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
