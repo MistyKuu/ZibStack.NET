@@ -162,6 +162,105 @@ public class ConfiguratorParserTests
     }
 
     [Fact]
+    public void Property_OverridesAppliedToCorrectProperty()
+    {
+        var parsed = Parse("""
+            public class Order { public string Email { get; set; } public int Id { get; set; } }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>()
+                        .Property(c => c.Email)
+                            .TsName("emailAddress")
+                            .TsType("string")
+                            .OpenApiFormat("email")
+                            .OpenApiDescription("Verified email.");
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        var email = parsed!.PerType["Order"].Properties["Email"];
+        Assert.Equal("emailAddress", email.TsName);
+        Assert.Equal("string", email.TsType);
+        Assert.Equal("email", email.OpenApiFormat);
+        Assert.Equal("Verified email.", email.OpenApiDescription);
+    }
+
+    [Fact]
+    public void MultipleProperties_OnSameType_TrackedSeparately()
+    {
+        var parsed = Parse("""
+            public class Order { public string Email { get; set; } public int InternalId { get; set; } }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>()
+                        .Property(c => c.Email).TsName("emailAddress")
+                        .Property(c => c.InternalId).Ignore();
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        var props = parsed!.PerType["Order"].Properties;
+        Assert.Equal("emailAddress", props["Email"].TsName);
+        Assert.True(props["InternalId"].Ignore);
+        Assert.Null(props["InternalId"].TsName);  // first prop's TsName must NOT leak to second
+    }
+
+    [Fact]
+    public void TypeAndPropertyChain_Mixed()
+    {
+        // Calls before the first .Property(...) target the type; after, target the property.
+        var parsed = Parse("""
+            public class Order { public string Email { get; set; } }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>()
+                        .TsName("OrderDto")
+                        .Property(c => c.Email).TsName("emailAddress");
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        var t = parsed!.PerType["Order"];
+        Assert.Equal("OrderDto", t.TsName);
+        Assert.Equal("emailAddress", t.Properties["Email"].TsName);
+    }
+
+    [Fact]
+    public void OpenApiNullable_BoolLiteralAccepted()
+    {
+        var parsed = Parse("""
+            public class Order { public string? Note { get; set; } }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>().Property(c => c.Note).OpenApiNullable(false);
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        Assert.Equal(false, parsed!.PerType["Order"].Properties["Note"].OpenApiNullable);
+    }
+
+    [Fact]
+    public void NestedPropertyAccess_NotSupported_ReportsTG0012()
+    {
+        // c.Inner.Email — only single-member access is allowed.
+        var parsed = Parse("""
+            public class Inner { public string Email { get; set; } }
+            public class Order { public Inner Inner { get; set; } }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>().Property(c => c.Inner.Email).TsName("x");
+                }
+            }
+            """, out var diags);
+        Assert.Contains(diags, d => d.Id == "TG0012");
+    }
+
+    [Fact]
     public void MultipleConfigurators_ReportsTG0010()
     {
         Parse("""
@@ -214,6 +313,19 @@ public class ConfiguratorParserTests
                     ITypeBuilder<T> Ignore();
                     ITypeBuilder<T> TsIgnore();
                     ITypeBuilder<T> OpenApiIgnore();
+                    IPropertyBuilder<T, TProp> Property<TProp>(System.Linq.Expressions.Expression<System.Func<T, TProp>> sel);
+                }
+                public interface IPropertyBuilder<TClass, TProp> {
+                    IPropertyBuilder<TClass, TProp> TsName(string n);
+                    IPropertyBuilder<TClass, TProp> TsType(string t);
+                    IPropertyBuilder<TClass, TProp> OpenApiName(string n);
+                    IPropertyBuilder<TClass, TProp> OpenApiFormat(string f);
+                    IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);
+                    IPropertyBuilder<TClass, TProp> OpenApiNullable(bool n);
+                    IPropertyBuilder<TClass, TProp> Ignore();
+                    IPropertyBuilder<TClass, TProp> TsIgnore();
+                    IPropertyBuilder<TClass, TProp> OpenApiIgnore();
+                    IPropertyBuilder<TClass, TNext> Property<TNext>(System.Linq.Expressions.Expression<System.Func<TClass, TNext>> sel);
                 }
                 public interface ITypeGenConfigurator { void Configure(ITypeGenBuilder b); }
             }
@@ -224,6 +336,8 @@ public class ConfiguratorParserTests
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Action).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Linq.Expressions.Expression).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Func<>).Assembly.Location),
         };
         var compilation = CSharpCompilation.Create(
             "ConfiguratorParserTest",

@@ -126,6 +126,22 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         if (o.Ignore) { cls.TsIgnore = true; cls.OpenApiIgnore = true; }
         cls.TsIgnore |= o.TsIgnore;
         cls.OpenApiIgnore |= o.OpenApiIgnore;
+
+        // Per-property fluent overrides — attribute values already on SchemaProperty win,
+        // fluent only fills nulls. Boolean ignore flags OR-merge so fluent can widen.
+        foreach (var prop in cls.Properties)
+        {
+            if (!o.Properties.TryGetValue(prop.SourceName, out var po)) continue;
+            prop.TsNameOverride ??= po.TsName;
+            prop.TsTypeOverride ??= po.TsType;
+            prop.OpenApiNameOverride ??= po.OpenApiName;
+            prop.OpenApiFormat ??= po.OpenApiFormat;
+            prop.OpenApiDescription ??= po.OpenApiDescription;
+            prop.OpenApiNullableOverride ??= po.OpenApiNullable;
+            if (po.Ignore) { prop.TsIgnore = true; prop.OpenApiIgnore = true; }
+            prop.TsIgnore |= po.TsIgnore;
+            prop.OpenApiIgnore |= po.OpenApiIgnore;
+        }
     }
 
     private static void ApplyFluentToEnum(SchemaEnum en, ConfiguratorParser.Parsed? config)

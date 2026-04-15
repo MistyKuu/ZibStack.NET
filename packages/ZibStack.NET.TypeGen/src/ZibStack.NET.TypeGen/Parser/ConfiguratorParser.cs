@@ -26,6 +26,22 @@ internal static class ConfiguratorParser
         public bool Ignore { get; set; }
         public bool TsIgnore { get; set; }
         public bool OpenApiIgnore { get; set; }
+
+        /// <summary>Per-property fluent overrides keyed by property name (case-sensitive, matches C# source).</summary>
+        public Dictionary<string, PerPropertyOverrides> Properties { get; } = new();
+    }
+
+    public sealed class PerPropertyOverrides
+    {
+        public string? TsName { get; set; }
+        public string? TsType { get; set; }
+        public string? OpenApiName { get; set; }
+        public string? OpenApiFormat { get; set; }
+        public string? OpenApiDescription { get; set; }
+        public bool? OpenApiNullable { get; set; }
+        public bool Ignore { get; set; }
+        public bool TsIgnore { get; set; }
+        public bool OpenApiIgnore { get; set; }
     }
 
     public sealed class Parsed
@@ -144,8 +160,7 @@ internal static class ConfiguratorParser
                 if (typeName is null) { ReportUnknown(report, first); return; }
                 if (!parsed.PerType.TryGetValue(typeName, out var overrides))
                     parsed.PerType[typeName] = overrides = new PerTypeOverrides();
-                for (int i = 1; i < calls.Count; i++)
-                    ApplyPerTypeCall(calls[i], semantic, overrides, report);
+                ProcessForTypeChain(calls, semantic, overrides, report);
                 return;
 
             default:
@@ -262,42 +277,127 @@ internal static class ConfiguratorParser
         }
     }
 
-    // ── per-type chain calls ───────────────────────────────────────────────
+    // ── per-type chain calls (state machine for type ↔ property context) ───
 
-    private static void ApplyPerTypeCall(
+    /// <summary>
+    /// Walks the chain after <c>b.ForType&lt;T&gt;()</c>. Tracks "currently
+    /// selected property" — calls before the first <c>.Property(...)</c> apply
+    /// to the type; calls after apply to the most recent property until another
+    /// <c>.Property(...)</c> switches context.
+    /// </summary>
+    private static void ProcessForTypeChain(
+        List<InvocationExpressionSyntax> calls,
+        SemanticModel sm,
+        PerTypeOverrides typeOverrides,
+        System.Action<Diagnostic> report)
+    {
+        PerPropertyOverrides? currentProp = null;
+        for (int i = 1; i < calls.Count; i++)
+        {
+            var inv = calls[i];
+            var name = GetMethodName(inv.Expression);
+            if (name is null) { ReportUnknown(report, inv); continue; }
+
+            if (name == "Property")
+            {
+                var propName = ResolvePropertySelector(inv, sm);
+                if (propName is null) { ReportUnknown(report, inv); currentProp = null; continue; }
+                if (!typeOverrides.Properties.TryGetValue(propName, out currentProp))
+                    typeOverrides.Properties[propName] = currentProp = new PerPropertyOverrides();
+                continue;
+            }
+
+            if (currentProp is null)
+                ApplyTypeLevelCall(inv, name, sm, typeOverrides, report);
+            else
+                ApplyPropertyLevelCall(inv, name, sm, currentProp, report);
+        }
+    }
+
+    private static void ApplyTypeLevelCall(
         InvocationExpressionSyntax inv,
+        string name,
         SemanticModel sm,
         PerTypeOverrides o,
         System.Action<Diagnostic> report)
     {
-        var name = GetMethodName(inv.Expression);
-        if (name is null) { ReportUnknown(report, inv); return; }
-
-        string? Arg()
-        {
-            if (inv.ArgumentList.Arguments.Count == 0) return null;
-            var v = ReadLiteralValue(inv.ArgumentList.Arguments[0].Expression, sm);
-            if (v is NonLiteralMarker)
-            {
-                report(Diagnostic.Create(
-                    TypeGenDiagnostics.NonLiteralArgument,
-                    inv.ArgumentList.Arguments[0].GetLocation(),
-                    name));
-                return null;
-            }
-            return v as string;
-        }
-
+        string? arg = ReadStringArg(inv, name, sm, report);
         switch (name)
         {
-            case "TsName": o.TsName = Arg(); break;
-            case "OpenApiName": o.OpenApiName = Arg(); break;
-            case "OutputDir": o.OutputDir = Arg(); break;
+            case "TsName": o.TsName = arg; break;
+            case "OpenApiName": o.OpenApiName = arg; break;
+            case "OutputDir": o.OutputDir = arg; break;
             case "Ignore": o.Ignore = true; break;
             case "TsIgnore": o.TsIgnore = true; break;
             case "OpenApiIgnore": o.OpenApiIgnore = true; break;
             default: ReportUnknown(report, inv); break;
         }
+    }
+
+    private static void ApplyPropertyLevelCall(
+        InvocationExpressionSyntax inv,
+        string name,
+        SemanticModel sm,
+        PerPropertyOverrides o,
+        System.Action<Diagnostic> report)
+    {
+        string? arg = ReadStringArg(inv, name, sm, report);
+        switch (name)
+        {
+            case "TsName": o.TsName = arg; break;
+            case "TsType": o.TsType = arg; break;
+            case "OpenApiName": o.OpenApiName = arg; break;
+            case "OpenApiFormat": o.OpenApiFormat = arg; break;
+            case "OpenApiDescription": o.OpenApiDescription = arg; break;
+            case "OpenApiNullable":
+                var v = ReadLiteralValue(inv.ArgumentList.Arguments[0].Expression, sm);
+                if (v is bool b) o.OpenApiNullable = b;
+                else if (v is NonLiteralMarker) report(Diagnostic.Create(
+                    TypeGenDiagnostics.NonLiteralArgument,
+                    inv.ArgumentList.Arguments[0].GetLocation(), name));
+                break;
+            case "Ignore": o.Ignore = true; break;
+            case "TsIgnore": o.TsIgnore = true; break;
+            case "OpenApiIgnore": o.OpenApiIgnore = true; break;
+            default: ReportUnknown(report, inv); break;
+        }
+    }
+
+    private static string? ReadStringArg(
+        InvocationExpressionSyntax inv, string name, SemanticModel sm, System.Action<Diagnostic> report)
+    {
+        if (inv.ArgumentList.Arguments.Count == 0) return null;
+        var v = ReadLiteralValue(inv.ArgumentList.Arguments[0].Expression, sm);
+        if (v is NonLiteralMarker)
+        {
+            report(Diagnostic.Create(
+                TypeGenDiagnostics.NonLiteralArgument,
+                inv.ArgumentList.Arguments[0].GetLocation(),
+                name));
+            return null;
+        }
+        return v as string;
+    }
+
+    /// <summary>
+    /// Decodes <c>.Property(c =&gt; c.Email)</c> by walking the lambda body. Only
+    /// simple member access on the lambda parameter is recognised — <c>c.X.Y</c>
+    /// or method calls return null and surface as <c>TG0012</c>.
+    /// </summary>
+    private static string? ResolvePropertySelector(InvocationExpressionSyntax inv, SemanticModel sm)
+    {
+        if (inv.ArgumentList.Arguments.Count == 0) return null;
+        if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return null;
+        ExpressionSyntax? body = lambda.Body switch
+        {
+            ExpressionSyntax e => e,
+            BlockSyntax block when block.Statements.Count == 1
+                && block.Statements[0] is ReturnStatementSyntax ret => ret.Expression,
+            _ => null,
+        };
+        if (body is not MemberAccessExpressionSyntax ma) return null;
+        if (ma.Expression is not IdentifierNameSyntax) return null;   // reject c.X.Y
+        return ma.Name.Identifier.Text;
     }
 
     private static void ReportUnknown(System.Action<Diagnostic> report, InvocationExpressionSyntax inv) =>

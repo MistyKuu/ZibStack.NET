@@ -62,8 +62,11 @@ components:
           format: int32
         Name:
           type: string
+          description: Display name shown in receipts.
         Email:
           type: string
+          format: email
+          description: Verified contact email.
     OrderStatus:
       type: string
       enum:

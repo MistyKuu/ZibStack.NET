@@ -70,6 +70,15 @@ public sealed class SampleApiBuildTests
         Assert.False(File.Exists(Path.Combine(GeneratedDir, "Customer.ts")),
             "Old non-renamed Customer.ts still present — fluent rename didn't supersede source name.");
         Assert.Contains("    CustomerV1:", yaml);
+
+        // Per-property fluent: b.ForType<Customer>().Property(c => c.Email).TsName("emailAddress")
+        // .OpenApiFormat("email").OpenApiDescription("Verified contact email.")
+        var customerTs = File.ReadAllText(Path.Combine(GeneratedDir, "CustomerDto.ts"));
+        Assert.Contains("emailAddress: string;", customerTs);
+        Assert.DoesNotContain("email:", customerTs);   // original camelCase name must not leak
+        Assert.Contains("format: email", yaml);
+        Assert.Contains("description: Verified contact email.", yaml);
+        Assert.Contains("description: Display name shown in receipts.", yaml);
     }
 
     private static (int Exit, string Output) Run(string file, string args)

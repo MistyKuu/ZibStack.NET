@@ -1,4 +1,5 @@
 using System;
+using System.Linq.Expressions;
 
 namespace ZibStack.NET.TypeGen;
 
@@ -114,4 +115,54 @@ public interface ITypeBuilder<T>
 
     /// <summary>Equivalent to <c>[OpenApiIgnore]</c> on the class.</summary>
     ITypeBuilder<T> OpenApiIgnore();
+
+    /// <summary>
+    /// Begin per-property overrides. The selector lambda is parsed at compile time
+    /// to extract the property name — only simple member access is supported
+    /// (<c>c =&gt; c.Email</c>), no method calls, no nested paths. Returns to the
+    /// type builder via the next chained call (the property builder is itself
+    /// chainable, so further <c>.Property(...)</c> calls work directly).
+    /// </summary>
+    IPropertyBuilder<T, TProp> Property<TProp>(Expression<Func<T, TProp>> selector);
+}
+
+/// <summary>
+/// Per-property fluent overrides. Mirrors the per-property attributes
+/// (<see cref="TsNameAttribute"/>, <see cref="TsTypeAttribute"/>,
+/// <see cref="OpenApiPropertyAttribute"/>, etc.). Use when you can't or don't
+/// want to annotate the source — e.g. DTOs from a referenced library.
+/// </summary>
+/// <typeparam name="TClass">Owning class.</typeparam>
+/// <typeparam name="TProp">Property type — informs IntelliSense, ignored by the parser.</typeparam>
+public interface IPropertyBuilder<TClass, TProp>
+{
+    /// <summary>Equivalent to <c>[TsName(name)]</c> on the property.</summary>
+    IPropertyBuilder<TClass, TProp> TsName(string name);
+
+    /// <summary>Equivalent to <c>[TsType(typeExpression)]</c> — opaque TS type literal.</summary>
+    IPropertyBuilder<TClass, TProp> TsType(string typeExpression);
+
+    /// <summary>Equivalent to <c>[OpenApiSchemaName(name)]</c> on the property.</summary>
+    IPropertyBuilder<TClass, TProp> OpenApiName(string name);
+
+    /// <summary>Equivalent to <c>[OpenApiProperty(Format = format)]</c>.</summary>
+    IPropertyBuilder<TClass, TProp> OpenApiFormat(string format);
+
+    /// <summary>Equivalent to <c>[OpenApiProperty(Description = description)]</c>.</summary>
+    IPropertyBuilder<TClass, TProp> OpenApiDescription(string description);
+
+    /// <summary>Equivalent to <c>[OpenApiProperty(Nullable = nullable)]</c> — overrides NRT inference.</summary>
+    IPropertyBuilder<TClass, TProp> OpenApiNullable(bool nullable);
+
+    /// <summary>Skip this property in both TypeScript and OpenAPI output.</summary>
+    IPropertyBuilder<TClass, TProp> Ignore();
+
+    /// <summary>Equivalent to <c>[TsIgnore]</c> on the property.</summary>
+    IPropertyBuilder<TClass, TProp> TsIgnore();
+
+    /// <summary>Equivalent to <c>[OpenApiIgnore]</c> on the property.</summary>
+    IPropertyBuilder<TClass, TProp> OpenApiIgnore();
+
+    /// <summary>Continue with another property on the same owning type.</summary>
+    IPropertyBuilder<TClass, TNext> Property<TNext>(Expression<Func<TClass, TNext>> selector);
 }

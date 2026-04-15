@@ -31,6 +31,12 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         // rules apply: if Customer also had a [TsName] attribute it would win over this.
         b.ForType<Customer>()
             .TsName("CustomerDto")
-            .OpenApiName("CustomerV1");
+            .OpenApiName("CustomerV1")
+            .Property(c => c.Email)
+                .TsName("emailAddress")
+                .OpenApiFormat("email")
+                .OpenApiDescription("Verified contact email.")
+            .Property(c => c.Name)
+                .OpenApiDescription("Display name shown in receipts.");
     }
 }
