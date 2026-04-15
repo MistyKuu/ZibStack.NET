@@ -12,16 +12,14 @@ using ZibStack.NET.Aop.Analyzers;
 namespace ZibStack.NET.Aop.CodeFixes;
 
 /// <summary>
-/// Code fix for AOP0011 — replaces invalid <c>MaxAttempts = 0/-N</c> with the
-/// default <c>3</c>. Picks 3 (matching <c>RetryAttribute.MaxAttempts</c>'s default)
-/// rather than 1 because anyone who typed <c>[Retry(...)]</c> is asking for retries;
-/// "1 attempt" is "no retry" and likely a typo.
+/// Code fix for AOP0012 — replaces a negative <c>DelayMs</c> with <c>0</c>
+/// (the attribute's default), which means "retry without waiting".
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp), Shared]
-public sealed class FixRetryMaxAttemptsCodeFix : CodeFixProvider
+public sealed class FixRetryDelayCodeFix : CodeFixProvider
 {
     public override ImmutableArray<string> FixableDiagnosticIds =>
-        ImmutableArray.Create(Diagnostics.RetryMaxAttemptsId);
+        ImmutableArray.Create(Diagnostics.RetryDelayId);
 
     public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
 
@@ -33,15 +31,15 @@ public sealed class FixRetryMaxAttemptsCodeFix : CodeFixProvider
         var diagnostic = context.Diagnostics[0];
         var attr = root.FindNode(diagnostic.Location.SourceSpan)
             .AncestorsAndSelf().OfType<AttributeSyntax>().FirstOrDefault();
-        var arg = attr is null ? null : SetAttributeArgumentHelper.FindNamedArg(attr, "MaxAttempts");
+        var arg = attr is null ? null : SetAttributeArgumentHelper.FindNamedArg(attr, "DelayMs");
         if (arg is null) return;
 
         context.RegisterCodeFix(
             CodeAction.Create(
-                title: "Set MaxAttempts to 3",
+                title: "Set DelayMs to 0",
                 createChangedDocument: ct => SetAttributeArgumentHelper.SetNumericArgAsync(
-                    context.Document, arg, SyntaxFactory.Literal(3), ct),
-                equivalenceKey: "AOP_SetMaxAttempts3"),
+                    context.Document, arg, SyntaxFactory.Literal(0), ct),
+                equivalenceKey: "AOP_SetDelayMs0"),
             diagnostic);
     }
 }
