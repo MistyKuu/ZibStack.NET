@@ -1,3 +1,4 @@
+using System;
 using ZibStack.NET.Core;
 using ZibStack.NET.Dto;
 using ZibStack.NET.TypeGen;

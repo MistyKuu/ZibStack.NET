@@ -281,6 +281,41 @@ public class ConfiguratorParserTests
     }
 
     [Fact]
+    public void WithGeneratedTypes_StoresFluentTargetsBitmask()
+    {
+        // Opt-in fluent discovery — the parser should record the flag value as int.
+        var parsed = Parse("""
+            public class Article {}
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Article>().WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi);
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        var article = parsed!.PerType["Article"];
+        Assert.NotNull(article.FluentTargets);
+        // TypeScript=1, OpenApi=2 → 3.
+        Assert.Equal(3, article.FluentTargets);
+    }
+
+    [Fact]
+    public void WithGeneratedTypes_NotCalled_LeavesFluentTargetsNull()
+    {
+        // Per-type config without explicit opt-in — type stays attribute-driven only.
+        var parsed = Parse("""
+            public class Article {}
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Article>().TsName("ArticleDto");
+                }
+            }
+            """, out _);
+        Assert.Null(parsed!.PerType["Article"].FluentTargets);
+    }
+
+    [Fact]
     public void MultipleConfigurators_ReportsTG0010()
     {
         Parse("""
@@ -303,6 +338,8 @@ public class ConfiguratorParserTests
         const string stubs = """
             using System;
             namespace ZibStack.NET.TypeGen {
+                [System.Flags]
+                public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
                 public enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
                 public enum TypeScriptFileLayout { FilePerClass, SingleFile }
                 public sealed class TypeScriptSettings {
@@ -327,6 +364,7 @@ public class ConfiguratorParserTests
                     ITypeBuilder<T> ForType<T>();
                 }
                 public interface ITypeBuilder<T> {
+                    ITypeBuilder<T> WithGeneratedTypes(TypeTarget targets);
                     ITypeBuilder<T> TsName(string n);
                     ITypeBuilder<T> OpenApiName(string n);
                     ITypeBuilder<T> OutputDir(string d);

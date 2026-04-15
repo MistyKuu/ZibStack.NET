@@ -193,9 +193,23 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             .OutputDir("generated/orders");
 
         b.ForType<InternalAudit>().Ignore();
+
+        // Fluent-only discovery — no [GenerateTypes] needed on the class.
+        // .WithGeneratedTypes(targets) opts the type into emission for the listed
+        // targets. Combine with the usual chain (TsName, .Property, etc.) to
+        // tweak the output.
+        b.ForType<Article>()
+            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi)
+            .TsName("ArticleDto")
+            .Property(p => p.Body).TsType("string | null");
     }
 }
 ```
+
+> **Discovery vs override.** Without `.WithGeneratedTypes(...)`, the fluent block
+> is a no-op for types that don't carry `[GenerateTypes]` — the chain just sits
+> there registering overrides for a class TypeGen never sees. Adding the marker
+> method is the explicit "yes, emit code for this type" signal.
 
 > Only one `ITypeGenConfigurator` per project — multiple implementations fire
 > diagnostic `TG0010`. Unrecognized fluent calls fire `TG0012`.

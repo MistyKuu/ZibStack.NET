@@ -119,6 +119,30 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             }
 
 
+            // Fluent-only discovery: any b.ForType<T>().WithGeneratedTypes(...) registers T
+            // for emission even if it has no [GenerateTypes] attribute. Lets users keep
+            // model files free of generation markers — central config in TypeGenConfig.cs.
+            if (config is not null)
+            {
+                foreach (var kvp in config.PerType)
+                {
+                    if (kvp.Value.FluentTargets is not int fluentTargets) continue;
+                    // Skip if the type was already discovered via attribute.
+                    if (model.Classes.Any(c => c.CSharpFullName == kvp.Key)) continue;
+
+                    var sym = compilation.GetTypeByMetadataName(kvp.Key);
+                    if (sym is null) continue;   // type unresolvable (e.g. another generator's output)
+
+                    var dir = !string.IsNullOrEmpty(kvp.Value.OutputDir) ? kvp.Value.OutputDir!
+                            : !string.IsNullOrEmpty(config.Settings.TypeScript.OutputDir) ? config.Settings.TypeScript.OutputDir!
+                            : ".";
+                    var aux = SchemaParser.ParseAuxiliaryClass(sym, (TypeTarget)fluentTargets, dir);
+                    if (aux is null) continue;
+                    ApplyFluentToClass(aux, config);
+                    model.Classes.Add(aux);
+                }
+            }
+
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
             var settings = config?.Settings ?? new GlobalSettings();

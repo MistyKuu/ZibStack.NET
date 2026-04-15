@@ -101,6 +101,14 @@ public interface ITypeGenBuilder
 /// </summary>
 public interface ITypeBuilder<T>
 {
+    /// <summary>
+    /// Opt-in: emit code for <typeparamref name="T"/> with the given targets without
+    /// requiring <c>[GenerateTypes]</c> on the class. Useful when you can't (or
+    /// don't want to) annotate the source — e.g. third-party types or just keeping
+    /// model files free of generation markers.
+    /// </summary>
+    ITypeBuilder<T> WithGeneratedTypes(TypeTarget targets);
+
     /// <summary>Equivalent to <c>[TsName(name)]</c> on the class.</summary>
     ITypeBuilder<T> TsName(string name);
 

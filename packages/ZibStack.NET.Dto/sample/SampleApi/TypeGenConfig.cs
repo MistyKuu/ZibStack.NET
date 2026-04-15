@@ -20,6 +20,16 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             oa.Description = "Full CRUD + schema + TS client contract, one attribute pass.";
         });
 
+        
+        b.TypeScript(ts => { ts.OutputDir = "generated"; });
+        // Article has NO [GenerateTypes] attribute on the class — fluent discovery
+        // via .WithGeneratedTypes(...) opts it in. The remaining chain (TsName,
+        // .Property(...).TsType(...)) configures the emitted TS interface.
+        b.ForType<Article>()
+            .WithGeneratedTypes(TypeTarget.TypeScript)
+            .TsName("ArticleDto")
+            .Property(p => p.Body).TsType("string | null");
+        
         // Player: demonstrate per-property mapping overrides.
         b.ForType<Player>()
             // decimal → number (OpenAPI default) loses precision on the wire; force

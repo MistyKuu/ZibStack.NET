@@ -26,6 +26,12 @@ internal static class ConfiguratorParser
         public bool Ignore { get; set; }
         public bool TsIgnore { get; set; }
         public bool OpenApiIgnore { get; set; }
+        /// <summary>
+        /// Set by <c>.WithGeneratedTypes(TypeTarget)</c> — opt-in fluent discovery.
+        /// When non-null, the type is registered for emission even without
+        /// <c>[GenerateTypes]</c> on the class.
+        /// </summary>
+        public int? FluentTargets { get; set; }
 
         /// <summary>Per-property fluent overrides keyed by property name (case-sensitive, matches C# source).</summary>
         public Dictionary<string, PerPropertyOverrides> Properties { get; } = new();
@@ -346,6 +352,17 @@ internal static class ConfiguratorParser
         PerTypeOverrides o,
         System.Action<Diagnostic> report)
     {
+        if (name == "WithGeneratedTypes")
+        {
+            // Single int (TypeTarget) arg — accept enum members and OR-combinations.
+            if (inv.ArgumentList.Arguments.Count > 0)
+            {
+                var v = ReadLiteralValue(inv.ArgumentList.Arguments[0].Expression, sm);
+                if (v is int i) o.FluentTargets = i;
+            }
+            return;
+        }
+
         string? arg = ReadStringArg(inv, name, sm, report);
         switch (name)
         {
