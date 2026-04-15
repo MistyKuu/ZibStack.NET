@@ -111,6 +111,15 @@ public class MultiAspectService
     public int Work(int x) => x + 1;
 }
 
+// ── Class-level aspect on class with internal methods ───────────────────────
+
+[Record]
+public class MixedAccessService
+{
+    public int PublicWork(int x) => x;
+    internal int InternalWork(int x) => x;
+}
+
 // ── Built-in [Retry] ───────────────────────────────────────────────────────────
 
 public class RetryTestService

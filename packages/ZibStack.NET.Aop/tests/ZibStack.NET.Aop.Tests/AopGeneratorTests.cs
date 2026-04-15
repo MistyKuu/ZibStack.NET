@@ -286,6 +286,26 @@ public class AopBehaviorTests
         Assert.Contains(_handler.Calls, c => c.Phase == "Before");
         Assert.True(_aroundHandler.Called);
     }
+
+    // ── Class-level aspect also picks up internal methods ──
+
+    [Fact]
+    public void ClassLevelAspect_InterceptsInternalMethod()
+    {
+        var svc = new MixedAccessService();
+        _ = svc.InternalWork(5);
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "InternalWork");
+    }
+
+    [Fact]
+    public void ClassLevelAspect_StillInterceptsPublicMethod()
+    {
+        var svc = new MixedAccessService();
+        _ = svc.PublicWork(5);
+
+        Assert.Contains(_handler.Calls, c => c.Phase == "Before" && c.Context.MethodName == "PublicWork");
+    }
 }
 
 // ── Pure runtime tests (no generator needed) ────────────────────────────────

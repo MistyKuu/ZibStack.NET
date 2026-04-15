@@ -102,8 +102,11 @@ public static class AopParser
         // Method-level attributes (take priority)
         CollectAspects(method.GetAttributes(), method, aspects, seenAspectTypes);
 
-        // Class-level attributes (apply to all public instance methods)
-        if (method.ContainingType != null && method.DeclaredAccessibility == Accessibility.Public)
+        // Class-level attributes (apply to all instance methods that an interceptor can
+        // actually call back into — public, internal, and protected internal). Private and
+        // protected are excluded because the generated interceptor lives in a separate
+        // `__X_Aop` class and cannot satisfy private/protected access rules.
+        if (method.ContainingType != null && IsInterceptableAccessibility(method.DeclaredAccessibility))
             CollectAspects(method.ContainingType.GetAttributes(), method, aspects, seenAspectTypes);
 
         if (aspects.Count == 0)
@@ -161,6 +164,13 @@ public static class AopParser
             if (isAsync && !namedReturn.IsGenericType)
                 returnsVoid = true;
         }
+
+        // Skip methods whose interceptor body cannot legally call the target. The generated
+        // interceptor lives in `__X_Aop` (a separate class) and invokes `@this.Method(...)`,
+        // so it needs at-least-internal access to the target. Private and protected fail.
+        if (!IsInterceptableAccessibility(method.DeclaredAccessibility) &&
+            method.DeclaredAccessibility != Accessibility.NotApplicable)
+            return null;
 
         // Interface members historically report Accessibility.NotApplicable via Roslyn even though
         // they are implicitly public; emit 'public' in that case so the generated extension method
@@ -549,6 +559,18 @@ public static class AopParser
         }
         return false;
     }
+
+    /// <summary>
+    /// Returns true if a generated interceptor — which lives in a separate `__X_Aop` static
+    /// class and invokes `@this.Method(...)` — can legally call a method with this
+    /// declared accessibility. Private/protected fail because the interceptor is neither
+    /// inside the target class nor a derived class. Internal works only same-assembly,
+    /// but that's the same constraint generators already operate under.
+    /// </summary>
+    public static bool IsInterceptableAccessibility(Accessibility accessibility) =>
+        accessibility is Accessibility.Public
+                      or Accessibility.Internal
+                      or Accessibility.ProtectedOrInternal;
 
     public static bool IsComplexType(ITypeSymbol type)
     {
