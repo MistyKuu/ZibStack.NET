@@ -137,6 +137,41 @@ internal static class SchemaParser
     /// External targets (BCL, other assemblies) are left alone — the user owns
     /// their <c>.ts</c> / <c>.d.ts</c> definition.
     /// </summary>
+    /// <summary>
+    /// For every class in <paramref name="model"/> with
+    /// <see cref="SchemaClass.PolymorphicVariants"/> populated, seeds each variant
+    /// (the derived class) into the model if not already present, inheriting the
+    /// base's <c>Targets</c> and <c>OutputDir</c>. Stamps each variant's
+    /// <see cref="SchemaClass.PolymorphicDiscriminatorValue"/> so the emitter knows
+    /// which literal to pin its discriminator property to.
+    /// </summary>
+    public static void SeedPolymorphicVariants(SchemaModel model, Compilation compilation)
+    {
+        // Iterate a snapshot — `toAdd` collects before appending so we don't
+        // mutate during enumeration.
+        var baseClasses = model.Classes.Where(c => c.PolymorphicVariants.Count > 0).ToList();
+        foreach (var baseCls in baseClasses)
+        {
+            foreach (var variant in baseCls.PolymorphicVariants)
+            {
+                var existing = model.Classes.FirstOrDefault(c => c.CSharpFullName == variant.CSharpFullName);
+                if (existing is not null)
+                {
+                    existing.PolymorphicDiscriminatorValue ??= variant.DiscriminatorValue;
+                    existing.PolymorphicDiscriminatorPropertyOnVariant ??= baseCls.PolymorphicDiscriminator;
+                    continue;
+                }
+                var sym = compilation.GetTypeByMetadataName(ToMetadataName(variant.CSharpFullName));
+                if (sym is null) continue;
+                var aux = ParseAuxiliaryClass(sym, baseCls.Targets, baseCls.OutputDir);
+                if (aux is null) continue;
+                aux.PolymorphicDiscriminatorValue = variant.DiscriminatorValue;
+                aux.PolymorphicDiscriminatorPropertyOnVariant = baseCls.PolymorphicDiscriminator;
+                model.Classes.Add(aux);
+            }
+        }
+    }
+
     public static void SeedGenericTypeTargets(SchemaModel model, Compilation compilation)
     {
         // Snapshot the current classes — we add to model.Classes while iterating.
@@ -470,6 +505,53 @@ internal static class SchemaParser
         return false;
     }
 
+    /// <summary>
+    /// Reads <c>[JsonPolymorphic(TypeDiscriminatorPropertyName = "…")]</c> +
+    /// <c>[JsonDerivedType(typeof(X), "…")]</c> on <paramref name="symbol"/> and
+    /// fills <see cref="SchemaClass.PolymorphicDiscriminator"/> +
+    /// <see cref="SchemaClass.PolymorphicVariants"/>. Silent when the class
+    /// isn't polymorphic — ordinary inheritance still applies.
+    /// </summary>
+    private static void ReadPolymorphicConfig(INamedTypeSymbol symbol, SchemaClass cls)
+    {
+        const string PolyAttr = "System.Text.Json.Serialization.JsonPolymorphicAttribute";
+        const string DerivedAttr = "System.Text.Json.Serialization.JsonDerivedTypeAttribute";
+
+        var polyAttr = symbol.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == PolyAttr);
+        string? discriminator = null;
+        if (polyAttr is not null)
+        {
+            foreach (var na in polyAttr.NamedArguments)
+                if (na.Key == "TypeDiscriminatorPropertyName" && na.Value.Value is string s)
+                    discriminator = s;
+            // Default per STJ docs is "$type" when unspecified.
+            discriminator ??= "$type";
+        }
+
+        var derived = symbol.GetAttributes()
+            .Where(a => a.AttributeClass?.ToDisplayString() == DerivedAttr)
+            .ToList();
+        if (derived.Count == 0) return;
+
+        // Variant without a discriminator value is legal in STJ but we need a
+        // value to emit useful TS / OpenAPI. Skip those — user should supply one.
+        foreach (var d in derived)
+        {
+            if (d.ConstructorArguments.Length < 2) continue;
+            if (d.ConstructorArguments[0].Value is not INamedTypeSymbol derivedSym) continue;
+            var value = d.ConstructorArguments[1].Value?.ToString();
+            if (string.IsNullOrEmpty(value)) continue;
+            cls.PolymorphicVariants.Add(new PolymorphicVariant
+            {
+                CSharpFullName = derivedSym.ToDisplayString(),
+                DiscriminatorValue = value!,
+            });
+        }
+        if (cls.PolymorphicVariants.Count > 0)
+            cls.PolymorphicDiscriminator = discriminator;
+    }
+
     private static string StripGlobal(string fqn) =>
         fqn.StartsWith("global::", System.StringComparison.Ordinal) ? fqn.Substring("global::".Length) : fqn;
 
@@ -550,6 +632,11 @@ internal static class SchemaParser
             foreach (var tp in symbol.TypeParameters)
                 cls.TypeParameters.Add(tp.Name);
         foreach (var a in baseTypeArgs) cls.BaseClassTypeArguments.Add(a);
+
+        // `[JsonPolymorphic] + [JsonDerivedType]` on this symbol → this class is a
+        // discriminated-union base. Record the discriminator property name and the
+        // variant list; emitters render it as a TS union / OpenAPI oneOf.
+        ReadPolymorphicConfig(symbol, cls);
 
         // Dedupe by name across (this class + flattened ancestors) so an abstract
         // property on a generic base that a middle class overrides doesn't land

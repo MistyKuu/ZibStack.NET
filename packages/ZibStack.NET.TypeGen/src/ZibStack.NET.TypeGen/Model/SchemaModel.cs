@@ -197,6 +197,48 @@ internal sealed class SchemaClass
     /// property type). Empty when the base is non-generic.
     /// </summary>
     public List<string> BaseClassTypeArguments { get; } = new();
+
+    /// <summary>
+    /// Present when this class is a polymorphic base (carries
+    /// <c>[JsonPolymorphic]</c> in the source). Names the discriminator property —
+    /// e.g. <c>"kind"</c> for <c>kind: "circle"</c>. TypeScript emits the base as a
+    /// <c>type Base = V1 | V2</c> discriminated union; OpenAPI emits
+    /// <c>oneOf</c> + <c>discriminator</c>. Null for classes that aren't unions.
+    /// </summary>
+    public string? PolymorphicDiscriminator { get; set; }
+
+    /// <summary>
+    /// Non-empty when this class is a polymorphic base — lists each variant
+    /// (derived type) with its discriminator literal. E.g. for <c>Shape</c> with
+    /// <c>Circle</c>/<c>Square</c>: <c>[("N.Circle","circle"), ("N.Square","square")]</c>.
+    /// Driven by <c>[JsonDerivedType(typeof(Circle), "circle")]</c> attributes on
+    /// the base. Emitters render each variant as an interface/schema with the
+    /// discriminator property pinned to its literal value.
+    /// </summary>
+    public List<PolymorphicVariant> PolymorphicVariants { get; } = new();
+
+    /// <summary>
+    /// Discriminator literal pinned onto this class by a
+    /// <see cref="PolymorphicDiscriminator"/>-carrying base. Emitters render the
+    /// property as <c>kind: "circle"</c> (literal type) rather than the generic
+    /// property type inherited from the base.
+    /// </summary>
+    public string? PolymorphicDiscriminatorValue { get; set; }
+
+    /// <summary>
+    /// Name of the discriminator property (copied from the base when this class
+    /// is a variant) — emitters need it to render the literal property line.
+    /// </summary>
+    public string? PolymorphicDiscriminatorPropertyOnVariant { get; set; }
+}
+
+/// <summary>Derived-type entry on a polymorphic base.</summary>
+internal sealed class PolymorphicVariant
+{
+    /// <summary>Fully-qualified C# name of the derived class.</summary>
+    public string CSharpFullName { get; set; } = "";
+    /// <summary>Discriminator value emitted at that variant (e.g. <c>"circle"</c>).</summary>
+    public string DiscriminatorValue { get; set; } = "";
 }
 
 internal sealed class SchemaProperty

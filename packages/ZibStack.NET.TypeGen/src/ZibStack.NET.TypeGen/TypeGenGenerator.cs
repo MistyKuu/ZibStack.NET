@@ -259,6 +259,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 var clsBefore = model.Classes.Count;
                 var enumBefore = model.Enums.Count;
                 SchemaParser.SeedGenericTypeTargets(model, compilation);
+                SchemaParser.SeedPolymorphicVariants(model, compilation);
                 SchemaParser.DiscoverBaseClasses(model, compilation);
                 SchemaParser.DiscoverTransitive(model, compilation);
                 for (int i = clsBefore; i < model.Classes.Count; i++)

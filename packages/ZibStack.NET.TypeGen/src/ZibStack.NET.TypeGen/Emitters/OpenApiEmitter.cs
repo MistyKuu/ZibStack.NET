@@ -395,8 +395,38 @@ internal static class OpenApiEmitter
 
     private static void EmitClassYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
     {
+        // Polymorphic base → `oneOf` with `discriminator.mapping`. Variants emit
+        // as their own schemas (via ordinary EmitClassYaml on the variant); this
+        // base schema just points at them.
+        if (cls.PolymorphicVariants.Count > 0 && cls.PolymorphicDiscriminator is not null)
+        {
+            var variantRefs = cls.PolymorphicVariants
+                .Select(v => (v, name: nameByCSharp.TryGetValue(v.CSharpFullName, out var n) ? n : null))
+                .Where(x => x.name is not null)
+                .ToList();
+            if (variantRefs.Count > 0)
+            {
+                sb.AppendLine($"{indent}{cls.EmittedName}:");
+                sb.AppendLine($"{indent}  oneOf:");
+                foreach (var (_, name) in variantRefs)
+                    sb.AppendLine($"{indent}    - $ref: '#/components/schemas/{name}'");
+                sb.AppendLine($"{indent}  discriminator:");
+                sb.AppendLine($"{indent}    propertyName: {cls.PolymorphicDiscriminator}");
+                sb.AppendLine($"{indent}    mapping:");
+                foreach (var (v, name) in variantRefs)
+                    sb.AppendLine($"{indent}      {v.DiscriminatorValue}: '#/components/schemas/{name}'");
+                return;
+            }
+        }
+
         // Base in the emit set → allOf [{ $ref: base }, { type: object, properties: new-only }].
-        var baseRef = cls.BaseClassFullName is { } bfn && nameByCSharp.TryGetValue(bfn, out var bn) ? bn : null;
+        // BUT: if our base is a polymorphic union, DON'T allOf into it — the base
+        // is an abstract oneOf, not a concrete object. We still stamp the
+        // discriminator literal via the normal props path (see EmitPropertyYaml).
+        var baseRef = cls.BaseClassFullName is { } bfn
+            && nameByCSharp.TryGetValue(bfn, out var bn)
+            && cls.PolymorphicDiscriminatorValue is null
+            ? bn : null;
         if (baseRef is not null)
         {
             sb.AppendLine($"{indent}{cls.EmittedName}:");
@@ -415,16 +445,30 @@ internal static class OpenApiEmitter
     {
         var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
         var required = emittedProps.Where(p => !IsEffectivelyNullable(p)).ToList();
-        if (required.Count > 0)
+        // Polymorphic variant: discriminator is always present + required.
+        var hasDiscProp = cls.PolymorphicDiscriminatorValue is not null
+            && cls.PolymorphicDiscriminatorPropertyOnVariant is not null;
+
+        if (required.Count > 0 || hasDiscProp)
         {
             sb.AppendLine($"{indent}required:");
+            if (hasDiscProp) sb.AppendLine($"{indent}  - {cls.PolymorphicDiscriminatorPropertyOnVariant}");
             foreach (var p in required)
                 sb.AppendLine($"{indent}  - {p.OpenApiNameOverride ?? p.SourceName}");
         }
 
-        if (emittedProps.Count > 0)
+        if (emittedProps.Count > 0 || hasDiscProp)
         {
             sb.AppendLine($"{indent}properties:");
+            if (hasDiscProp)
+            {
+                // Discriminator as a string with single-value enum — OpenAPI 3.0
+                // idiom for pinning a literal.
+                sb.AppendLine($"{indent}  {cls.PolymorphicDiscriminatorPropertyOnVariant}:");
+                sb.AppendLine($"{indent}    type: string");
+                sb.AppendLine($"{indent}    enum:");
+                sb.AppendLine($"{indent}      - {cls.PolymorphicDiscriminatorValue}");
+            }
             foreach (var p in emittedProps)
                 EmitPropertyYaml(sb, p, nameByCSharp, indent + "  ");
         }

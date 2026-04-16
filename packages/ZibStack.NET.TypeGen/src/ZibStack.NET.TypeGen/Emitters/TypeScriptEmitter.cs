@@ -208,9 +208,36 @@ internal static class TypeScriptEmitter
     private static void EmitClass(StringBuilder sb, SchemaClass cls, TypeScriptSettings ts, IReadOnlyDictionary<string, string> nameLookup)
     {
         if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) return;
+
+        // Polymorphic base → `type Base = V1 | V2 | …;` discriminated union.
+        // The variants still emit as ordinary interfaces (later in the same file
+        // or in siblings); the base itself is a union, not a struct-shape.
+        if (cls.PolymorphicVariants.Count > 0 && cls.PolymorphicDiscriminator is not null)
+        {
+            var variantTsNames = cls.PolymorphicVariants
+                .Select(v => nameLookup.TryGetValue(v.CSharpFullName, out var n) ? n : null)
+                .Where(n => n is not null)
+                .ToList();
+            if (variantTsNames.Count > 0)
+            {
+                sb.AppendLine($"export type {cls.EmittedName} = {string.Join(" | ", variantTsNames)};");
+                sb.AppendLine();
+                return;
+            }
+        }
+
         // Only express inheritance when the base is in the emit set — otherwise its
         // properties were pre-inlined by the parser and there's nothing to extend.
-        var baseTs = cls.BaseClassFullName is { } bfn && nameLookup.TryGetValue(bfn, out var bn) ? bn : null;
+        // When the base is a polymorphic union (emitted as `type Base = V1 | …`),
+        // DON'T extend it — the variant is one of the union members, not a subtype
+        // of a struct. Instead the discriminator is stamped as a literal property
+        // below.
+        string? baseTs = null;
+        if (cls.BaseClassFullName is { } bfn && nameLookup.TryGetValue(bfn, out var bn))
+        {
+            var isBasePolymorphic = cls.PolymorphicDiscriminatorValue is not null;
+            if (!isBasePolymorphic) baseTs = bn;
+        }
 
         // Generic class header: `interface Foo<T, U>`. Type-parameter symbols
         // come straight from the open generic definition — one letter per slot.
@@ -236,6 +263,14 @@ internal static class TypeScriptEmitter
             sb.AppendLine(baseTs is null
                 ? $"export type {cls.EmittedName}{typeParamsSuffix} = {{"
                 : $"export type {cls.EmittedName}{typeParamsSuffix} = {baseTs}{baseSuffix} & {{");
+
+        // Polymorphic variant: stamp the discriminator property as a literal type
+        // FIRST so narrowing works (`if (s.kind === "circle") …` → TS sees Circle).
+        if (cls.PolymorphicDiscriminatorValue is not null
+            && cls.PolymorphicDiscriminatorPropertyOnVariant is { } discName)
+        {
+            sb.AppendLine($"    {discName}: \"{cls.PolymorphicDiscriminatorValue}\";");
+        }
 
         foreach (var prop in cls.Properties)
         {

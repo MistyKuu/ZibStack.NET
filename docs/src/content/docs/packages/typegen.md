@@ -557,6 +557,87 @@ type through:
 `extends`/`allOf` shape — base properties + derived-only props + the additional
 properties marker, all in the right place.
 
+## Polymorphic types → discriminated unions
+
+When a C# class hierarchy carries `[JsonPolymorphic]` + `[JsonDerivedType]`
+(System.Text.Json's native polymorphism support), TypeGen emits a real
+discriminated union — no manual union declaration, no virtual `Type` property
+hack:
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi)]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
+[JsonDerivedType(typeof(Circle), "circle")]
+[JsonDerivedType(typeof(Square), "square")]
+public abstract record Shape;
+
+public record Circle(double Radius) : Shape;
+public record Square(double Side)   : Shape;
+```
+
+→ TypeScript:
+```typescript
+// Shape.ts
+export type Shape = Circle | Square;
+
+// Circle.ts
+export interface Circle {
+    kind: "circle";       // discriminator pinned as literal
+    radius: number;
+}
+
+// Square.ts
+export interface Square {
+    kind: "square";
+    side: number;
+}
+```
+
+Frontend gets **full type narrowing for free**:
+```typescript
+function area(s: Shape): number {
+    if (s.kind === "circle") return Math.PI * s.radius ** 2;   // TS knows: Circle
+    return s.side ** 2;                                         // TS knows: Square
+}
+```
+
+→ OpenAPI:
+```yaml
+Shape:
+  oneOf:
+    - $ref: '#/components/schemas/Circle'
+    - $ref: '#/components/schemas/Square'
+  discriminator:
+    propertyName: kind
+    mapping:
+      circle: '#/components/schemas/Circle'
+      square: '#/components/schemas/Square'
+
+Circle:
+  type: object
+  required: [kind, Radius]
+  properties:
+    kind:
+      type: string
+      enum: [circle]        # pinned literal
+    Radius: { type: number, format: double }
+# (Square analogously)
+```
+
+**Detection is explicit — only types listed in `[JsonDerivedType]` attributes
+become variants.** Auto-scanning all subclasses in the compilation would be
+surprising (tests / sample code dangling off a production hierarchy would leak
+into the API). If you add a new subclass, you add a `[JsonDerivedType]` line —
+the attribute doubles as runtime JSON config AND TS/OpenAPI contract.
+
+**Default discriminator name:** when `[JsonPolymorphic(TypeDiscriminatorPropertyName = "...")]`
+is omitted, TypeGen uses `$type` (STJ's default). Match whatever your runtime
+serializer expects.
+
+**Variants auto-seeded:** the subclasses don't need their own `[GenerateTypes]`
+— they're pulled in by the polymorphic seed pass with the base's targets and
+output dir.
+
 ## String enum converters
 
 When an enum carries `[JsonConverter(typeof(JsonStringEnumConverter))]` (or the
