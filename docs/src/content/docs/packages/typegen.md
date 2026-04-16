@@ -153,6 +153,49 @@ The emitters translate C# types to target-language equivalents. Defaults:
 
 Override any single property with `[TsType("...")]` or `[OpenApiProperty(Format = "...")]`.
 
+### `[TsType]` with imports
+
+When the type expression names an external symbol (your own DTO, a third-party
+type, a branded type alias) the generator can emit the matching `import` line
+for you. Pass `ImportFrom` as a named argument:
+
+```csharp
+[TsType("AutomationRulePayload", ImportFrom = "./types/automation-rule-payload")]
+public JsonObject? Element { get; set; }
+```
+
+→ at the top of the generated file:
+```typescript
+import { AutomationRulePayload } from './types/automation-rule-payload';
+```
+
+Multiple PascalCase identifiers in the expression all get pulled from the same
+path:
+
+```csharp
+[TsType("Map<Foo, Bar>", ImportFrom = "./types/api")]
+public object Item { get; set; }
+```
+
+→
+```typescript
+import { Bar, Foo, Map } from './types/api';
+```
+
+Primitives (`string`, `number`, `boolean`), literal unions (`'a' | 'b'`) and
+similar non-importable tokens are left alone. Two properties pointing at the
+same path get merged into one `import` line; different paths get separate lines.
+
+The same is available via the fluent configurator — `.TsType("Foo", "./bar")`:
+
+```csharp
+b.ForType<Article>()
+    .Property(a => a.Element).TsType("AutomationRulePayload", "./types/automation-rule-payload");
+```
+
+When `ImportFrom` is null / omitted (or the type expression is a primitive like
+`"string"`), no import is emitted — the override is treated as opaque.
+
 ## Configuration
 
 Two layers, in increasing specificity:

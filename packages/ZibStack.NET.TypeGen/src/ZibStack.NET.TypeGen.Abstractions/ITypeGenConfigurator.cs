@@ -153,6 +153,16 @@ public interface IPropertyBuilder<TClass, TProp>
     /// <summary>Equivalent to <c>[TsType(typeExpression)]</c> — opaque TS type literal.</summary>
     IPropertyBuilder<TClass, TProp> TsType(string typeExpression);
 
+    /// <summary>
+    /// Equivalent to <c>[TsType(typeExpression, ImportFrom = importFrom)]</c>. The
+    /// generator emits an <c>import { … } from '&lt;importFrom&gt;';</c> line at the
+    /// top of the file with every PascalCase identifier appearing in
+    /// <paramref name="typeExpression"/>. Pass <c>null</c> for <paramref name="importFrom"/>
+    /// (or use the single-arg overload) when the type expression doesn't reference an
+    /// external symbol.
+    /// </summary>
+    IPropertyBuilder<TClass, TProp> TsType(string typeExpression, string? importFrom);
+
     /// <summary>Equivalent to <c>[OpenApiSchemaName(name)]</c> on the property.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiName(string name);
 

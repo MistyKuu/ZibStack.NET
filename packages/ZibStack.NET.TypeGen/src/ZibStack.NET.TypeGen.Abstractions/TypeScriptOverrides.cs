@@ -28,6 +28,11 @@ public sealed class TsNameAttribute : Attribute
 ///
 /// [TsType("'pending' | 'shipped' | 'delivered'")]
 /// public OrderStatus Status { get; set; }
+///
+/// // External named type — TypeGen emits an `import { AutomationRulePayload }
+/// // from './types/automation-rule-payload';` line at the top of the file.
+/// [TsType("AutomationRulePayload", ImportFrom = "./types/automation-rule-payload")]
+/// public JsonObject? Element { get; set; }
 /// </code>
 /// </example>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field,
@@ -35,6 +40,16 @@ public sealed class TsNameAttribute : Attribute
 public sealed class TsTypeAttribute : Attribute
 {
     public string TypeExpression { get; }
+
+    /// <summary>
+    /// Optional. Module specifier to import the named symbol(s) appearing in
+    /// <see cref="TypeExpression"/> from. PascalCase identifiers in the expression
+    /// are treated as imported names; primitives like <c>string</c>, <c>number</c>,
+    /// literal unions, etc. are left alone. Leave <c>null</c> when the type expression
+    /// doesn't reference an external symbol (e.g. <c>"string"</c>, <c>"'a' | 'b'"</c>).
+    /// </summary>
+    public string? ImportFrom { get; set; }
+
     public TsTypeAttribute(string typeExpression) => TypeExpression = typeExpression;
 }
 

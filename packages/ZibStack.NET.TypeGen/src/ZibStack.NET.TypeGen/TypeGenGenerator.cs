@@ -377,6 +377,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             if (!o.Properties.TryGetValue(prop.SourceName, out var po)) continue;
             prop.TsNameOverride ??= po.TsName;
             prop.TsTypeOverride ??= po.TsType;
+            prop.TsImportFrom ??= po.TsImportFrom;
             prop.OpenApiNameOverride ??= po.OpenApiName;
             prop.OpenApiTypeOverride ??= po.OpenApiType;
             prop.OpenApiRefOverride ??= po.OpenApiRef;

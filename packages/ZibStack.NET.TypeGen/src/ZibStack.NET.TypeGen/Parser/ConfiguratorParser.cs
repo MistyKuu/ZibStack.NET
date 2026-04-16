@@ -50,6 +50,7 @@ internal static class ConfiguratorParser
     {
         public string? TsName { get; set; }
         public string? TsType { get; set; }
+        public string? TsImportFrom { get; set; }
         public string? OpenApiName { get; set; }
         public string? OpenApiType { get; set; }
         public string? OpenApiRef { get; set; }
@@ -417,7 +418,20 @@ internal static class ConfiguratorParser
         switch (name)
         {
             case "TsName": o.TsName = arg; break;
-            case "TsType": o.TsType = arg; break;
+            case "TsType":
+                o.TsType = arg;
+                // Optional second arg — `.TsType("Foo", "./types/foo")` — captures the
+                // module specifier to import the symbol(s) from. Plain `.TsType("string")`
+                // continues to work; we just look for an extra string literal positionally.
+                if (inv.ArgumentList.Arguments.Count >= 2)
+                {
+                    var importArg = ReadLiteralValue(inv.ArgumentList.Arguments[1].Expression, sm);
+                    if (importArg is string s) o.TsImportFrom = s;
+                    else if (importArg is NonLiteralMarker) report(Diagnostic.Create(
+                        TypeGenDiagnostics.NonLiteralArgument,
+                        inv.ArgumentList.Arguments[1].GetLocation(), name));
+                }
+                break;
             case "OpenApiName": o.OpenApiName = arg; break;
             case "OpenApiType": o.OpenApiType = arg; break;
             case "OpenApiRef": o.OpenApiRef = arg; break;

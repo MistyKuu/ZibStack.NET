@@ -42,6 +42,20 @@ internal static class TypeScriptEmitter
         {
             var sb = new StringBuilder();
             EmitBanner(sb, ts);
+            // Roll up user-supplied imports from every emitted class so the single
+            // file gets one import block at the top.
+            var rolledImports = new Dictionary<string, HashSet<string>>(System.StringComparer.Ordinal);
+            foreach (var cls in model.Classes)
+            {
+                if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) continue;
+                foreach (var kvp in CollectUserImports(cls))
+                {
+                    if (!rolledImports.TryGetValue(kvp.Key, out var names))
+                        rolledImports[kvp.Key] = names = new HashSet<string>(System.StringComparer.Ordinal);
+                    foreach (var n in kvp.Value) names.Add(n);
+                }
+            }
+            EmitImports(sb, System.Linq.Enumerable.Empty<string>(), selfName: "", rolledImports);
             foreach (var cls in model.Classes)
                 EmitClass(sb, cls, ts, tsNameByCSharp);
             foreach (var en in model.Enums)
@@ -59,7 +73,7 @@ internal static class TypeScriptEmitter
                 if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) continue;
                 var sb = new StringBuilder();
                 EmitBanner(sb, ts);
-                EmitImports(sb, CollectClassReferences(cls, tsNameByCSharp), cls.EmittedName);
+                EmitImports(sb, CollectClassReferences(cls, tsNameByCSharp), cls.EmittedName, CollectUserImports(cls));
                 EmitClass(sb, cls, ts, tsNameByCSharp);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.TypeScript,
@@ -86,13 +100,27 @@ internal static class TypeScriptEmitter
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    private static void EmitImports(StringBuilder sb, IEnumerable<string> refs, string selfName)
+    private static void EmitImports(StringBuilder sb, IEnumerable<string> refs, string selfName,
+        IReadOnlyDictionary<string, HashSet<string>>? userImports = null)
     {
         var sorted = refs.Where(r => r != selfName).Distinct().OrderBy(r => r, System.StringComparer.Ordinal).ToList();
-        if (sorted.Count == 0) return;
+        bool any = false;
         foreach (var r in sorted)
+        {
             sb.AppendLine($"import {{ {r} }} from './{r}';");
-        sb.AppendLine();
+            any = true;
+        }
+        if (userImports is not null)
+        {
+            foreach (var kvp in userImports.OrderBy(k => k.Key, System.StringComparer.Ordinal))
+            {
+                if (kvp.Value.Count == 0) continue;
+                var names = string.Join(", ", kvp.Value.OrderBy(n => n, System.StringComparer.Ordinal));
+                sb.AppendLine($"import {{ {names} }} from '{kvp.Key}';");
+                any = true;
+            }
+        }
+        if (any) sb.AppendLine();
     }
 
     private static HashSet<string> CollectClassReferences(SchemaClass cls, IReadOnlyDictionary<string, string> nameLookup)
@@ -104,11 +132,43 @@ internal static class TypeScriptEmitter
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
-            // Explicit TsType override is an opaque literal — user owns any imports themselves.
+            // Explicit TsType override is an opaque literal — user-imports handled separately.
             if (prop.TsTypeOverride != null) continue;
             CollectRefs(prop.CSharpTypeFullName, nameLookup, acc);
         }
         return acc;
+    }
+
+    /// <summary>
+    /// Builds the per-file map of user-supplied imports from <c>[TsType("Foo",
+    /// ImportFrom = "./bar")]</c> annotations. Identifiers are extracted from the
+    /// type expression by matching PascalCase tokens (skips primitives like
+    /// <c>string</c>, <c>number</c>, literal strings, etc.). Multiple properties
+    /// pointing at the same path get merged into one import line.
+    /// </summary>
+    private static Dictionary<string, HashSet<string>> CollectUserImports(SchemaClass cls)
+    {
+        var byPath = new Dictionary<string, HashSet<string>>(System.StringComparer.Ordinal);
+        foreach (var prop in cls.Properties)
+        {
+            if (prop.TsIgnore) continue;
+            if (prop.TsTypeOverride is null || string.IsNullOrEmpty(prop.TsImportFrom)) continue;
+            if (!byPath.TryGetValue(prop.TsImportFrom!, out var names))
+                byPath[prop.TsImportFrom!] = names = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var ident in ExtractPascalIdentifiers(prop.TsTypeOverride))
+                names.Add(ident);
+        }
+        return byPath;
+    }
+
+    private static IEnumerable<string> ExtractPascalIdentifiers(string typeExpression)
+    {
+        // PascalCase identifiers — covers TS class/interface/type names. Skips
+        // primitives (`string`, `number`, `boolean`), literals (`'pending'`), `null`,
+        // `undefined`, etc. Caller dedupes via HashSet.
+        return System.Text.RegularExpressions.Regex.Matches(typeExpression, @"[A-Z][A-Za-z0-9_]*")
+            .Cast<System.Text.RegularExpressions.Match>()
+            .Select(m => m.Value);
     }
 
     private static void CollectRefs(string cSharpType, IReadOnlyDictionary<string, string> nameLookup, HashSet<string> acc)

@@ -200,6 +200,15 @@ internal sealed class SchemaProperty
     /// <summary>Per-target type overrides.</summary>
     public string? TsTypeOverride { get; set; }
 
+    /// <summary>
+    /// Optional module specifier for the <see cref="TsTypeOverride"/> symbol(s).
+    /// When set, the TypeScript emitter adds an <c>import { … } from '&lt;path&gt;';</c>
+    /// line at the top of the file, listing every PascalCase identifier appearing in
+    /// <see cref="TsTypeOverride"/>. <c>null</c> means the type expression doesn't
+    /// reference an external symbol — primitives, literal unions, etc.
+    /// </summary>
+    public string? TsImportFrom { get; set; }
+
     /// <summary>OpenAPI annotations from <c>[OpenApiProperty]</c> and per-property fluent overrides.</summary>
     public string? OpenApiFormat { get; set; }
     public object? OpenApiExample { get; set; }

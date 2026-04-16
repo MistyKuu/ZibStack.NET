@@ -203,6 +203,7 @@ internal static class SchemaParser
             IsNullable = prop.NullableAnnotation == NullableAnnotation.Annotated,
             TsNameOverride = ReadStringArg(prop, TsNameAttr, "Name"),
             TsTypeOverride = ReadStringArg(prop, TsTypeAttr, "TypeExpression"),
+            TsImportFrom = ReadNamedStringArg(prop, TsTypeAttr, "ImportFrom"),
             OpenApiNameOverride = ReadStringArg(prop, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(prop, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(prop, OpenApiIgnoreAttr),
@@ -357,6 +358,21 @@ internal static class SchemaParser
         // Try positional ctor arg first.
         if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is string ctorVal)
             return ctorVal;
+        foreach (var na in attr.NamedArguments)
+            if (na.Key == namedKey && na.Value.Value is string nv) return nv;
+        return null;
+    }
+
+    /// <summary>
+    /// Like <see cref="ReadStringArg"/> but skips the positional-ctor short-circuit —
+    /// reads strictly from named arguments. Use when the attribute has both a positional
+    /// ctor arg AND additional named props (e.g. <c>[TsType("Foo", ImportFrom = "...")]</c>).
+    /// </summary>
+    private static string? ReadNamedStringArg(ISymbol symbol, string attrFullName, string namedKey)
+    {
+        var attr = symbol.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attrFullName);
+        if (attr is null) return null;
         foreach (var na in attr.NamedArguments)
             if (na.Key == namedKey && na.Value.Value is string nv) return nv;
         return null;
