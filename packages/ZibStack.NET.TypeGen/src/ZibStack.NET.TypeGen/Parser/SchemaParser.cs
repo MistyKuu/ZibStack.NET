@@ -154,7 +154,10 @@ internal static class SchemaParser
                 if (inModel.Contains(prop.TsTypeTargetCSharpFqn)) continue;
                 var sym = compilation.GetTypeByMetadataName(StripGlobal(prop.TsTypeTargetCSharpFqn));
                 if (sym is null) continue;
-                if (!IsUserDefinedType(sym, compilation)) continue;
+                // `[TsType<T>]` is an explicit request to emit T — relax the
+                // same-assembly check that DiscoverTransitive uses. Still skip
+                // BCL (System.*, Microsoft.*) to avoid pulling in half the framework.
+                if (!IsEmittableTypeForExplicitReference(sym)) continue;
                 toAdd.Add((cls, sym));
                 inModel.Add(prop.TsTypeTargetCSharpFqn);
             }
@@ -305,6 +308,24 @@ internal static class SchemaParser
             || ctor == "System.Collections.Generic.Dictionary<TKey, TValue>"
             || ctor == "System.Collections.Generic.IDictionary<TKey, TValue>"
             || ctor == "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>";
+    }
+
+    /// <summary>
+    /// Looser version of <see cref="IsUserDefinedType"/> for types the user has
+    /// <em>explicitly</em> referenced via <c>[TsType&lt;T&gt;]</c>. Drops the
+    /// same-assembly constraint — a type from a referenced NuGet or another
+    /// project is fair game when the user asked for it by name. BCL namespaces
+    /// still get filtered to avoid accidentally dragging in framework internals.
+    /// </summary>
+    private static bool IsEmittableTypeForExplicitReference(INamedTypeSymbol t)
+    {
+        if (t.SpecialType != SpecialType.None) return false;
+        if (t.TypeKind != TypeKind.Class && t.TypeKind != TypeKind.Struct && t.TypeKind != TypeKind.Enum)
+            return false;
+        var ns = t.ContainingNamespace?.ToDisplayString() ?? "";
+        if (ns == "System" || ns.StartsWith("System.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Microsoft.", System.StringComparison.Ordinal)) return false;
+        return true;
     }
 
     private static bool IsUserDefinedType(INamedTypeSymbol t, Compilation compilation)
