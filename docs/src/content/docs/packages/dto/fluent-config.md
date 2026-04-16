@@ -102,15 +102,16 @@ The fluent layer is **additive**. Concrete behavior when both apply:
 
 ### Limitations
 
-- **`.RenameTo` on Query DTOs** isn't applied — the query generator uses the
-  property name in expression trees that access the entity (`x => x.PropertyName`),
-  so renaming would break compilation. Use `[DtoName]` on the property if you
-  really need it (works because attribute path doesn't go through the rename helper).
-- **`.Flatten()` is not yet exposed** on `IDtoPropertyBuilder` — use `[Flatten]`
-  attribute for now.
-- Per-property fluent overrides don't yet apply to `[CreateDtoFor]` /
-  `[UpdateDtoFor]` partial records (those have their own `Ignore = new[] { ... }`
-  array on the attribute).
+- **`.RenameTo` on Query DTOs** is a no-op — the Query generator uses the
+  property name inside expression trees that access the entity
+  (`x => x.PropertyName`), so renaming would break EF compilation. Use
+  `[DtoName]` on the property when you need a JSON-name override on a Query DTO.
+- **`.Flatten()`** is exposed on `IDtoPropertyBuilder` for symmetry with
+  `[Flatten]` but the recursive flatten machinery still reads the attribute,
+  not the fluent flag — set `[Flatten]` on the property if you need it today.
+- Per-property fluent overrides don't apply inside `[CreateDtoFor]` /
+  `[UpdateDtoFor]` partial records — those use the attribute's own
+  `Ignore = new[] { ... }` array.
 
 
 ### `required` keyword
