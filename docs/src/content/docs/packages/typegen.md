@@ -150,6 +150,7 @@ The emitters translate C# types to target-language equivalents. Defaults:
 | `Dictionary<K, V>` | `Record<K, V>` | `type: object, additionalProperties: V` | `dict[K, V]` |
 | User DTO | `TypeName` | `$ref: '#/components/schemas/TypeName'` | `TypeName` (imported) |
 | `enum` | `export enum` (numeric values) | `type: string, enum: [...]` | `IntEnum` |
+| `enum` with `[JsonConverter(typeof(JsonStringEnumConverter))]` | `export enum` (string values) | `type: string, enum: [...]` | `(str, Enum)` |
 
 Override any single property with `[TsType("...")]` or `[OpenApiProperty(Format = "...")]`.
 
@@ -540,6 +541,48 @@ type through:
 `[JsonExtensionData]` emits its index signature inside the body of the
 `extends`/`allOf` shape — base properties + derived-only props + the additional
 properties marker, all in the right place.
+
+## String enum converters
+
+When an enum carries `[JsonConverter(typeof(JsonStringEnumConverter))]` (or the
+generic `JsonStringEnumConverter<T>` in .NET 8+, or Newtonsoft's
+`StringEnumConverter`), runtime JSON uses the **member name**, not the
+underlying integer. TypeGen picks this up and emits matching client code so
+deserialisation lines up automatically:
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Python)]
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OrderStatus { Pending, Shipped, Delivered }
+```
+
+→ TypeScript:
+```typescript
+export enum OrderStatus {
+    Pending = "Pending",
+    Shipped = "Shipped",
+    Delivered = "Delivered",
+}
+```
+
+→ Python (`(str, Enum)` idiom — portable across 3.8+; `StrEnum` arrived in 3.11):
+```python
+from enum import Enum
+
+class OrderStatus(str, Enum):
+    PENDING = "Pending"
+    SHIPPED = "Shipped"
+    DELIVERED = "Delivered"
+```
+
+Without the converter the defaults stay — numeric TS enum, `IntEnum` in Python.
+OpenAPI always emits `type: string, enum: [...]` because that's what the OpenAPI
+ecosystem expects; numeric-enum integer discriminators are rarer and use
+`$ref` or explicit `type: integer` overrides instead.
+
+Non-standard converters (custom `JsonConverter<T>` subclasses) don't flip the
+flag — TypeGen doesn't guess their serialised shape, so members still emit as
+integers. Use `[TsType]` / `[OpenApiProperty]` to override per property.
 
 ## Transitive discovery of nested types
 

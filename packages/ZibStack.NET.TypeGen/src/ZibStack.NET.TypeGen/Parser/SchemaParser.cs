@@ -314,6 +314,31 @@ internal static class SchemaParser
         return true;
     }
 
+    /// <summary>
+    /// True when the symbol carries a <c>[JsonConverter(typeof(X))]</c> whose
+    /// <c>X</c> is one of the well-known string-serialising enum converters —
+    /// System.Text.Json's non-generic + generic <c>JsonStringEnumConverter</c>,
+    /// or Newtonsoft.Json's <c>StringEnumConverter</c>. Other converters
+    /// (custom, third-party) don't flip the flag — we don't guess their shape.
+    /// </summary>
+    private static bool HasStringifyingJsonConverter(ISymbol symbol)
+    {
+        foreach (var attr in symbol.GetAttributes())
+        {
+            var attrName = attr.AttributeClass?.ToDisplayString();
+            if (attrName != "System.Text.Json.Serialization.JsonConverterAttribute"
+                && attrName != "Newtonsoft.Json.JsonConverterAttribute") continue;
+            if (attr.ConstructorArguments.Length == 0) continue;
+            if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol converter) continue;
+            var converterFqn = converter.ConstructedFrom.ToDisplayString();
+            if (converterFqn == "System.Text.Json.Serialization.JsonStringEnumConverter"
+                || converterFqn == "System.Text.Json.Serialization.JsonStringEnumConverter<TEnum>"
+                || converterFqn == "Newtonsoft.Json.Converters.StringEnumConverter")
+                return true;
+        }
+        return false;
+    }
+
     private static string StripGlobal(string fqn) =>
         fqn.StartsWith("global::", System.StringComparison.Ordinal) ? fqn.Substring("global::".Length) : fqn;
 
@@ -483,6 +508,7 @@ internal static class SchemaParser
             OpenApiNameOverride = ReadStringArg(symbol, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(symbol, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(symbol, OpenApiIgnoreAttr),
+            IsStringSerialized = HasStringifyingJsonConverter(symbol),
         };
 
         foreach (var field in symbol.GetMembers().OfType<IFieldSymbol>())

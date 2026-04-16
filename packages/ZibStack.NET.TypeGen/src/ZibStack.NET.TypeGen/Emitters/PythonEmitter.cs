@@ -65,7 +65,9 @@ internal static class PythonEmitter
                 if ((en.Targets & TypeTarget.Python) == 0) continue;
                 var sb = new StringBuilder();
                 EmitHeader(sb, py, singleFile: false);
-                sb.AppendLine("from enum import IntEnum");
+                sb.AppendLine(en.IsStringSerialized
+                    ? "from enum import Enum"
+                    : "from enum import IntEnum");
                 sb.AppendLine();
                 EmitEnum(sb, en);
                 files.Add(new EmittedFile(TypeTarget.Python, en.OutputDir, ToSnakeCase(en.EmittedName) + ".py", sb.ToString()));
@@ -217,7 +219,13 @@ internal static class PythonEmitter
         // Numeric enums use IntEnum (preserves C# int values); if all values are
         // sequential 0..N-1 the choice is cosmetic, but explicit IntEnum lets
         // Python code compare against ints naturally.
-        sb.AppendLine($"class {en.EmittedName}(IntEnum):");
+        //
+        // String-serialised enums ([JsonStringEnumConverter]) inherit from
+        // (str, Enum) — the portable idiom across Python 3.8+ (StrEnum only arrived
+        // in 3.11). Member values are the original C# member names so round-trips
+        // match the wire format.
+        var bases = en.IsStringSerialized ? "str, Enum" : "IntEnum";
+        sb.AppendLine($"class {en.EmittedName}({bases}):");
         if (en.Members.Count == 0)
         {
             sb.AppendLine("    pass");
@@ -225,7 +233,10 @@ internal static class PythonEmitter
             return;
         }
         foreach (var m in en.Members)
-            sb.AppendLine($"    {ToScreamingSnakeCase(m.Name)} = {m.Value}");
+        {
+            var value = en.IsStringSerialized ? $"\"{m.Name}\"" : m.Value.ToString();
+            sb.AppendLine($"    {ToScreamingSnakeCase(m.Name)} = {value}");
+        }
         sb.AppendLine();
     }
 

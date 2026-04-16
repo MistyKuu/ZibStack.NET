@@ -237,7 +237,13 @@ internal static class TypeScriptEmitter
         if (en.TsIgnore || (en.Targets & TypeTarget.TypeScript) == 0) return;
         sb.AppendLine($"export enum {en.EmittedName} {{");
         foreach (var m in en.Members)
-            sb.AppendLine($"    {m.Name} = {m.Value},");
+        {
+            // String-serialised enums ([JsonStringEnumConverter] etc.) emit member-name
+            // string values so JSON parse / stringify round-trips against the TS type.
+            // Without the converter the runtime JSON is integers — keep the numeric form.
+            var value = en.IsStringSerialized ? $"\"{m.Name}\"" : m.Value.ToString();
+            sb.AppendLine($"    {m.Name} = {value},");
+        }
         sb.AppendLine("}");
         sb.AppendLine();
     }

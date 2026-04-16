@@ -265,6 +265,17 @@ internal sealed class SchemaEnum
     public string? OpenApiNameOverride { get; set; }
     public bool TsIgnore { get; set; }
     public bool OpenApiIgnore { get; set; }
+
+    /// <summary>
+    /// <c>true</c> when the enum carries
+    /// <c>[JsonConverter(typeof(JsonStringEnumConverter))]</c> (or the generic
+    /// <c>JsonStringEnumConverter&lt;T&gt;</c>, or Newtonsoft's
+    /// <c>StringEnumConverter</c>) — meaning runtime JSON is the member name,
+    /// not the underlying integer. Emitters use this to choose string-valued
+    /// TypeScript enum members and <c>(str, Enum)</c> Python bases, matching
+    /// what the consumer will actually see on the wire.
+    /// </summary>
+    public bool IsStringSerialized { get; set; }
 }
 
 internal sealed class SchemaEnumMember
