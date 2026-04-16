@@ -90,8 +90,15 @@ logger.LogInformation($"User {userId} bought {product} for {total:C}");
 //   $"..." (level OFF):  3.2 ns, 0 B    vs  Microsoft: 15.7 ns, 104 B
 //   $"..." (level ON):   3.8 ns, 0 B    vs  Microsoft: 19.1 ns, 104 B
 
-// Optional: override assembly-level defaults (default: Information level, Destructure mode)
-[assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
+// Optional: project-wide defaults via fluent configurator (default: Information level, Destructure mode)
+public sealed class LogConfig : ILogConfigurator
+{
+    public void Configure(ILogBuilder b) => b.Defaults(d =>
+    {
+        d.EntryExitLevel = ZibLogLevel.Debug;
+        d.ObjectLogging = ObjectLogMode.Json;
+    });
+}
 ```
 
 > **Quiet by default.** ZibStack.NET.Log doesn't force a global using and the interpolated-logging suggestion (`ZLOG002`) is a hint, not a warning — your existing `LogInformation("...", arg)` call sites stay untouched. If you want the opinionated experience (global using + warnings on every legacy call site), opt in with `<ZibLogStrict>true</ZibLogStrict>` in your `.csproj`. See the [Log package docs](https://mistykuu.github.io/ZibStack.NET/packages/log/#configuration) for individual toggles.

@@ -430,13 +430,16 @@ internal sealed class LogAspectEmitter : IAspectEmitter
 }
 
 /// <summary>
-/// Reads assembly-level [ZibLogDefaults] and reports diagnostics for [Log] methods.
+/// Reads project-wide ILogConfigurator fluent defaults and reports diagnostics for [Log] methods.
 /// Logger is resolved from DI — no [ZibLog] or field detection needed.
 /// </summary>
 internal sealed class LogClassDataProvider : IClassDataProvider
 {
     public string AttributeFullName => "ZibStack.NET.Log.LogAttribute";
 
+    // Compilation isn't plumbed through the IClassDataProvider contract, but the
+    // containing assembly's compilation is reachable via the first syntax reference's
+    // semantic model on the class symbol. Close enough for parser discovery.
     public IReadOnlyDictionary<string, object?>? ExtractClassData(INamedTypeSymbol classSymbol)
     {
         // Check if class has any [Log] methods
@@ -444,19 +447,20 @@ internal sealed class LogClassDataProvider : IClassDataProvider
             .Any(m => m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.LogAttribute"));
         if (!hasLog) return null;
 
-        var data = new Dictionary<string, object?>();
+        var compilation = GetCompilation(classSymbol);
+        if (compilation is null) return null;
 
-        // Read assembly-level [ZibLogDefaults]
-        foreach (var asmAttr in classSymbol.ContainingAssembly.GetAttributes())
-        {
-            if (asmAttr.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.ZibLogDefaultsAttribute")
-            {
-                foreach (var arg in asmAttr.NamedArguments)
-                    data[$"Default_{arg.Key}"] = arg.Value.Value;
-            }
-        }
-
+        var defaults = LogConfiguratorParser.Read(compilation);
+        var data = defaults.ToDefaultsDictionary();
         return data.Count > 0 ? data : null;
+    }
+
+    private static Compilation? GetCompilation(INamedTypeSymbol classSymbol)
+    {
+        // Classes reaching this provider are declared in the user's source (the generator
+        // pipeline filters by declaration syntax), so ContainingAssembly is always the
+        // source assembly, which exposes Compilation. Still null-check for safety.
+        return (classSymbol.ContainingAssembly as ISourceAssemblySymbol)?.Compilation;
     }
 
     public IEnumerable<Diagnostic> GetDiagnostics(INamedTypeSymbol classSymbol)

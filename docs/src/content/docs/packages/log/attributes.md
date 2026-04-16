@@ -1,6 +1,6 @@
 ---
 title: Attribute reference
-description: Full parameter list for every attribute — [Log], [Sensitive], [NoLog], [ZibLogDefaults] — defaults, behavior, examples.
+description: "Full parameter list for every attribute — [Log], [Sensitive], [NoLog] — plus the fluent ILogConfigurator for project-wide defaults."
 ---
 
 ## Attribute Reference
@@ -23,16 +23,27 @@ description: Full parameter list for every attribute — [Log], [Sensitive], [No
 | `[NoLog]` | Parameter | | Excludes parameter from logs entirely |
 | `[return: NoLog]` | Return value | | Excludes return value from exit logs |
 
-### Assembly-level defaults
+### Project-wide defaults (fluent `ILogConfigurator`)
 
-Set defaults for all `[Log]` methods in the assembly. Per-method properties override these.
+Set defaults for all `[Log]` methods in the project. Per-method `[Log(...)]` properties still win. One class per project — the generator discovers it automatically and parses the `Configure` body at compile time (never invoked at runtime, so all values must be literals or constants).
 
 ```csharp
-[assembly: ZibLogDefaults(
-    EntryExitLevel = ZibLogLevel.Debug,
-    ObjectLogging = ObjectLogMode.Json,
-    MeasureElapsed = false)]
+public sealed class LogConfig : ILogConfigurator
+{
+    public void Configure(ILogBuilder b)
+    {
+        b.Defaults(d =>
+        {
+            d.EntryExitLevel = ZibLogLevel.Debug;
+            d.ObjectLogging = ObjectLogMode.Json;
+            d.MeasureElapsed = false;
+        });
+        b.Interpolation(i => i.PropertyNameCasing = ZibLogPropertyCasing.CamelCase);
+    }
+}
 ```
+
+**`b.Defaults(d => ...)`** — merged into every `[Log]` aspect:
 
 | Property | Default | Description |
 |---|---|---|
@@ -42,6 +53,12 @@ Set defaults for all `[Log]` methods in the assembly. Per-method properties over
 | `LogReturnValue` | `true` | Log return value |
 | `MeasureElapsed` | `true` | Measure elapsed time |
 | `ObjectLogging` | `Destructure` | How complex objects are logged |
+
+**`b.Interpolation(i => ...)`** — settings for `logger.LogXxx($"...")` interpolated-string logging:
+
+| Property | Default | Description |
+|---|---|---|
+| `PropertyNameCasing` | `PascalCase` | Casing of structured property names in log templates (`PascalCase` or `CamelCase`) |
 
 ### Interpolated string logging
 

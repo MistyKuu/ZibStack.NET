@@ -39,20 +39,11 @@ public sealed class InterpolatedLogInterceptorGenerator : IIncrementalGenerator
             .Select(static (cs, _) => cs!)
             .Collect();
 
-        // Read [assembly: ZibLogDefaults(PropertyNameCasing = ...)]
+        // Read fluent ILogConfigurator → b.Interpolation(i => { i.PropertyNameCasing = ... })
         var casing = context.CompilationProvider.Select(static (compilation, _) =>
         {
-            foreach (var attr in compilation.Assembly.GetAttributes())
-            {
-                if (attr.AttributeClass?.ToDisplayString() != "ZibStack.NET.Log.ZibLogDefaultsAttribute")
-                    continue;
-                foreach (var arg in attr.NamedArguments)
-                {
-                    if (arg.Key == "PropertyNameCasing" && arg.Value.Value is int v)
-                        return v; // 0 = PascalCase (default), 1 = CamelCase
-                }
-            }
-            return 0;
+            var defaults = LogConfiguratorParser.Read(compilation);
+            return defaults.PropertyNameCasing ?? 0; // 0 = PascalCase (default), 1 = CamelCase
         });
 
         context.RegisterSourceOutput(callSites.Combine(casing), (spc, pair) =>

@@ -2,8 +2,6 @@ using ZibStack.NET.Aop;
 using ZibStack.NET.Log;
 using ZibStack.NET.Log.Sample.Services;
 
-[assembly: ZibLogDefaults(EntryExitLevel = ZibLogLevel.Debug, ObjectLogging = ObjectLogMode.Json)]
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<OrderService>();
@@ -129,6 +127,20 @@ app.MapGet("/ping", (OrderService service) =>
 });
 
 app.Run();
+
+// Project-wide defaults for [Log] — fluent configurator form (replaces [assembly: ZibLogDefaults]).
+// The Configure body is parsed at compile time by the source generator; never invoked at runtime.
+sealed class LogConfig : ILogConfigurator
+{
+    public void Configure(ILogBuilder b)
+    {
+        b.Defaults(d =>
+        {
+            d.EntryExitLevel = ZibLogLevel.Debug;
+            d.ObjectLogging = ObjectLogMode.Json;
+        });
+    }
+}
 
 sealed class StructuredTestLogger : ILogger
 {

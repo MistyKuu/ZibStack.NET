@@ -95,7 +95,7 @@ ZibStack.NET.Log is designed to be a **quiet guest** in consumer projects — no
 | `ZibLogEmitGlobalUsing` | `false` | When `true`, the source generator emits `global using ZibStack.NET.Log;` so the interpolated-string handler overload is available everywhere without per-file `using`. |
 | `ZibLogStrict` | `false` | When `true`, turns on the opinionated experience: `ZibLogEmitGlobalUsing=true` **and** the `ZLOG002` analyzer is raised from `Info` (IDE hint) to `Warning` (visible in build output). |
 
-The assembly-level `[ZibLogDefaults]` attribute controls property name casing:
+Project-wide settings (including property-name casing and `[Log]` defaults) go through a fluent `ILogConfigurator` implementation:
 
 | Property | Default | Effect |
 |---|---|---|
@@ -103,12 +103,18 @@ The assembly-level `[ZibLogDefaults]` attribute controls property name casing:
 | | `CamelCase` (1) | `$"{userId}"` → template `{userId}`. Keeps the variable name as-is. |
 
 ```csharp
-// Default (PascalCase — no attribute needed):
+// Default (PascalCase — no configurator needed):
 _logger.LogInformation($"User {userId} bought {product}");
 // Template: "User {UserId} bought {Product}"
 
-// Opt into camelCase:
-[assembly: ZibLogDefaults(PropertyNameCasing = (int)ZibLogPropertyCasing.CamelCase)]
+// Opt into camelCase — one class per project, parsed at compile time:
+public sealed class LogConfig : ILogConfigurator
+{
+    public void Configure(ILogBuilder b) => b.Interpolation(i =>
+    {
+        i.PropertyNameCasing = ZibLogPropertyCasing.CamelCase;
+    });
+}
 // Template: "User {userId} bought {product}"
 ```
 

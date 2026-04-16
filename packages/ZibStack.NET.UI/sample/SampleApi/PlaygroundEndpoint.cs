@@ -68,7 +68,7 @@ public static class PlaygroundEndpoint
         // Log and Aop use interceptors (not source-generated attributes) — add manually
         attrs.Add(new AttributeInfo("Log", "method/class", "Log", "Automatic entry/exit/exception logging with zero allocation", "Level?, ObjectLogging?"));
         attrs.Add(new AttributeInfo("Sensitive", "parameter", "Log", "Masks parameter value in log output", ""));
-        attrs.Add(new AttributeInfo("ZibLogDefaults", "assembly", "Log", "Override assembly-level logging defaults", "EntryExitLevel?, ObjectLogging?"));
+        attrs.Add(new AttributeInfo("ILogConfigurator", "class", "Log", "Project-wide fluent defaults for [Log] + interpolated logging (replaces [assembly: ZibLogDefaults])", "Configure(ILogBuilder)"));
         attrs.Add(new AttributeInfo("Trace", "method", "Aop", "OpenTelemetry-compatible tracing — creates Activity spans", ""));
         attrs.Add(new AttributeInfo("Timing", "method", "Aop", "Lightweight method timing via ITimingRecorder", ""));
         attrs.Add(new AttributeInfo("AspectHandler", "class", "Aop", "Links an aspect attribute to its handler type", "handlerType"));
