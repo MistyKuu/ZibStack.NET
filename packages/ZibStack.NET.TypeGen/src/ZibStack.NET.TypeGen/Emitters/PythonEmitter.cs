@@ -135,7 +135,13 @@ internal static class PythonEmitter
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
-            CollectRefsRecursive(prop.CSharpTypeFullName, nameLookup, acc);
+            // `[UseType<T>]` points at a different type than the C# declaration.
+            // Use T's FQN for the import so Python's `from t import T` resolves.
+            if (prop.TargetTypeCSharpFqn is { } useTypeFqn
+                && nameLookup.TryGetValue(useTypeFqn, out var useTypeName))
+                acc.Add(useTypeName);
+            else
+                CollectRefsRecursive(prop.CSharpTypeFullName, nameLookup, acc);
         }
         return acc;
     }
@@ -185,7 +191,20 @@ internal static class PythonEmitter
         {
             var srcName = prop.SourceName;
             var pyName = py.SnakeCaseProperties ? ToSnakeCase(srcName) : srcName;
-            var typeExpr = MapCSharpToPy(prop.CSharpTypeFullName, prop.IsNullable, nameLookup);
+            // `[UseType<T>]` short-circuit: emit T's Python name directly when T
+            // is in the model (CollectRefsRecursive picked it up for imports).
+            // Nullable wrapping still applies. External targets (not in model)
+            // fall through to the usual C# → Python mapping.
+            string typeExpr;
+            if (prop.TargetTypeCSharpFqn is { } useTypeFqn
+                && nameLookup.TryGetValue(useTypeFqn, out var useTypePy))
+            {
+                typeExpr = prop.IsNullable ? useTypePy + " | None" : useTypePy;
+            }
+            else
+            {
+                typeExpr = MapCSharpToPy(prop.CSharpTypeFullName, prop.IsNullable, nameLookup);
+            }
             var optional = prop.IsNullable;
 
             if (py.Style == PythonStyle.Pydantic)

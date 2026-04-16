@@ -160,11 +160,11 @@ public class BugfixBundle2Tests
     {
         // End-to-end: the parent class is discovered *only* via the fluent
         // `.WithGeneratedTypes(...)` path (no [GenerateTypes] attribute). Its
-        // property carries a fluent `.TsType<Payload>()` — Payload also has no
+        // property carries a fluent `.UseType<Payload>()` — Payload also has no
         // attribute. The pipeline must:
         //   1. discover the parent via WithGeneratedTypes,
-        //   2. merge the per-property TsTypeTargetCSharpFqn via fluent,
-        //   3. seed Payload via SeedGenericTsTypeTargets,
+        //   2. merge the per-property TargetTypeCSharpFqn via fluent,
+        //   3. seed Payload via SeedGenericTypeTargets,
         //   4. rewrite the property to point at Payload + auto-path import.
         var userCode = """
             using ZibStack.NET.TypeGen;
@@ -187,7 +187,7 @@ public class BugfixBundle2Tests
                     b.ForType<Root>()
                         .WithGeneratedTypes(TypeTarget.TypeScript)
                         .OutputDir(".")
-                        .Property(r => r.El).TsType<Payload>();
+                        .Property(r => r.El).UseType<Payload>();
                 }
             }
             """;
@@ -195,7 +195,7 @@ public class BugfixBundle2Tests
 
         // Root got emitted by fluent-only discovery
         Assert.Contains(model.Classes, c => c.SourceName == "Root");
-        // Payload got seeded by SeedGenericTsTypeTargets from the .TsType<Payload>()
+        // Payload got seeded by SeedGenericTypeTargets from the .UseType<Payload>()
         Assert.Contains(model.Classes, c => c.SourceName == "Payload");
 
         // Emitted TS has both the import AND the property type pointing at Payload
@@ -209,7 +209,7 @@ public class BugfixBundle2Tests
     public void Fluent_PropertyTsTypeGeneric_OnTransitivelyDiscoveredClass_SeedsTarget()
     {
         // User repro: XD is the only fluent root. A is transitively discovered
-        // (via XD.As : List<A>). Fluent sets `.Property(a => a.Element).TsType<Side>()`
+        // (via XD.As : List<A>). Fluent sets `.Property(a => a.Element).UseType<Side>()`
         // on A — Side must land in the model so Element renders as Side (not unknown).
         var userCode = """
             using ZibStack.NET.TypeGen;
@@ -248,14 +248,14 @@ public class BugfixBundle2Tests
                 public void Configure(ITypeGenBuilder b)
                 {
                     b.ForType<XD>().WithGeneratedTypes(TypeTarget.TypeScript).OutputDir(".");
-                    b.ForType<A>().Property(x => x.Element).TsType<Side>();
+                    b.ForType<A>().Property(x => x.Element).UseType<Side>();
                 }
             }
             """;
         var (model, _) = RunFullPipeline(userCode);
 
-        // Side must have been seeded by SeedGenericTsTypeTargets after fluent
-        // merge made A.Element.TsTypeTargetCSharpFqn = Side's FQN.
+        // Side must have been seeded by SeedGenericTypeTargets after fluent
+        // merge made A.Element.TargetTypeCSharpFqn = Side's FQN.
         Assert.Contains(model.Classes, c => c.SourceName == "Side");
 
         var files = TypeScriptEmitter.Emit(model, new GlobalSettings()).ToList();
@@ -271,7 +271,7 @@ public class BugfixBundle2Tests
     {
         // 100% fluent: no [GenerateTypes] anywhere, no [TsType] attribute. Everything
         // flows through the configurator — Root registered via WithGeneratedTypes,
-        // property El typed via fluent .TsType<Dupa>(), and Dupa's own nested graph
+        // property El typed via fluent .UseType<Dupa>(), and Dupa's own nested graph
         // (Detail, Tag) rides transitive discovery the same way a regular property
         // type would.
         var userCode = """
@@ -301,7 +301,7 @@ public class BugfixBundle2Tests
                     b.ForType<Root>()
                         .WithGeneratedTypes(TypeTarget.TypeScript)
                         .OutputDir(".")
-                        .Property(r => r.El).TsType<Dupa>();
+                        .Property(r => r.El).UseType<Dupa>();
                 }
             }
             """;
@@ -365,7 +365,7 @@ public class BugfixBundle2Tests
                     IPropertyBuilder<TClass, TProp> TsName(string n);
                     IPropertyBuilder<TClass, TProp> TsType(string t);
                     IPropertyBuilder<TClass, TProp> TsType(string t, string? importFrom);
-                    IPropertyBuilder<TClass, TProp> TsType<TTarget>();
+                    IPropertyBuilder<TClass, TProp> UseType<TTarget>();
                     IPropertyBuilder<TClass, TProp> OpenApiName(string n);
                     IPropertyBuilder<TClass, TProp> OpenApiType(string t); IPropertyBuilder<TClass, TProp> OpenApiRef(string s);
                     IPropertyBuilder<TClass, TProp> OpenApiFormat(string f); IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);
@@ -381,7 +381,7 @@ public class BugfixBundle2Tests
                     public string? OutputDir { get; set; }
                 }
                 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-                public sealed class TsTypeAttribute<T> : Attribute { public string? ImportFrom { get; set; } }
+                public sealed class UseTypeAttribute<T> : Attribute { public string? ImportFrom { get; set; } }
             }
             """;
         var refs = new[]
@@ -414,7 +414,7 @@ public class BugfixBundle2Tests
                         : ".";
                 var aux = SchemaParser.ParseAuxiliaryClass(sym, (TypeTarget)fluentTargets, dir);
                 if (aux is null) continue;
-                // Merge fluent-per-property overrides (including TsTypeTargetCSharpFqn).
+                // Merge fluent-per-property overrides (including TargetTypeCSharpFqn).
                 if (config.PerType.TryGetValue(aux.CSharpFullName, out var pto))
                     foreach (var prop in aux.Properties)
                         if (pto.Properties.TryGetValue(prop.SourceName, out var po))
@@ -422,7 +422,7 @@ public class BugfixBundle2Tests
                             prop.TsNameOverride ??= po.TsName;
                             prop.TsTypeOverride ??= po.TsType;
                             prop.TsImportFrom ??= po.TsImportFrom;
-                            prop.TsTypeTargetCSharpFqn ??= po.TsTypeTargetCSharpFqn;
+                            prop.TargetTypeCSharpFqn ??= po.TargetTypeCSharpFqn;
                         }
                 model.Classes.Add(aux);
             }
@@ -433,17 +433,17 @@ public class BugfixBundle2Tests
         {
             lastCount = model.Classes.Count + model.Enums.Count;
             var clsBefore = model.Classes.Count;
-            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+            SchemaParser.SeedGenericTypeTargets(model, compilation);
             SchemaParser.DiscoverBaseClasses(model, compilation);
             SchemaParser.DiscoverTransitive(model, compilation);
             // Mirror the generator: newly added classes go through a fluent
             // merge pass so config-side per-property overrides (TsType<T>,
             // TsName, Ignore, …) reach their SchemaProperty before the next
-            // SeedGeneric iteration reads TsTypeTargetCSharpFqn.
+            // SeedGeneric iteration reads TargetTypeCSharpFqn.
             for (int i = clsBefore; i < model.Classes.Count; i++)
                 MergeFluentInto(model.Classes[i], config);
         } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
-        SchemaParser.ResolveGenericTsTypeReferences(model);
+        SchemaParser.ResolveGenericTypeReferences(model);
         return (model, compilation);
     }
 
@@ -462,7 +462,7 @@ public class BugfixBundle2Tests
                 prop.TsNameOverride ??= po.TsName;
                 prop.TsTypeOverride ??= po.TsType;
                 prop.TsImportFrom ??= po.TsImportFrom;
-                prop.TsTypeTargetCSharpFqn ??= po.TsTypeTargetCSharpFqn;
+                prop.TargetTypeCSharpFqn ??= po.TargetTypeCSharpFqn;
                 if (po.Ignore) { prop.TsIgnore = true; prop.OpenApiIgnore = true; }
                 prop.TsIgnore |= po.TsIgnore;
                 prop.OpenApiIgnore |= po.OpenApiIgnore;
@@ -473,9 +473,9 @@ public class BugfixBundle2Tests
     public void GenericTsType_TargetInReferencedAssembly_StillSeedsAndImports()
     {
         // Split into two compilations: the referenced lib defines Payload, the
-        // consumer references it and uses [TsType<Payload>]. Today's IsUserDefined
+        // consumer references it and uses [UseType<Payload>]. Today's IsUserDefined
         // check rejects external-assembly types — user explicitly writing
-        // [TsType<T>] should override that heuristic (they asked for T by name).
+        // [UseType<T>] should override that heuristic (they asked for T by name).
         var libRefs = new[]
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
@@ -499,7 +499,7 @@ public class BugfixBundle2Tests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<Payload>]
+                [UseType<Payload>]
                 public object? El { get; set; }
             }
             """, extraRefs: new[] { MetadataReference.CreateFromImage(libStream.ToArray()) });
@@ -527,7 +527,7 @@ public class BugfixBundle2Tests
                     public TsTypeAttribute(string typeExpression) => TypeExpression = typeExpression;
                 }
                 [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Field)]
-                public sealed class TsTypeAttribute<T> : System.Attribute { public string? ImportFrom { get; set; } }
+                public sealed class UseTypeAttribute<T> : System.Attribute { public string? ImportFrom { get; set; } }
             }
             """;
         var refs = new List<MetadataReference>
@@ -570,11 +570,11 @@ public class BugfixBundle2Tests
         do
         {
             lastCount = model.Classes.Count + model.Enums.Count;
-            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+            SchemaParser.SeedGenericTypeTargets(model, compilation);
             SchemaParser.DiscoverBaseClasses(model, compilation);
             SchemaParser.DiscoverTransitive(model, compilation);
         } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
-        SchemaParser.ResolveGenericTsTypeReferences(model);
+        SchemaParser.ResolveGenericTypeReferences(model);
         return model;
     }
 }

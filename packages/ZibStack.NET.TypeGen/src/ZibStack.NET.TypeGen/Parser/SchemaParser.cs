@@ -15,9 +15,10 @@ internal static class SchemaParser
     private const string GenerateTypesAttr = "ZibStack.NET.TypeGen.GenerateTypesAttribute";
     private const string TsNameAttr = "ZibStack.NET.TypeGen.TsNameAttribute";
     private const string TsTypeAttr = "ZibStack.NET.TypeGen.TsTypeAttribute";
-    // Generic variant `[TsType<T>]`. Constructed form is `...TsTypeAttribute<T>` —
-    // we match on the open-generic's name after a GetGenericTypeDefinition-style check.
-    private const string TsTypeGenericAttrOpen = "ZibStack.NET.TypeGen.TsTypeAttribute<T>";
+    // Cross-target generic override `[UseType<T>]`. Renders per emitter:
+    // TS import, OpenAPI $ref, Python import. Match the open form via
+    // ConstructedFrom.ToDisplayString().
+    private const string UseTypeGenericAttrOpen = "ZibStack.NET.TypeGen.UseTypeAttribute<T>";
     private const string TsIgnoreAttr = "ZibStack.NET.TypeGen.TsIgnoreAttribute";
     private const string OpenApiSchemaNameAttr = "ZibStack.NET.TypeGen.OpenApiSchemaNameAttribute";
     private const string OpenApiPropertyAttr = "ZibStack.NET.TypeGen.OpenApiPropertyAttribute";
@@ -136,7 +137,7 @@ internal static class SchemaParser
     /// External targets (BCL, other assemblies) are left alone — the user owns
     /// their <c>.ts</c> / <c>.d.ts</c> definition.
     /// </summary>
-    public static void SeedGenericTsTypeTargets(SchemaModel model, Compilation compilation)
+    public static void SeedGenericTypeTargets(SchemaModel model, Compilation compilation)
     {
         // Snapshot the current classes — we add to model.Classes while iterating.
         var inModel = new HashSet<string>(
@@ -150,16 +151,16 @@ internal static class SchemaParser
         {
             foreach (var prop in cls.Properties)
             {
-                if (prop.TsTypeTargetCSharpFqn is null) continue;
-                if (inModel.Contains(prop.TsTypeTargetCSharpFqn)) continue;
-                var sym = compilation.GetTypeByMetadataName(ToMetadataName(prop.TsTypeTargetCSharpFqn));
+                if (prop.TargetTypeCSharpFqn is null) continue;
+                if (inModel.Contains(prop.TargetTypeCSharpFqn)) continue;
+                var sym = compilation.GetTypeByMetadataName(ToMetadataName(prop.TargetTypeCSharpFqn));
                 if (sym is null) continue;
                 // `[TsType<T>]` is an explicit request to emit T — relax the
                 // same-assembly check that DiscoverTransitive uses. Still skip
                 // BCL (System.*, Microsoft.*) to avoid pulling in half the framework.
                 if (!IsEmittableTypeForExplicitReference(sym)) continue;
                 toAdd.Add((cls, sym));
-                inModel.Add(prop.TsTypeTargetCSharpFqn);
+                inModel.Add(prop.TargetTypeCSharpFqn);
             }
         }
         foreach (var (owner, sym) in toAdd)
@@ -180,7 +181,7 @@ internal static class SchemaParser
     /// <summary>
     /// After the model is finalised (roots + companions + transitive discovery +
     /// fluent merge), rewrites every property carrying
-    /// <see cref="SchemaProperty.TsTypeTargetCSharpFqn"/> so its
+    /// <see cref="SchemaProperty.TargetTypeCSharpFqn"/> so its
     /// <see cref="SchemaProperty.TsTypeOverride"/> points at the target's emitted
     /// TS name and its <see cref="SchemaProperty.TsImportFrom"/> — when unset by
     /// the user — is computed as a relative path from the owning class's
@@ -188,15 +189,15 @@ internal static class SchemaParser
     /// alone (the name already falls back to the generic argument's simple name
     /// during parsing; no import is emitted without an explicit <c>ImportFrom</c>).
     /// </summary>
-    public static void ResolveGenericTsTypeReferences(SchemaModel model)
+    public static void ResolveGenericTypeReferences(SchemaModel model)
     {
         foreach (var cls in model.Classes)
         {
             foreach (var prop in cls.Properties)
             {
-                if (prop.TsTypeTargetCSharpFqn is null) continue;
+                if (prop.TargetTypeCSharpFqn is null) continue;
 
-                var fqn = prop.TsTypeTargetCSharpFqn;
+                var fqn = prop.TargetTypeCSharpFqn;
                 var targetClass = model.Classes.FirstOrDefault(c => c.CSharpFullName == fqn);
                 var targetEnum = targetClass is null
                     ? model.Enums.FirstOrDefault(e => e.CSharpFullName == fqn)
@@ -712,24 +713,25 @@ internal static class SchemaParser
             OpenApiIgnore = HasAttr(prop, OpenApiIgnoreAttr),
         };
 
-        // [TsType<T>] generic form — captures T's FQN now; actual TS name +
-        // import path get resolved late in the pipeline (see
-        // ResolveGenericTsTypeReferences) after discovery has finalised the model.
-        var genericTsType = prop.GetAttributes().FirstOrDefault(a =>
+        // `[UseType<T>]` cross-target generic override — captures T's FQN now;
+        // actual per-target rendering (TS import, OpenAPI $ref, Python import)
+        // is resolved late via ResolveGenericTypeReferences after the model
+        // has stabilised (so T can itself be auto-discovered).
+        var genericUseType = prop.GetAttributes().FirstOrDefault(a =>
             a.AttributeClass is INamedTypeSymbol nts
             && nts.IsGenericType
-            && nts.ConstructedFrom.ToDisplayString() == TsTypeGenericAttrOpen
+            && nts.ConstructedFrom.ToDisplayString() == UseTypeGenericAttrOpen
             && nts.TypeArguments.Length == 1);
-        if (genericTsType is not null
-            && ((INamedTypeSymbol)genericTsType.AttributeClass!).TypeArguments[0] is ITypeSymbol tArg)
+        if (genericUseType is not null
+            && ((INamedTypeSymbol)genericUseType.AttributeClass!).TypeArguments[0] is ITypeSymbol tArg)
         {
-            sp.TsTypeTargetCSharpFqn = tArg.ToDisplayString();
+            sp.TargetTypeCSharpFqn = tArg.ToDisplayString();
             // Seed TsTypeOverride with the target's simple name as a fallback —
-            // the resolver will replace it with the target's EmittedName / [TsName]
-            // override once the model is finalised.
+            // the resolver replaces it with the target's EmittedName (TsName
+            // override etc.) once the model is finalised.
             sp.TsTypeOverride ??= tArg.Name;
-            // Optional explicit ImportFrom override — falls through if absent.
-            foreach (var na in genericTsType.NamedArguments)
+            // Optional TS import path override (OpenAPI/Python don't need it).
+            foreach (var na in genericUseType.NamedArguments)
                 if (na.Key == "ImportFrom" && na.Value.Value is string imp)
                     sp.TsImportFrom ??= imp;
         }

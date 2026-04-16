@@ -880,6 +880,12 @@ internal static class OpenApiEmitter
     {
         if (prop.OpenApiRefOverride is { } refName)
             return ("$ref", null, refName, null);
+        // `[UseType<T>]` — cross-target override. If T is in the model, emit a
+        // $ref; if not, fall through (the target lives outside the schema — user
+        // should supply OpenApiRefOverride or OpenApiTypeOverride explicitly).
+        if (prop.TargetTypeCSharpFqn is { } useTypeFqn
+            && nameByCSharp.TryGetValue(useTypeFqn, out var useTypeName))
+            return ("$ref", null, useTypeName, null);
         var inferred = MapCSharpToOpenApi(prop.CSharpTypeFullName, nameByCSharp);
         if (prop.OpenApiTypeOverride is { } typeOverride)
             // Drop the inferred format — it was chosen to match the inferred type

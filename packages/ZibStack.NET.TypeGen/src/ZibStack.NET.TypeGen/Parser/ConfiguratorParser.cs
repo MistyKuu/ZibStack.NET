@@ -52,7 +52,7 @@ internal static class ConfiguratorParser
         public string? TsType { get; set; }
         public string? TsImportFrom { get; set; }
         /// <summary>FQN of T from a fluent <c>.TsType&lt;T&gt;()</c> call.</summary>
-        public string? TsTypeTargetCSharpFqn { get; set; }
+        public string? TargetTypeCSharpFqn { get; set; }
         public string? OpenApiName { get; set; }
         public string? OpenApiType { get; set; }
         public string? OpenApiRef { get; set; }
@@ -416,19 +416,20 @@ internal static class ConfiguratorParser
         PerPropertyOverrides o,
         System.Action<Diagnostic> report)
     {
-        // `.TsType<T>()` — generic form. Resolve T via the semantic model and
-        // store its FQN; the late-bind pass in the main generator replaces this
-        // with the emitted TS name + computed import path. Falls through to the
-        // string-form case when there's no type-argument list.
-        if (name == "TsType"
+        // `.UseType<T>()` — cross-target generic override. Resolve T via the
+        // semantic model and store its FQN; late-bind replaces it with the
+        // target's emitted name (and computes TS import path) once the model
+        // is finalised. OpenAPI / Python emitters read the same field to emit
+        // `$ref` / import respectively.
+        if (name == "UseType"
             && inv.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax g }
             && g.TypeArgumentList.Arguments.Count == 1)
         {
             var typeInfo = sm.GetTypeInfo(g.TypeArgumentList.Arguments[0]).Type;
             if (typeInfo is not null)
             {
-                o.TsTypeTargetCSharpFqn = typeInfo.ToDisplayString();
-                // Seed the fallback — replaced later by ResolveGenericTsTypeReferences.
+                o.TargetTypeCSharpFqn = typeInfo.ToDisplayString();
+                // Seed the fallback — replaced later by ResolveGenericTypeReferences.
                 o.TsType ??= typeInfo.Name;
             }
             return;

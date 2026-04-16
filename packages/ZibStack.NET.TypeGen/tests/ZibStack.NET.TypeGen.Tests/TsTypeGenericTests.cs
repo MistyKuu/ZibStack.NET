@@ -29,7 +29,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<Payload>]
+                [UseType<Payload>]
                 public JsonObject? Element { get; set; }
             }
 
@@ -50,7 +50,7 @@ public class TsTypeGenericTests
     [Fact]
     public void GenericTsType_TargetAutoDiscovered_AutoImport()
     {
-        // Payload has NO [GenerateTypes] — but Rule does. [TsType<Payload>] on a
+        // Payload has NO [GenerateTypes] — but Rule does. [UseType<Payload>] on a
         // property forces TypeGen to treat Payload as reachable; transitive
         // discovery pulls it in and the import gets auto-resolved.
         var model = ParseAll("""
@@ -61,7 +61,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<Payload>]
+                [UseType<Payload>]
                 public JsonObject? Element { get; set; }
             }
 
@@ -88,7 +88,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = "client/src/rules")]
             public class Rule
             {
-                [TsType<Payload>]
+                [UseType<Payload>]
                 public JsonObject? Element { get; set; }
             }
 
@@ -114,7 +114,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<Payload>(ImportFrom = "./shared/payload")]
+                [UseType<Payload>(ImportFrom = "./shared/payload")]
                 public JsonObject? Element { get; set; }
             }
 
@@ -145,7 +145,7 @@ public class TsTypeGenericTests
                 [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
                 public class Rule
                 {
-                    [TsType<System.Ext.ExternalType>]
+                    [UseType<System.Ext.ExternalType>]
                     public JsonObject? Element { get; set; }
                 }
             }
@@ -169,7 +169,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<Payload>]
+                [UseType<Payload>]
                 public JsonObject? Element { get; set; }
             }
 
@@ -188,10 +188,10 @@ public class TsTypeGenericTests
     [Fact]
     public void GenericTsType_SeededTarget_WithBaseClass_BaseAlsoAutoSeeded()
     {
-        // [TsType<A>] where A inherits from Base. Both A and Base must show up
+        // [UseType<A>] where A inherits from Base. Both A and Base must show up
         // in the emitted set — A via generic seed, Base via the inheritance
         // auto-seed pass. Needs the pipeline to run DiscoverBaseClasses AFTER
-        // (or iterated with) SeedGenericTsTypeTargets; otherwise A's base chain
+        // (or iterated with) SeedGenericTypeTargets; otherwise A's base chain
         // is missed.
         var model = ParseAll("""
             using System.Text.Json.Nodes;
@@ -201,7 +201,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<A>]
+                [UseType<A>]
                 public JsonObject? Element { get; set; }
             }
 
@@ -226,7 +226,7 @@ public class TsTypeGenericTests
     [Fact]
     public void GenericTsType_SeededTarget_GoesThroughNestedDiscoveryToo()
     {
-        // The T in [TsType<T>] enters the model via SeedGenericTsTypeTargets
+        // The T in [UseType<T>] enters the model via SeedGenericTypeTargets
         // *before* DiscoverTransitive runs. That means anything T references
         // (nested classes, enums, collections) rides the same transitive walk
         // as if T had been a normal property type — no special case needed.
@@ -240,13 +240,13 @@ public class TsTypeGenericTests
             public class Rule
             {
                 // `Element` has no C# type link to Payload — TypeGen would leave
-                // it at `unknown` without the generic hint. With [TsType<Payload>]
+                // it at `unknown` without the generic hint. With [UseType<Payload>]
                 // the whole Payload-reachable graph lands in the output.
-                [TsType<Payload>]
+                [UseType<Payload>]
                 public JsonObject? Element { get; set; }
             }
 
-            // Payload has no [GenerateTypes] — pulled in solely by [TsType<Payload>].
+            // Payload has no [GenerateTypes] — pulled in solely by [UseType<Payload>].
             public class Payload
             {
                 public string Title { get; set; } = "";
@@ -260,7 +260,7 @@ public class TsTypeGenericTests
             public enum Severity { Low, High }
             """);
 
-        // Seeded via [TsType<Payload>], then DiscoverTransitive walked Payload
+        // Seeded via [UseType<Payload>], then DiscoverTransitive walked Payload
         // and pulled in Detail, Tag, Severity by property graph.
         Assert.Contains(model.Classes, c => c.SourceName == "Payload");
         Assert.Contains(model.Classes, c => c.SourceName == "Detail");
@@ -304,7 +304,7 @@ public class TsTypeGenericTests
             [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
             public class Rule
             {
-                [TsType<Priority>]
+                [UseType<Priority>]
                 public object? Level { get; set; }
             }
 
@@ -321,7 +321,7 @@ public class TsTypeGenericTests
     [Fact]
     public void FluentTsTypeGeneric_ReadByConfiguratorParser()
     {
-        // Drive the configurator parser directly with a `.TsType<T>()` fluent call
+        // Drive the configurator parser directly with a `.UseType<T>()` fluent call
         // and assert that T's FQN lands on the per-property overrides. The late-bind
         // merge into SchemaProperty + path computation happens in TypeGenGenerator,
         // tested end-to-end through the attribute form above — this only verifies
@@ -336,14 +336,14 @@ public class TsTypeGenericTests
                     public void Configure(ITypeGenBuilder b)
                     {
                         b.ForType<Owner>()
-                            .Property(o => o.El).TsType<Target>();
+                            .Property(o => o.El).UseType<Target>();
                     }
                 }
             }
             """);
         var owner = parsed.PerType["Ns.Owner"];
         var el = owner.Properties["El"];
-        Assert.Equal("Ns.Target", el.TsTypeTargetCSharpFqn);
+        Assert.Equal("Ns.Target", el.TargetTypeCSharpFqn);
     }
 
     // ── Roslyn harness ──────────────────────────────────────────────────────
@@ -372,7 +372,7 @@ public class TsTypeGenericTests
                     public TsTypeAttribute(string typeExpression) => TypeExpression = typeExpression;
                 }
                 [System.AttributeUsage(System.AttributeTargets.Property | System.AttributeTargets.Field)]
-                public sealed class TsTypeAttribute<T> : System.Attribute {
+                public sealed class UseTypeAttribute<T> : System.Attribute {
                     public string? ImportFrom { get; set; }
                 }
             }
@@ -416,11 +416,11 @@ public class TsTypeGenericTests
         do
         {
             lastCount = model.Classes.Count + model.Enums.Count;
-            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+            SchemaParser.SeedGenericTypeTargets(model, compilation);
             SchemaParser.DiscoverBaseClasses(model, compilation);
             SchemaParser.DiscoverTransitive(model, compilation);
         } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
-        SchemaParser.ResolveGenericTsTypeReferences(model);
+        SchemaParser.ResolveGenericTypeReferences(model);
         return model;
     }
 
@@ -459,7 +459,7 @@ public class TsTypeGenericTests
                     IPropertyBuilder<TClass, TProp> TsName(string n);
                     IPropertyBuilder<TClass, TProp> TsType(string t);
                     IPropertyBuilder<TClass, TProp> TsType(string t, string? importFrom);
-                    IPropertyBuilder<TClass, TProp> TsType<TTarget>();
+                    IPropertyBuilder<TClass, TProp> UseType<TTarget>();
                     IPropertyBuilder<TClass, TProp> OpenApiName(string n);
                     IPropertyBuilder<TClass, TProp> OpenApiType(string t); IPropertyBuilder<TClass, TProp> OpenApiRef(string s);
                     IPropertyBuilder<TClass, TProp> OpenApiFormat(string f); IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);

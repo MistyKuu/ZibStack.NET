@@ -54,34 +54,45 @@ public sealed class TsTypeAttribute : Attribute
 }
 
 /// <summary>
-/// Generic variant of <see cref="TsTypeAttribute"/>. The TypeScript type name is
-/// read from <typeparamref name="T"/>'s symbol at compile time (refactor-safe —
-/// renaming <typeparamref name="T"/> updates this reference automatically). When
-/// <typeparamref name="T"/> is reachable from a <see cref="GenerateTypesAttribute"/>
-/// root (either directly annotated or pulled in by transitive discovery), the
-/// import path is computed from its emitted <c>OutputDir</c> — no string literal
-/// needed. When the target lives outside the model (BCL, NuGet package,
-/// hand-written <c>.d.ts</c>) set <see cref="ImportFrom"/> explicitly or the
-/// symbol name is emitted without an <c>import</c> line.
+/// Cross-target type override. Tells every emitter (TypeScript, OpenAPI,
+/// Python, …) "this property is actually of type <typeparamref name="T"/>",
+/// and each one renders it in its own idiom:
+/// <list type="bullet">
+///   <item>TS: <c>prop: T;</c> plus <c>import { T } from './T';</c> — path
+///   auto-computed when T is in the emitted model, else supply
+///   <see cref="ImportFrom"/>.</item>
+///   <item>OpenAPI: <c>$ref: '#/components/schemas/T'</c>.</item>
+///   <item>Python: <c>prop: T</c> plus <c>from t import T</c>.</item>
+/// </list>
+/// Refactor-safe — renaming <typeparamref name="T"/> updates every reference
+/// via Roslyn, no string literal to drift. Use the string-form
+/// <see cref="TsTypeAttribute"/> for TypeScript-only opaque expressions
+/// (literal unions, branded types, etc.) that can't be expressed in the other
+/// targets.
 /// </summary>
-/// <typeparam name="T">Any type — its simple name and (optionally) its
-/// <see cref="TsNameAttribute"/> override drive the emitted TS expression.</typeparam>
+/// <typeparam name="T">The concrete type the property represents on the wire.</typeparam>
 /// <example>
 /// <code>
-/// // Zero string literals — compile-time safe.
-/// [TsType&lt;AutomationRulePayload&gt;]
+/// // Cross-target: TS import, OpenAPI $ref, Python import — all from one attribute.
+/// [UseType&lt;AutomationRulePayload&gt;]
 /// public JsonObject? Element { get; set; }
 ///
-/// // Explicit path wins when the target isn't in the generated model.
-/// [TsType&lt;ExternalLib.Widget&gt;(ImportFrom = "@acme/widgets")]
+/// // Explicit TS path wins when the target isn't in the generated model.
+/// // (OpenAPI/Python still use T's name as the ref/import.)
+/// [UseType&lt;ExternalLib.Widget&gt;(ImportFrom = "@acme/widgets")]
 /// public object? Widget { get; set; }
 /// </code>
 /// </example>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field,
     Inherited = false, AllowMultiple = false)]
-public sealed class TsTypeAttribute<T> : Attribute
+public sealed class UseTypeAttribute<T> : Attribute
 {
-    /// <summary>See <see cref="TsTypeAttribute.ImportFrom"/>.</summary>
+    /// <summary>
+    /// Optional TypeScript module specifier used when the import path can't be
+    /// derived from the model (target lives outside the project, hand-written
+    /// <c>.d.ts</c>, etc.). OpenAPI / Python ignore this — they reference the
+    /// target by name only.
+    /// </summary>
     public string? ImportFrom { get; set; }
 }
 

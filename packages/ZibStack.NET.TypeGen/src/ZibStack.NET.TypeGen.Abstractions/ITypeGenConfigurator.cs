@@ -164,15 +164,13 @@ public interface IPropertyBuilder<TClass, TProp>
     IPropertyBuilder<TClass, TProp> TsType(string typeExpression, string? importFrom);
 
     /// <summary>
-    /// Generic equivalent of <c>[TsType&lt;T&gt;]</c>. The TS name is read from
-    /// <typeparamref name="T"/>'s symbol (refactor-safe); when <typeparamref name="T"/>
-    /// is reachable from a <see cref="GenerateTypesAttribute"/> root — directly or via
-    /// transitive discovery — the import path is computed from its <c>OutputDir</c>
-    /// so no string-literal duplication is needed. Pair with
-    /// <see cref="TsType(string, string?)"/> or an explicit <c>ImportFrom</c> on the
-    /// attribute form when the target lives outside the generated model.
+    /// Cross-target equivalent of <c>[UseType&lt;T&gt;]</c>. Tells every emitter
+    /// that the property's wire-level type is <typeparamref name="T"/> — TS emits
+    /// <c>prop: T;</c> with an auto-computed import, OpenAPI emits
+    /// <c>$ref: '#/components/schemas/T'</c>, Python emits <c>prop: T</c> with
+    /// the matching import. Refactor-safe.
     /// </summary>
-    IPropertyBuilder<TClass, TProp> TsType<T>();
+    IPropertyBuilder<TClass, TProp> UseType<T>();
 
     /// <summary>Equivalent to <c>[OpenApiSchemaName(name)]</c> on the property.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiName(string name);

@@ -238,14 +238,15 @@ internal sealed class SchemaProperty
     public string? TsImportFrom { get; set; }
 
     /// <summary>
-    /// Set when the property carries <c>[TsType&lt;T&gt;]</c> — the FQN of
-    /// <c>T</c>. Resolved late (after discovery) by
-    /// <see cref="T:ZibStack.NET.TypeGen.Generator.SchemaParser.ResolveGenericTsTypeReferences"/>:
-    /// the referenced SchemaClass/SchemaEnum gives the emitted TS name and
-    /// <see cref="TsImportFrom"/> falls out of its <c>OutputDir</c>. Null when
-    /// the property uses the string-form <c>[TsType("Foo")]</c> or no override.
+    /// Set when the property carries <c>[UseType&lt;T&gt;]</c> (or the fluent
+    /// <c>.UseType&lt;T&gt;()</c>) — the FQN of <c>T</c>. Resolved late (after
+    /// discovery) by
+    /// <see cref="T:ZibStack.NET.TypeGen.Generator.SchemaParser.ResolveGenericTypeReferences"/>.
+    /// Every emitter reads this: TS renders <c>T</c> plus an import, OpenAPI
+    /// emits a <c>$ref</c>, Python emits <c>T</c> plus an import. Null when the
+    /// property uses the string-form <c>[TsType("Foo")]</c> or no override.
     /// </summary>
-    public string? TsTypeTargetCSharpFqn { get; set; }
+    public string? TargetTypeCSharpFqn { get; set; }
 
     /// <summary>OpenAPI annotations from <c>[OpenApiProperty]</c> and per-property fluent overrides.</summary>
     public string? OpenApiFormat { get; set; }

@@ -244,7 +244,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             //     SeedGeneric + DiscoverTransitive get another look.
             // Fluent overrides get applied inside the loop too — any freshly
             // added class goes through ApplyFluentToClass so per-property
-            // TsTypeTargetCSharpFqn from the configurator is visible to the next
+            // TargetTypeCSharpFqn from the configurator is visible to the next
             // SeedGeneric iteration. Terminates when no pass adds anything.
             // Each pass is strict-additive, so a hard iteration cap is a safety
             // net — should exit in 2-3 turns for realistic graphs. If we hit the
@@ -258,7 +258,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 lastCount = model.Classes.Count + model.Enums.Count;
                 var clsBefore = model.Classes.Count;
                 var enumBefore = model.Enums.Count;
-                SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+                SchemaParser.SeedGenericTypeTargets(model, compilation);
                 SchemaParser.DiscoverBaseClasses(model, compilation);
                 SchemaParser.DiscoverTransitive(model, compilation);
                 for (int i = clsBefore; i < model.Classes.Count; i++)
@@ -272,7 +272,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // supply an ImportFrom, compute the relative import path from the owning
             // class's OutputDir to the target's. Must run AFTER discovery + fluent
             // so target names / OutputDirs are final.
-            SchemaParser.ResolveGenericTsTypeReferences(model);
+            SchemaParser.ResolveGenericTypeReferences(model);
 
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
@@ -438,7 +438,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             prop.TsNameOverride ??= po.TsName;
             prop.TsTypeOverride ??= po.TsType;
             prop.TsImportFrom ??= po.TsImportFrom;
-            prop.TsTypeTargetCSharpFqn ??= po.TsTypeTargetCSharpFqn;
+            prop.TargetTypeCSharpFqn ??= po.TargetTypeCSharpFqn;
             prop.OpenApiNameOverride ??= po.OpenApiName;
             prop.OpenApiTypeOverride ??= po.OpenApiType;
             prop.OpenApiRefOverride ??= po.OpenApiRef;

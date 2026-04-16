@@ -29,7 +29,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         
         b.ForType<Root>()
             .WithGeneratedTypes(TypeTarget.TypeScript)
-            .Property(r => r.El).TsType<Dupa>();
+            .Property(r => r.El).UseType<Dupa>();
 
         b.ForType<OrderItem>().TsName("hoho");
         b.ForType<OrderItem>().Property(x => x.UnitPrice).TsName("ASD");
