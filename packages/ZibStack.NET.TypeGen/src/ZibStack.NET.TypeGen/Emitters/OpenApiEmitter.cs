@@ -1105,8 +1105,21 @@ internal static class OpenApiEmitter
         return null;
     }
 
-    private static bool IsEffectivelyNullable(SchemaProperty p) =>
-        p.OpenApiNullableOverride ?? p.IsNullable;
+    /// <summary>
+    /// Is this property nullable for OpenAPI purposes — affects both the
+    /// <c>nullable: true</c> flag and the parent schema's <c>required</c> list
+    /// membership. Precedence: explicit <c>OpenApiNullableOverride</c> (fluent)
+    /// wins first. <c>[Required]</c> / <c>[ZRequired]</c> / C# <c>required</c>
+    /// override NRT when there's no fluent override — "you marked this as
+    /// must-send, so it's not nullable on the wire regardless of
+    /// <c>string?</c>". Otherwise NRT nullability.
+    /// </summary>
+    private static bool IsEffectivelyNullable(SchemaProperty p)
+    {
+        if (p.OpenApiNullableOverride is { } ov) return ov;
+        if (p.IsExplicitlyRequired) return false;
+        return p.IsNullable;
+    }
 
     // ── YAML/JSON scalar formatters ──
 

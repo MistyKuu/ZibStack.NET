@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using ZibStack.NET.Dto;
 using ZibStack.NET.TypeGen;
 
@@ -13,7 +14,8 @@ namespace SampleApi.Models;
 public partial class Order
 {
     public int Id { get; set; }
-    public string Customer { get; set; } = "";
+    
+    public required string Customer { get; set; } = "";
     public decimal Total { get; set; }
     public OrderStatus Status { get; set; }
 

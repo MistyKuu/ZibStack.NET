@@ -88,20 +88,17 @@ public sealed class SampleApiBuildTests
         Assert.Contains("description: Verified contact email.", yaml);
         Assert.Contains("description: Display name shown in receipts.", yaml);
 
-        // [CrudApi] on Order contributes a full paths block — full RESTful endpoint set.
-        Assert.Contains("  /api/orders:", yaml);
-        Assert.Contains("  /api/orders/{id}:", yaml);
-        Assert.Contains("operationId: createOrder", yaml);
-        Assert.Contains("operationId: getOrderById", yaml);
-        Assert.Contains("operationId: updateOrder", yaml);
-        Assert.Contains("operationId: deleteOrder", yaml);
-
-        // Companion request/response schemas synthesized from Dto semantics. Before
-        // this was wired, $refs like CreateOrderRequest dangled — the OpenAPI doc
-        // validated as structurally broken.
-        Assert.Contains("    CreateOrderRequest:", yaml);
-        Assert.Contains("    UpdateOrderRequest:", yaml);
-        Assert.Contains("    OrderResponse:", yaml);
+        // The sample now exercises all three endpoint-discovery paths — verify
+        // each shows up in the emitted paths block. Order no longer declares
+        // TypeTarget.OpenApi (sample demonstrates partial-target config), so
+        // CrudApi synth is intentionally not exercised via Order here.
+        // Hand-written Minimal API:
+        Assert.Contains("  /api/health:", yaml);
+        Assert.Contains("  /api/echo:", yaml);
+        Assert.Contains("  /api/admin/ping:", yaml);   // via MapGroup prefix chain
+        // Hand-written [ApiController]:
+        Assert.Contains("  /api/widgets/{id}:", yaml);
+        Assert.Contains("tags: [Widgets]", yaml);
     }
 
     private static (int Exit, string Output) Run(string file, string args)

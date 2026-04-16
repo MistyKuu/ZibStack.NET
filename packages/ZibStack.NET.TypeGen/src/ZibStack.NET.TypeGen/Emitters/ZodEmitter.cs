@@ -317,8 +317,11 @@ internal static class ZodEmitter
 
         // Nullable + optional → .nullish() is the Zod shortcut for "null or
         // undefined or absent". Read-only (computed) props stay optional only —
-        // server always produces a value, client doesn't supply one.
-        if (prop.IsNullable)
+        // server always produces a value, client doesn't supply one. Explicit
+        // `[Required]` / `[ZRequired]` / C# `required` override NRT: field must
+        // be provided, so no nullish/optional even if the C# type is `string?`.
+        var effectivelyNullable = prop.IsNullable && !prop.IsExplicitlyRequired;
+        if (effectivelyNullable)
             core += ".nullish()";
         else if (prop.IsReadOnly)
             core += ".optional()";

@@ -499,6 +499,17 @@ internal sealed class SchemaProperty
     /// only shapes the Dto pipeline.
     /// </summary>
     public bool IsInitOnly { get; set; }
+
+    /// <summary>
+    /// True when the property is explicitly marked as required on the wire —
+    /// either via <c>[Required]</c> / <c>[ZRequired]</c> (runtime validator
+    /// attributes) or the C# 11 <c>required</c> modifier. Overrides the
+    /// NRT-driven nullable inference: even a <c>string?</c> annotated
+    /// <c>[Required]</c> lands in the OpenAPI <c>required</c> list, is
+    /// non-optional in TypeScript / Zod, and has no <c>None</c> default in
+    /// Pydantic.
+    /// </summary>
+    public bool IsExplicitlyRequired { get; set; }
 }
 
 internal sealed class SchemaEnum

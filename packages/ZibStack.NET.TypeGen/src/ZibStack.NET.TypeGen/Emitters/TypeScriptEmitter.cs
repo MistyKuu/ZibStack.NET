@@ -332,7 +332,12 @@ internal static class TypeScriptEmitter
             // stay plain-required: the Dto pipeline already excludes them from
             // the Update request, and at construction time they ARE required.
             var readOnlyMod = prop.IsReadOnly ? "readonly " : "";
-            var optionalMarker = (prop.IsNullable || prop.IsReadOnly) ? "?" : "";
+            // Optional marker: NRT-nullable OR server-computed readonly → optional.
+            // But `[Required]` / `[ZRequired]` / C# `required` keyword override NRT
+            // nullability — client must always send this field even if the type is
+            // `string?`. Matches the wire-level contract enforced by validators.
+            var effectivelyNullable = prop.IsNullable && !prop.IsExplicitlyRequired;
+            var optionalMarker = (effectivelyNullable || prop.IsReadOnly) ? "?" : "";
             sb.AppendLine($"    {readOnlyMod}{name}{optionalMarker}: {typeExpr};");
         }
 

@@ -888,6 +888,10 @@ internal static class SchemaParser
             OpenApiIgnore = HasAttr(prop, OpenApiIgnoreAttr),
             IsReadOnly = isReadOnly,
             IsInitOnly = isInitOnly,
+            // C# 11 `required` modifier — IPropertySymbol.IsRequired surfaces it
+            // directly. Wire-level semantics: client MUST send this field, even
+            // when the type is NRT-nullable.
+            IsExplicitlyRequired = prop.IsRequired,
         };
 
         // `[UseType<T>]` cross-target generic override — captures T's FQN now;
@@ -976,6 +980,9 @@ internal static class SchemaParser
                 case "System.ComponentModel.DataAnnotations.UrlAttribute":
                     sp.OpenApiFormat ??= "uri";
                     break;
+                case "System.ComponentModel.DataAnnotations.RequiredAttribute":
+                    sp.IsExplicitlyRequired = true;
+                    break;
 
                 // ── ZibStack.NET.Validation (Z*) ──
                 case "ZibStack.NET.Validation.ZMinLengthAttribute":
@@ -1003,6 +1010,9 @@ internal static class SchemaParser
                     // Approximation — for strings "non-empty" includes whitespace rules
                     // OpenAPI can't express, but minLength: 1 rules out empty strings / arrays.
                     sp.MinLength ??= 1;
+                    break;
+                case "ZibStack.NET.Validation.ZRequiredAttribute":
+                    sp.IsExplicitlyRequired = true;
                     break;
             }
         }

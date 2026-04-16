@@ -196,7 +196,12 @@ internal static class PythonEmitter
             // and write, so server-computed fields don't need a value client-side.
             // The `frozen=True` still blocks reassignment after construction, so
             // you can't accidentally mutate a value parsed from a server response.
-            var pyOptional = prop.IsNullable || prop.IsReadOnly;
+            // Explicit `[Required]` / `[ZRequired]` / C# `required` overrides
+            // NRT nullability — field must be supplied on the wire even when
+            // the C# type is `string?`. Read-only (server-computed) stays
+            // optional regardless.
+            var effectivelyNullable = prop.IsNullable && !prop.IsExplicitlyRequired;
+            var pyOptional = effectivelyNullable || prop.IsReadOnly;
             // `[UseType<T>]` short-circuit: emit T's Python name directly when T
             // is in the model (CollectRefsRecursive picked it up for imports).
             // Nullable wrapping still applies. External targets (not in model)

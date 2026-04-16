@@ -474,9 +474,17 @@ validation, TypeGen picks it up.
 | `[EmailAddress]`, `[ZEmail]` | `format: email` |
 | `[Url]`, `[ZUrl]` | `format: uri` |
 | `[ZNotEmpty]` | `minLength: 1` (approximation for strings/arrays) |
+| `[Required]`, `[ZRequired]`, C# 11 `required` modifier | field lands in `required:` list, non-optional across TS / Zod / Python |
 
 Attribute detection is by metadata name — no runtime dependency on either
 package. Explicit `[OpenApiProperty]` fields win (don't get overwritten).
+
+**`required` vs NRT nullability.** By default TypeGen infers required from NRT —
+`string` is required, `string?` isn't. Explicit `[Required]` / `[ZRequired]` /
+C# `required` modifier **override NRT**: even a `string?` annotated with
+`[Required]` lands in the required list, gets no optional `?` in TypeScript, no
+`.nullish()` in Zod, no `| None` default in Pydantic. Matches the wire-level
+contract your runtime validator enforces.
 
 ## Hand-written Minimal API → OpenAPI `paths:`
 
