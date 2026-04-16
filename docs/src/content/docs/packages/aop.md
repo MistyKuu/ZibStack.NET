@@ -89,6 +89,26 @@ public class TimingHandler : IAspectHandler
 
 > **Fallback:** If DI is not configured, the generator falls back to `new TimingHandler()` — which requires a parameterless constructor. To use injected dependencies, always set `AspectServiceProvider.ServiceProvider`.
 
+## Project-wide defaults (fluent `IAopConfigurator`)
+
+Set defaults for built-in aspects in one place — explicit attribute arguments always win, so per-method `[Retry(MaxAttempts = 5)]` overrides a project default of `10`.
+
+```csharp
+public sealed class AopConfig : IAopConfigurator
+{
+    public void Configure(IAopBuilder b)
+    {
+        b.Retry(r => { r.MaxAttempts = 5; r.DelayMs = 200; });
+        b.Timeout(t => t.TimeoutMs = 10_000);
+        b.Trace(t => t.IncludeParameters = false);
+        b.Cache(c => c.DurationSeconds = 600);
+        b.Metrics(m => m.MeterName = "checkout.aop");
+    }
+}
+```
+
+One class per project, discovered automatically by the source generator. The `Configure` method body is parsed at compile time (Roslyn constant evaluation) — **never invoked at runtime**, so every right-hand-side must be a literal, constant, or enum member. Covers `[Retry]`, `[Timeout]`, `[Trace]`, `[Cache]`, `[Metrics]`; Polly + HybridCache extension packages retain their own attribute args.
+
 ## Benchmarks
 
 Runtime handler overhead per call, measured with BenchmarkDotNet on .NET 10.0:

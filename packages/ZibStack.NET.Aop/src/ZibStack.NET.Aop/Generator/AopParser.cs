@@ -502,6 +502,21 @@ public static class AopParser
                     props[namedArg.Key] = namedArg.Value.Value;
             }
 
+            // Merge project-wide IAopConfigurator defaults for keys NOT explicitly set on
+            // the attribute. Explicit attribute args always win.
+            if ((method.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } compilation)
+            {
+                var allDefaults = AopConfiguratorParser.Read(compilation);
+                if (allDefaults.TryGetValue(typeName, out var aspectDefaults))
+                {
+                    foreach (var kv in aspectDefaults)
+                    {
+                        if (!props.ContainsKey(kv.Key))
+                            props[kv.Key] = kv.Value;
+                    }
+                }
+            }
+
             string? handlerTypeName = null;
             string? genericAroundTypeArg = null;
             bool isAsyncHandler = false, hasSyncHandler = false, isAroundHandler = false, isAsyncAroundHandler = false;

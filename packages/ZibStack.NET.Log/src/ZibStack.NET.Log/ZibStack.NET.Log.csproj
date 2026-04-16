@@ -51,6 +51,11 @@
     <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopGenerator.cs" Link="AopGenerator\AopGenerator.cs" />
     <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\IAspectEmitter.cs" Link="AopGenerator\IAspectEmitter.cs" />
     <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\InterceptionModel.cs" Link="AopGenerator\InterceptionModel.cs" />
+    <!-- AopParser merges IAopConfigurator project defaults into aspect NamedArgs — same file
+         linked here so the Log generator's shared AopParser compiles. Harmless for [Log]:
+         the parser only merges defaults for aspects whose FQN is in its SectionToAspect table
+         (Retry/Timeout/Trace/Cache/Metrics), so [Log] isn't affected. -->
+    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopConfiguratorParser.cs" Link="AopGenerator\AopConfiguratorParser.cs" />
     <!-- NOT including AopStandaloneGenerator.cs — we have our own ZibLogGenerator -->
   </ItemGroup>
 
