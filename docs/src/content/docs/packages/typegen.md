@@ -333,6 +333,32 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
 > there registering overrides for a class TypeGen never sees. Adding the marker
 > method is the explicit "yes, emit code for this type" signal.
 
+### Targeting generic types — `ForType(typeof(...))`
+
+Open generics can't be passed as a C# type argument (`ForType<Base<>>()` is a
+syntax error), so pair the second `ForType` overload with `typeof(...)`:
+
+```csharp
+// Open form — the canonical way to target every Base<T> instantiation at once.
+b.ForType(typeof(Base<>))
+    .Property("InternalTrace").TsIgnore()
+    .Property("DebugToken").OpenApiIgnore();
+
+// Closed form works too — both collapse onto the same Base<T> key that the
+// schema model uses, so a single line covers Base<int>, Base<string>, etc.
+b.ForType(typeof(Base<int>))
+    .TsName("BaseDto");
+```
+
+Strongly-typed lambda selectors aren't available on this path (the type
+argument is erased) — use the string-based `Property(name)` overload. It's
+parsed as a literal; `nameof(T.Member)` also works since it's a compile-time
+constant.
+
+```csharp
+b.ForType<Order>().Property(nameof(Order.Email)).TsName("emailAddress");
+```
+
 ### Targeting Dto-generated companion DTOs
 
 When the parent type carries `[CrudApi]` (or `[CreateDto]`/`[UpdateDto]`/

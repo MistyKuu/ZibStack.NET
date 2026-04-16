@@ -316,6 +316,86 @@ public class ConfiguratorParserTests
     }
 
     [Fact]
+    public void ForType_OpenGeneric_ViaTypeof_KeyedByOpenForm()
+    {
+        // typeof(Base<>) is the only syntax that expresses an open generic — type
+        // arguments don't allow unbounds. The parser must normalize to the
+        // OriginalDefinition so the key matches SchemaClass.CSharpFullName for
+        // Base<T> (which the schema model always keys by open form).
+        var parsed = Parse("""
+            public class Base<T> { public T Payload { get; set; } = default!; public string InternalTrace { get; set; } = ""; }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType(typeof(Base<>))
+                        .Property("InternalTrace").Ignore();
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        // Single entry keyed by "Base<T>", not "Base<int>" or any concrete binding.
+        Assert.True(parsed!.PerType.ContainsKey("Base<T>"));
+        var baseOverride = parsed.PerType["Base<T>"];
+        Assert.True(baseOverride.Properties["InternalTrace"].Ignore);
+    }
+
+    [Fact]
+    public void ForType_ConstructedGeneric_NormalizedToOpenForm()
+    {
+        // Writing ForType<Base<int>>() also works — the override collapses onto
+        // the same "Base<T>" key, so a single config line covers every
+        // instantiation that lives in the compilation.
+        var parsed = Parse("""
+            public class Base<T> { public T Payload { get; set; } = default!; public string Name { get; set; } = ""; }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Base<int>>().Property(c => c.Name).TsIgnore();
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        Assert.True(parsed!.PerType.ContainsKey("Base<T>"));
+        // The constructed form must NOT leak as a separate entry.
+        Assert.False(parsed.PerType.ContainsKey("Base<int>"));
+        Assert.True(parsed.PerType["Base<T>"].Properties["Name"].TsIgnore);
+    }
+
+    [Fact]
+    public void Property_StringOverload_Accepted()
+    {
+        // String-based selector is the only viable option on the ForType(Type)
+        // path, and sometimes handy on the typed path too (nameof dynamic etc.).
+        var parsed = Parse("""
+            public class Order { public string Email { get; set; } = ""; }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>().Property("Email").TsName("emailAddress");
+                }
+            }
+            """, out var diags);
+        Assert.Empty(diags);
+        Assert.Equal("emailAddress", parsed!.PerType["Order"].Properties["Email"].TsName);
+    }
+
+    [Fact]
+    public void Property_NameofLiteral_Accepted()
+    {
+        // nameof(T.X) is a compile-time constant — ReadLiteralValue pulls it via
+        // GetConstantValue and the parser treats it as a string literal.
+        var parsed = Parse("""
+            public class Order { public string Email { get; set; } = ""; }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.ForType<Order>().Property(nameof(Order.Email)).TsIgnore();
+                }
+            }
+            """, out var diags);
+        Assert.Empty(diags);
+        Assert.True(parsed!.PerType["Order"].Properties["Email"].TsIgnore);
+    }
+
+    [Fact]
     public void MultipleConfigurators_ReportsTG0010()
     {
         Parse("""
@@ -362,6 +442,7 @@ public class ConfiguratorParserTests
                     ITypeGenBuilder TypeScript(Action<TypeScriptSettings> c);
                     ITypeGenBuilder OpenApi(Action<OpenApiSettings> c);
                     ITypeBuilder<T> ForType<T>();
+                    ITypeBuilder<object> ForType(System.Type t);
                 }
                 public interface ITypeBuilder<T> {
                     ITypeBuilder<T> WithGeneratedTypes(TypeTarget targets);
@@ -372,6 +453,7 @@ public class ConfiguratorParserTests
                     ITypeBuilder<T> TsIgnore();
                     ITypeBuilder<T> OpenApiIgnore();
                     IPropertyBuilder<T, TProp> Property<TProp>(System.Linq.Expressions.Expression<System.Func<T, TProp>> sel);
+                    IPropertyBuilder<T, object> Property(string name);
                 }
                 public interface IPropertyBuilder<TClass, TProp> {
                     IPropertyBuilder<TClass, TProp> TsName(string n);
@@ -386,6 +468,7 @@ public class ConfiguratorParserTests
                     IPropertyBuilder<TClass, TProp> TsIgnore();
                     IPropertyBuilder<TClass, TProp> OpenApiIgnore();
                     IPropertyBuilder<TClass, TNext> Property<TNext>(System.Linq.Expressions.Expression<System.Func<TClass, TNext>> sel);
+                    IPropertyBuilder<TClass, object> Property(string name);
                 }
                 public interface ITypeGenConfigurator { void Configure(ITypeGenBuilder b); }
             }

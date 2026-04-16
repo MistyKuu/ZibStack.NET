@@ -223,9 +223,19 @@ internal static class ConfiguratorParser
     /// </summary>
     private static string? ExtractSyntacticTypeName(InvocationExpressionSyntax inv)
     {
-        if (inv.Expression is not MemberAccessExpressionSyntax { Name: GenericNameSyntax g }) return null;
-        if (g.TypeArgumentList.Arguments.Count != 1) return null;
-        return g.TypeArgumentList.Arguments[0].ToString();
+        // ForType<T>() syntactic fallback.
+        if (inv.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax g }
+            && g.TypeArgumentList.Arguments.Count == 1)
+        {
+            return g.TypeArgumentList.Arguments[0].ToString();
+        }
+        // ForType(typeof(X)) syntactic fallback.
+        if (inv.ArgumentList.Arguments.Count == 1
+            && inv.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax tof)
+        {
+            return tof.Type.ToString();
+        }
+        return null;
     }
 
     private static string? ResolveForTypeArg(InvocationExpressionSyntax inv, SemanticModel sm)
@@ -233,11 +243,36 @@ internal static class ConfiguratorParser
 
     private static (string? Name, INamedTypeSymbol? Symbol) ResolveForTypeArgWithSymbol(InvocationExpressionSyntax inv, SemanticModel sm)
     {
-        if (inv.Expression is not MemberAccessExpressionSyntax { Name: GenericNameSyntax g }) return (null, null);
-        if (g.TypeArgumentList.Arguments.Count != 1) return (null, null);
-        var typeSyntax = g.TypeArgumentList.Arguments[0];
-        var typeSym = sm.GetTypeInfo(typeSyntax).Type as INamedTypeSymbol;
-        return (typeSym?.ToDisplayString(), typeSym);
+        // Two overloads land here:
+        //   1. b.ForType<Foo>()          → generic name syntax, type arg in the < >
+        //   2. b.ForType(typeof(Foo))    → plain identifier, first ctor arg is typeof(…)
+        // For generics (both forms), normalize to the OPEN form (Base<T>) because
+        // the schema model keys SchemaClass.CSharpFullName by ConstructedFrom. This
+        // lets a single ForType<Base<int>>() or ForType(typeof(Base<>)) override
+        // apply to the one canonical Base<T> schema regardless of how many
+        // concrete instantiations exist in source.
+        INamedTypeSymbol? typeSym = null;
+
+        if (inv.Expression is MemberAccessExpressionSyntax { Name: GenericNameSyntax g }
+            && g.TypeArgumentList.Arguments.Count == 1)
+        {
+            typeSym = sm.GetTypeInfo(g.TypeArgumentList.Arguments[0]).Type as INamedTypeSymbol;
+        }
+        else if (inv.Expression is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax { Identifier.Text: "ForType" } }
+            && inv.ArgumentList.Arguments.Count == 1
+            && inv.ArgumentList.Arguments[0].Expression is TypeOfExpressionSyntax tof)
+        {
+            typeSym = sm.GetTypeInfo(tof.Type).Type as INamedTypeSymbol;
+        }
+
+        if (typeSym is null) return (null, null);
+        // OriginalDefinition normalizes both constructed (Base<int>) and unbound
+        // (typeof(Base<>)) generics to the single "Base<T>" key the schema model
+        // uses. Non-generics pass through unchanged.
+        var normalized = typeSym.IsGenericType
+            ? typeSym.OriginalDefinition.ToDisplayString()
+            : typeSym.ToDisplayString();
+        return (normalized, typeSym);
     }
 
     // ── lambda body walker ─────────────────────────────────────────────────
@@ -496,7 +531,17 @@ internal static class ConfiguratorParser
     private static string? ResolvePropertySelector(InvocationExpressionSyntax inv, SemanticModel sm)
     {
         if (inv.ArgumentList.Arguments.Count == 0) return null;
-        if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return null;
+        var argExpr = inv.ArgumentList.Arguments[0].Expression;
+
+        // String overload — `.Property("Name")` / `.Property(nameof(T.Name))`.
+        // ReadLiteralValue covers both via GetConstantValue.
+        if (argExpr is not LambdaExpressionSyntax)
+        {
+            var literal = ReadLiteralValue(argExpr, sm);
+            return literal as string;
+        }
+
+        var lambda = (LambdaExpressionSyntax)argExpr;
         ExpressionSyntax? body = lambda.Body switch
         {
             ExpressionSyntax e => e,

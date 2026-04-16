@@ -90,6 +90,18 @@ public interface ITypeGenBuilder
     /// to per-class / per-property attributes.
     /// </summary>
     ITypeBuilder<T> ForType<T>();
+
+    /// <summary>
+    /// Same as <see cref="ForType{T}"/> but takes a <c>typeof(...)</c> expression.
+    /// Use for open generics (<c>typeof(Base&lt;&gt;)</c>) — which can't be passed
+    /// as a type argument in C# — or when you want to share a single override across
+    /// multiple constructions of the same generic definition (both
+    /// <c>typeof(Base&lt;int&gt;)</c> and <c>typeof(Base&lt;&gt;)</c> resolve to the
+    /// open-form schema key that TypeGen actually stores <c>Base&lt;T&gt;</c> under).
+    /// Strongly-typed property selectors aren't available on this path — use the
+    /// <see cref="ITypeBuilder{T}.Property(string)"/> string overload.
+    /// </summary>
+    ITypeBuilder<object> ForType(Type t);
 }
 
 /// <summary>
@@ -135,6 +147,14 @@ public interface ITypeBuilder<T>
     /// chainable, so further <c>.Property(...)</c> calls work directly).
     /// </summary>
     IPropertyBuilder<T, TProp> Property<TProp>(Expression<Func<T, TProp>> selector);
+
+    /// <summary>
+    /// String-based property selector — pair it with <see cref="ITypeGenBuilder.ForType(Type)"/>
+    /// (untyped path) or use on the typed path when the property name is dynamic.
+    /// Arg must be a string literal or <c>nameof(…)</c> — anything else is invisible
+    /// to the compile-time parser.
+    /// </summary>
+    IPropertyBuilder<T, object> Property(string propertyName);
 }
 
 /// <summary>
@@ -212,4 +232,11 @@ public interface IPropertyBuilder<TClass, TProp>
 
     /// <summary>Continue with another property on the same owning type.</summary>
     IPropertyBuilder<TClass, TNext> Property<TNext>(Expression<Func<TClass, TNext>> selector);
+
+    /// <summary>
+    /// Continue with another property on the same owning type, selected by name.
+    /// Required on the <c>ForType(typeof(...))</c> path where strongly-typed
+    /// selectors are unavailable.
+    /// </summary>
+    IPropertyBuilder<TClass, object> Property(string propertyName);
 }
