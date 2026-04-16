@@ -653,10 +653,46 @@ isn't walked through that path).
 - `Dictionary<string, V>` (and `IDictionary` / `IReadOnlyDictionary`) emits as
   `{ type: object, additionalProperties: <V-schema> }`. Non-string keys are tolerated
   but key typing isn't preserved — OpenAPI only supports string keys.
-- **Inheritance**: when the base class also carries `[GenerateTypes]`, the child emits as
-  `allOf: [ { $ref: Base }, { type: object, properties: <new-only> } ]` in OpenAPI and
-  `export interface Child extends Base { ...new-only }` in TypeScript. When the base
-  isn't in the model, inherited properties are flattened (inlined) into the child.
+
+### Inheritance — structure preserved, not flattened
+
+The emitted TS / OpenAPI mirrors the C# inheritance chain **1:1**. Every base
+class becomes its own schema, each level owns only its declared members, and
+`extends` / `allOf` wires the hierarchy together. Un-annotated bases get
+auto-seeded into the model with the descendant's `Targets` + `OutputDir`:
+
+```csharp
+public class Entity { public int Id { get; set; } }
+public class Timestamped : Entity { public DateTime CreatedAt { get; set; } }
+public class Auditable : Timestamped { public string CreatedBy { get; set; } = ""; }
+
+[GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = "generated")]
+public class Order : Auditable { public string Customer { get; set; } = ""; }
+```
+
+→ four TS files, each owning only its declared members:
+
+```ts
+// Entity.ts            → interface Entity { id: number; }
+// Timestamped.ts       → interface Timestamped extends Entity { createdAt: string; }
+// Auditable.ts         → interface Auditable extends Timestamped { createdBy: string; }
+// Order.ts             → interface Order extends Auditable { customer: string; }
+```
+
+Mixed `[GenerateTypes]` on some levels works the same way — any class already
+in the model stays as-is, un-annotated intermediates are auto-seeded. No
+duplication anywhere: a member declared on `Entity` appears only in `Entity.ts`,
+not copied into every descendant.
+
+**Flattening still happens** when the base can't stand on its own — generic
+bases (`Foo<T>`, out of MVP scope per `TG0003`) and BCL types have their
+declared members inlined into the nearest emittable descendant so properties
+aren't lost. Everything else preserves the chain.
+
+**Abstract overrides.** When an abstract member on a non-emittable ancestor is
+overridden by an intermediate in the chain, the override wins — the member
+lands on the class that declared the concrete body, once, via standard
+name-keyed dedupe.
 
 ## Python (Pydantic v2)
 
