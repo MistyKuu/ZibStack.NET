@@ -206,6 +206,53 @@ public class BugfixBundle2Tests
     }
 
     [Fact]
+    public void Fluent_RootPlusUseTypeAttrOnDiscovered_PullsInBothChainAndTarget()
+    {
+        // User's latest repro: XD is the fluent root; A auto-discovered via
+        // XD.As. A.Element carries [UseType<Side>] attribute. Both C (via base
+        // chain B : C) AND Side (via UseType seed) must land in the model.
+        var code = """
+            using ZibStack.NET.TypeGen;
+            using System.Collections.Generic;
+            using System.Text.Json.Nodes;
+            namespace Ns;
+
+            public record XD
+            {
+                public JsonObject? Element { get; init; }
+                public List<A> As { get; set; } = new();
+                public List<B> Bs { get; set; } = new();
+            }
+
+            public abstract record C { public string Hehe1 { get; set; } = ""; }
+            public record B : C;
+            public record A : B
+            {
+                public string Test { get; set; } = "";
+
+                [UseType<Side>]
+                public JsonObject? Element { get; set; }
+            }
+            public record Side { public string A { get; set; } = ""; }
+
+            public sealed class Cfg : ITypeGenConfigurator
+            {
+                public void Configure(ITypeGenBuilder b)
+                {
+                    b.ForType<XD>().WithGeneratedTypes(TypeTarget.TypeScript).OutputDir(".");
+                }
+            }
+            """;
+        var (model, _) = RunFullPipeline(code);
+        var names = model.Classes.Select(c => c.SourceName).OrderBy(n => n).ToList();
+        Assert.Contains("XD", names);
+        Assert.Contains("A", names);
+        Assert.Contains("B", names);
+        Assert.Contains("C", names);
+        Assert.Contains("Side", names);
+    }
+
+    [Fact]
     public void Fluent_WithGeneratedTypes_PullsInBaseClassOfTransitivelyDiscoveredType()
     {
         // User's exact repro: XD is fluent root. A / B auto-discovered. B inherits
