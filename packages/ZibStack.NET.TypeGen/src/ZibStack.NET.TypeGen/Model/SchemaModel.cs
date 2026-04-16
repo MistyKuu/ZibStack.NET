@@ -321,6 +321,27 @@ internal sealed class SchemaProperty
 
     public bool TsIgnore { get; set; }
     public bool OpenApiIgnore { get; set; }
+
+    /// <summary>
+    /// True when the property has no public setter — a getter-only expression
+    /// body (<c>public int Total =&gt; Qty * Price;</c>), a backing-field
+    /// property (<c>public int X { get; }</c>), or one with a private setter
+    /// (<c>{ get; private set; }</c>). Server-computed: the client cannot mutate
+    /// it, so emitters render it as <c>readonly</c> (TS) / <c>readOnly: true</c>
+    /// (OpenAPI) / <c>Field(frozen=True)</c> (Pydantic), and the Dto CRUD
+    /// pipeline excludes it from both <c>Create</c> and <c>Update</c> shapes.
+    /// </summary>
+    public bool IsReadOnly { get; set; }
+
+    /// <summary>
+    /// True when the property uses C# 9 <c>init</c>-only accessor
+    /// (<c>{ get; init; }</c>). Settable once during object construction, so
+    /// it participates in <c>Create</c> but is excluded from <c>Update</c>
+    /// (immutable post-creation). Emitted as a normal mutable property in TS
+    /// / OpenAPI — the init-only distinction is a .NET language concept that
+    /// only shapes the Dto pipeline.
+    /// </summary>
+    public bool IsInitOnly { get; set; }
 }
 
 internal sealed class SchemaEnum

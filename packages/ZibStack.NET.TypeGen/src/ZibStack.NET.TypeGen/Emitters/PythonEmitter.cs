@@ -209,18 +209,28 @@ internal static class PythonEmitter
 
             if (py.Style == PythonStyle.Pydantic)
             {
-                // Field(alias=...) preserves the original JSON key. Default None only when nullable.
-                if (pyName == srcName)
+                // Pydantic v2 `Field(frozen=True)` blocks reassignment after
+                // construction — a per-field mirror of C#'s getter-only / private-set
+                // semantics. Without frozen, the default `model.field = x` would
+                // silently succeed client-side even though the server rejects it.
+                // Merged with alias/default via a single Field() call so the arg
+                // list reads naturally.
+                var fieldArgs = new List<string>();
+                if (optional) fieldArgs.Add("default=None");
+                if (pyName != srcName) fieldArgs.Add($"alias=\"{srcName}\"");
+                if (prop.IsReadOnly) fieldArgs.Add("frozen=True");
+
+                if (fieldArgs.Count == 0)
                 {
-                    sb.AppendLine(optional
-                        ? $"    {pyName}: {typeExpr} = None"
-                        : $"    {pyName}: {typeExpr}");
+                    sb.AppendLine($"    {pyName}: {typeExpr}");
+                }
+                else if (fieldArgs.Count == 1 && fieldArgs[0] == "default=None")
+                {
+                    sb.AppendLine($"    {pyName}: {typeExpr} = None");
                 }
                 else
                 {
-                    sb.AppendLine(optional
-                        ? $"    {pyName}: {typeExpr} = Field(default=None, alias=\"{srcName}\")"
-                        : $"    {pyName}: {typeExpr} = Field(alias=\"{srcName}\")");
+                    sb.AppendLine($"    {pyName}: {typeExpr} = Field({string.Join(", ", fieldArgs)})");
                 }
             }
             else

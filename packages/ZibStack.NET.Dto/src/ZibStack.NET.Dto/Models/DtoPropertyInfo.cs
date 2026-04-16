@@ -36,11 +36,30 @@ internal sealed class DtoPropertyInfo
         ? (IgnoreTargets & target) != 0
         : OnlyTargets != 0 && (OnlyTargets & target) == 0;
 
+    /// <summary>
+    /// True when the source property has no externally visible setter —
+    /// <c>{ get; private set; }</c> or (after the getter-only filter) any
+    /// property Roslyn reports as computed. Server owns the value: the Create
+    /// and Update request DTOs both skip it, because a client-provided value
+    /// would have nowhere to go when <c>ToEntity()</c>/<c>ApplyTo()</c> runs.
+    /// </summary>
+    public bool IsReadOnly { get; }
+
+    /// <summary>
+    /// True for <c>{ get; init; }</c> accessors — settable exactly once, at
+    /// object construction. The Create DTO still accepts it (init-time value
+    /// is the point), but Update DTO skips it: post-creation reassignment is
+    /// what <c>init</c> forbids, and silently dropping writes there would be
+    /// a footgun.
+    /// </summary>
+    public bool IsInitOnly { get; }
+
     public DtoPropertyInfo(string propertyName, string jsonName, string displayTypeName,
         bool isNullable, bool isRequired, bool isValueType,
         int ignoreTargets, int onlyTargets,
         string? sourcePropertyName = null,
-        List<string>? validationAttributes = null, List<ValidationRule>? validationRules = null)
+        List<string>? validationAttributes = null, List<ValidationRule>? validationRules = null,
+        bool isReadOnly = false, bool isInitOnly = false)
     {
         PropertyName = propertyName;
         SourcePropertyName = sourcePropertyName ?? propertyName;
@@ -53,5 +72,7 @@ internal sealed class DtoPropertyInfo
         OnlyTargets = onlyTargets;
         ValidationAttributes = validationAttributes ?? new List<string>();
         ValidationRules = validationRules ?? new List<ValidationRule>();
+        IsReadOnly = isReadOnly;
+        IsInitOnly = isInitOnly;
     }
 }

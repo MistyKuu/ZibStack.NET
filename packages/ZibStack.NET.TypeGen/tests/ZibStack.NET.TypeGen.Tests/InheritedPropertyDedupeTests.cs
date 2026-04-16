@@ -302,8 +302,12 @@ public class InheritedPropertyDedupeTests
         var typeLines = combined.Split('\n').Count(l =>
         {
             var t = l.TrimStart();
+            // `readonly` modifier prefixes getter-only props — the abstract
+            // `Type { get; }` declaration surfaces as `readonly type: …`.
             return t.StartsWith("type:", System.StringComparison.OrdinalIgnoreCase)
-                || t.StartsWith("Type:", System.StringComparison.Ordinal);
+                || t.StartsWith("Type:", System.StringComparison.Ordinal)
+                || t.StartsWith("readonly type:", System.StringComparison.Ordinal)
+                || t.StartsWith("readonly Type:", System.StringComparison.Ordinal);
         });
         Assert.True(typeLines == 1,
             $"Expected exactly 1 'type' property line across emitted files, got {typeLines}.\nCombined:\n{combined}");

@@ -785,6 +785,18 @@ internal static class SchemaParser
 
     private static SchemaProperty ParseProperty(IPropertySymbol prop)
     {
+        // Accessor shape drives Dto Create/Update participation and "readonly"
+        // emission. Three cases collapse to our two flags:
+        //   { get; set; }        → neither flag — fully mutable
+        //   { get; init; }       → IsInitOnly (public init accessor)
+        //   { get; }             → IsReadOnly (no setter at all)
+        //   { get; private set;} → IsReadOnly (setter not visible externally)
+        var setter = prop.SetMethod;
+        var isInitOnly = setter is { IsInitOnly: true, DeclaredAccessibility: Accessibility.Public };
+        var isReadOnly = setter is null || setter.DeclaredAccessibility != Accessibility.Public;
+        // An init-only with public init isn't read-only — it's settable at ctor time.
+        if (isInitOnly) isReadOnly = false;
+
         var sp = new SchemaProperty
         {
             SourceName = prop.Name,
@@ -798,6 +810,8 @@ internal static class SchemaParser
             OpenApiNameOverride = ReadStringArg(prop, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(prop, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(prop, OpenApiIgnoreAttr),
+            IsReadOnly = isReadOnly,
+            IsInitOnly = isInitOnly,
         };
 
         // `[UseType<T>]` cross-target generic override — captures T's FQN now;

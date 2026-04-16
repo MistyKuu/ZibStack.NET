@@ -638,6 +638,32 @@ serializer expects.
 — they're pulled in by the polymorphic seed pass with the base's targets and
 output dir.
 
+## Computed & immutable properties
+
+The C# accessor shape drives Create/Update participation and the generated
+client contract:
+
+| C# property                   | TS                 | OpenAPI        | Python (Pydantic)        | Dto `Create` | Dto `Update` |
+| ----------------------------- | ------------------ | -------------- | ------------------------ | ------------ | ------------ |
+| `public int X { get; set; }`  | `x: number;`       | normal         | normal                   | ✓            | ✓            |
+| `public int X { get; init; }` | `x: number;`       | normal         | normal                   | ✓            | — *(init)*   |
+| `public int X { get; }`       | `readonly x:…`     | `readOnly: …`  | `Field(frozen=True)`     | —            | —            |
+| `public int X => Y * Z;`      | `readonly x:…`     | `readOnly: …`  | `Field(frozen=True)`     | —            | —            |
+| `public int X { get; private set; }` | `readonly x:…` | `readOnly: …` | `Field(frozen=True)`     | —            | —            |
+
+Why it matters: a server-computed field (aggregate, timestamp, derived flag)
+would be silently dropped by the server if a client sent one — making the
+field visible in the request DTO is a footgun. The Dto generator excludes it
+from both `Create` and `Update`, and TypeGen publishes the read-only contract
+across all three targets so mainstream OpenAPI codegens (orval, Kiota,
+openapi-typescript-codegen) strip it from request models automatically.
+
+`init`-only properties participate in `Create` (that's what `init` is for —
+ctor-time assignment), but drop out of `Update` (an `init` accessor rejects
+post-construction writes at runtime). Records with positional syntax
+(`public record Order(string Sku)`) fall under this bucket — `Sku` ends up in
+Create, not Update, matching the record's immutable-by-design nature.
+
 ## String enum converters
 
 When an enum carries `[JsonConverter(typeof(JsonStringEnumConverter))]` (or the

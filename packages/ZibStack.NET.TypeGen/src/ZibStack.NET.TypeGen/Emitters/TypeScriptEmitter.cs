@@ -278,7 +278,14 @@ internal static class TypeScriptEmitter
             var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, ts.PropertyNameStyle);
             var typeExpr = prop.TsTypeOverride ?? MapCSharpToTs(prop.CSharpTypeFullName, prop.IsNullable, nameLookup, cls.TypeParameters);
             var optionalMarker = prop.IsNullable ? "?" : "";
-            sb.AppendLine($"    {name}{optionalMarker}: {typeExpr};");
+            // Server-computed getters (`public int X => …;` / `{ get; private set; }`)
+            // surface as `readonly` so the TS compiler blocks reassignment on the
+            // client — mirrors the C# contract. `init` accessors stay mutable:
+            // TS has no equivalent "set once at construction" modifier, and the
+            // Dto pipeline already blocks the client-visible Update variant from
+            // exposing them.
+            var readOnlyMod = prop.IsReadOnly ? "readonly " : "";
+            sb.AppendLine($"    {readOnlyMod}{name}{optionalMarker}: {typeExpr};");
         }
 
         // [JsonExtensionData] property → TS index signature catching unmapped keys.

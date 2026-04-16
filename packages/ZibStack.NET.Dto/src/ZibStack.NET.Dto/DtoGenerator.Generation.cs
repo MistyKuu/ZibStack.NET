@@ -78,7 +78,11 @@ public partial class DtoGenerator
 
     private static void GenerateCreateRequestClass(StringBuilder sb, DtoClassInfo classInfo)
     {
-        var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1)).ToList();
+        // `IsReadOnly` (private-set / getter-only) is computed server-side — the
+        // client has no business sending a value, so it's dropped from Create.
+        // `IsInitOnly` is fine here: init accessors run during construction, which
+        // is exactly when Create runs — the value can be materialized at ToEntity().
+        var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1) && !p.IsReadOnly).ToList();
 
         sb.AppendLine($"/// <summary>Auto-generated Create request DTO for <see cref=\"{classInfo.ClassName}\"/>. Contains ToEntity() and Validate().</summary>");
         EmitTypeGenAttribute(sb, classInfo.HasTypeGen);
@@ -139,7 +143,11 @@ public partial class DtoGenerator
 
     private static void GenerateUpdateRequestClass(StringBuilder sb, DtoClassInfo classInfo)
     {
-        var props = classInfo.Properties.Where(p => !p.IsIgnoredFrom(2)).ToList();
+        // Update rejects both read-only (same reason as Create) and init-only:
+        // an `init` accessor is settable during construction only, and Update
+        // applies to an existing entity — writing to it would throw at runtime.
+        var props = classInfo.Properties.Where(p =>
+            !p.IsIgnoredFrom(2) && !p.IsReadOnly && !p.IsInitOnly).ToList();
 
         sb.AppendLine($"/// <summary>Auto-generated Update request DTO for <see cref=\"{classInfo.ClassName}\"/>. Contains ApplyTo() and Validate(). Uses PatchField for partial updates.</summary>");
         EmitTypeGenAttribute(sb, classInfo.HasTypeGen);
@@ -196,8 +204,13 @@ public partial class DtoGenerator
 
     private static void GenerateCombinedRequestClass(StringBuilder sb, DtoClassInfo classInfo)
     {
-        // Combined is Create + Update. Exclude properties ignored from BOTH.
-        var allProps = classInfo.Properties.Where(p => !p.IsIgnoredFrom(1) || !p.IsIgnoredFrom(2)).ToList();
+        // Combined is Create + Update. Include a property if EITHER target would
+        // include it. Reject read-only entirely (neither side wants it). Init-only
+        // is Create-only territory, so Combined still includes it — ValidateForUpdate()
+        // below filters it per-target.
+        var allProps = classInfo.Properties.Where(p =>
+            (!p.IsIgnoredFrom(1) && !p.IsReadOnly)
+            || (!p.IsIgnoredFrom(2) && !p.IsReadOnly && !p.IsInitOnly)).ToList();
 
         EmitTypeGenAttribute(sb, classInfo.HasTypeGen);
         sb.AppendLine($"public record {classInfo.RequestName} : ZibStack.NET.Dto.ICanCreate<{classInfo.ClassName}>, ZibStack.NET.Dto.ICanApply<{classInfo.ClassName}>");
@@ -213,7 +226,7 @@ public partial class DtoGenerator
         sb.AppendLine();
 
         // ValidateForCreate()
-        var createProps = allProps.Where(p => !p.IsIgnoredFrom(1)).ToList();
+        var createProps = allProps.Where(p => !p.IsIgnoredFrom(1) && !p.IsReadOnly).ToList();
         sb.AppendLine("    public DtoValidationResult ValidateForCreate()");
         sb.AppendLine("    {");
 
@@ -250,7 +263,8 @@ public partial class DtoGenerator
         sb.AppendLine();
 
         // ValidateForUpdate()
-        var updateProps = allProps.Where(p => !p.IsIgnoredFrom(2)).ToList();
+        var updateProps = allProps.Where(p =>
+            !p.IsIgnoredFrom(2) && !p.IsReadOnly && !p.IsInitOnly).ToList();
         sb.AppendLine("    public DtoValidationResult ValidateForUpdate()");
         sb.AppendLine("    {");
 
@@ -980,8 +994,9 @@ public partial class DtoGenerator
             : (isCreate ? classInfo.RequestName : classInfo.RequestName);
         var validatorSuffix = isCreate ? "CreateBaseValidator" : "UpdateBaseValidator";
         var props = isCreate
-            ? classInfo.Properties.Where(p => !p.IsIgnoredFrom(1)).ToList()
-            : classInfo.Properties.Where(p => !p.IsIgnoredFrom(2)).ToList();
+            ? classInfo.Properties.Where(p => !p.IsIgnoredFrom(1) && !p.IsReadOnly).ToList()
+            : classInfo.Properties.Where(p =>
+                !p.IsIgnoredFrom(2) && !p.IsReadOnly && !p.IsInitOnly).ToList();
 
         sb.AppendLine($"public class {requestName}{validatorSuffix} : ZibStack.NET.Dto.FluentDtoValidator<{requestName}>");
         sb.AppendLine("{");

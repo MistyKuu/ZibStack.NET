@@ -560,6 +560,12 @@ internal static class OpenApiEmitter
             sb.AppendLine($"{indent}  description: {YamlString(prop.OpenApiDescription)}");
         if (prop.OpenApiExample != null)
             sb.AppendLine($"{indent}  example: {YamlScalar(prop.OpenApiExample)}");
+        // Server-computed fields: clients must not send them in requests. OpenAPI's
+        // `readOnly: true` is understood by every mainstream codegen (orval,
+        // openapi-typescript-codegen, openapi-generator) — they strip the field
+        // from request bodies and keep it on response models.
+        if (prop.IsReadOnly)
+            sb.AppendLine($"{indent}  readOnly: true");
 
         // Validation-derived constraints — safe to emit even when not applicable
         // to the type (OpenAPI readers ignore minLength on integers, etc.).
@@ -743,6 +749,7 @@ internal static class OpenApiEmitter
         }
         if (prop.OpenApiDescription != null)
             sb.Append($", \"description\": {JsonString(prop.OpenApiDescription)}");
+        if (prop.IsReadOnly) sb.Append(", \"readOnly\": true");
         if (prop.MinLength is int minLen) sb.Append($", \"minLength\": {minLen}");
         if (prop.MaxLength is int maxLen) sb.Append($", \"maxLength\": {maxLen}");
         if (prop.Minimum is double minVal) sb.Append($", \"minimum\": {FormatNumber(minVal)}");

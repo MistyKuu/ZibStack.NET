@@ -622,7 +622,20 @@ public partial class DtoGenerator
         foreach (var prop in GetAllProperties(symbol))
         {
             if (prop.DeclaredAccessibility != Accessibility.Public) continue;
-            if (prop.SetMethod is null || prop.GetMethod is null) continue;
+            // Reject write-only (no getter) and read-only with no setter at all
+            // (getter-only expression body / backing field). Computed values like
+            // `public int Total => Qty * Price;` can't be reconstructed from a
+            // client payload, so they have no business in Create/Update shapes.
+            if (prop.GetMethod is null || prop.SetMethod is null) continue;
+
+            // Separate flags for private-set vs init — both participate differently
+            // in Create/Update (see DtoPropertyInfo docs). Init is a specific setter
+            // flavor that's still public; private-set is a setter with non-public
+            // accessibility.
+            var isInitOnly = prop.SetMethod.IsInitOnly
+                && prop.SetMethod.DeclaredAccessibility == Accessibility.Public;
+            var isReadOnly = !isInitOnly
+                && prop.SetMethod.DeclaredAccessibility != Accessibility.Public;
 
             var (ignoreTargets, onlyTargets) = GetDtoTargetFlags(prop);
             // [DtoIgnore] without args → ignoreTargets = 31 (All). Skip entirely.
@@ -668,7 +681,9 @@ public partial class DtoGenerator
                 onlyTargets,
                 sourcePropertyName: dtoName != prop.Name ? prop.Name : null,
                 validationAttributes: validationAttrs,
-                validationRules: validationRules);
+                validationRules: validationRules,
+                isReadOnly: isReadOnly,
+                isInitOnly: isInitOnly);
 
             // Detect nested complex types for auto-recursive DTO generation
             if (kind is null)
