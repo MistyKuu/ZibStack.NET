@@ -206,6 +206,43 @@ public class BugfixBundle2Tests
     }
 
     [Fact]
+    public void Fluent_WithGeneratedTypes_PullsInBaseClassOfTransitivelyDiscoveredType()
+    {
+        // User's exact repro: XD is fluent root. A / B auto-discovered. B inherits
+        // abstract C. C MUST land in model via DiscoverBaseClasses after B is in.
+        var code = """
+            using ZibStack.NET.TypeGen;
+            using System.Collections.Generic;
+            using System.Text.Json.Nodes;
+            namespace Ns;
+
+            public record XD
+            {
+                public JsonObject? Element { get; init; }
+                public List<A> As { get; set; } = new();
+                public List<B> Bs { get; set; } = new();
+            }
+
+            public abstract record C { public string Hehe1 { get; set; } = ""; }
+            public record B : C;
+            public record A : B { public string Test { get; set; } = ""; }
+
+            public sealed class Cfg : ITypeGenConfigurator
+            {
+                public void Configure(ITypeGenBuilder b)
+                {
+                    b.ForType<XD>().WithGeneratedTypes(TypeTarget.TypeScript).OutputDir(".");
+                }
+            }
+            """;
+        var (model, _) = RunFullPipeline(code);
+        Assert.Contains(model.Classes, c => c.SourceName == "XD");
+        Assert.Contains(model.Classes, c => c.SourceName == "A");
+        Assert.Contains(model.Classes, c => c.SourceName == "B");
+        Assert.Contains(model.Classes, c => c.SourceName == "C");
+    }
+
+    [Fact]
     public void Fluent_PropertyTsTypeGeneric_OnTransitivelyDiscoveredClass_SeedsTarget()
     {
         // User repro: XD is the only fluent root. A is transitively discovered
