@@ -5,19 +5,19 @@ description: "How ZibStack.NET.Validation compares to DataAnnotations, FluentVal
 
 Validation in .NET splits into two worlds: attributes on properties (DataAnnotations — built in, limited), and fluent code (FluentValidation — flexible, runtime). ZibStack.NET.Validation **combines the ergonomics of attributes** (stay on the DTO where the fields are) **with the performance of a source generator** (compile-time, zero reflection, `TryValidate` / `Validate` methods generated directly on the type).
 
-| Feature | DataAnnotations | FluentValidation | **ZibStack.NET.Validation** |
+| Feature | **ZibStack.NET.Validation** | DataAnnotations | FluentValidation |
 |---|---|---|---|
-| Rule location | Attributes on properties | Separate `AbstractValidator<T>` class | Attributes on properties (`[ZRequired]`, `[ZRange]`, `[ZEmail]`, `[ZNotEmpty]`, …) |
-| Rule evaluation | Runtime reflection (`Validator.TryValidateObject`) | Compiled expression trees (runtime) | **Generated method body at compile time** |
-| Reflection on hot path | ✅ yes | partial | ❌ zero |
-| AOT-friendly | partial (some attributes reflect) | ❌ expression trees | ✅ no reflection, no expressions |
-| Custom rules | `ValidationAttribute` subclass | `Must(x => …)` / custom validator | `[ZMatch(pattern)]` + `ValidationAttribute` subclass still works |
-| Conditional rules | ❌ | ✅ `When(x => …)` | partial (via `[Required]` + NRT) — plain conditional via custom attribute |
-| Async rules | ❌ | ✅ `MustAsync` | ❌ (source gen can't emit await — out of scope) |
-| Multiple errors returned | ✅ `ValidationResult[]` | ✅ `ValidationResult.Errors` | ✅ `ValidationResult.Errors` |
-| ASP.NET Core auto-integration | ✅ built-in | ⚠️ `FluentValidation.AspNetCore` **deprecated in v12** | ✅ runs via ProblemDetails or [Dto] endpoints |
-| DTO / TS / OpenAPI cross-target consistency | n/a | n/a | ✅ picked up by ZibStack.NET.TypeGen → OpenAPI `minLength`, `pattern`, Zod `.email()`, `.gte()` |
-| Install footprint | zero (BCL) | NuGet | NuGet (source gen only, no runtime lib) |
+| Rule location | Attributes on properties (`[ZRequired]`, `[ZRange]`, `[ZEmail]`, `[ZNotEmpty]`, …) | Attributes on properties | Separate `AbstractValidator<T>` class |
+| Rule evaluation | **Generated method body at compile time** | Runtime reflection (`Validator.TryValidateObject`) | Compiled expression trees (runtime) |
+| Reflection on hot path | ❌ zero | ✅ yes | partial |
+| AOT-friendly | ✅ no reflection, no expressions | partial (some attributes reflect) | ❌ expression trees |
+| Custom rules | `[ZMatch(pattern)]` + `ValidationAttribute` subclass still works | `ValidationAttribute` subclass | `Must(x => …)` / custom validator |
+| Conditional rules | partial (via `[Required]` + NRT) — plain conditional via custom attribute | ❌ | ✅ `When(x => …)` |
+| Async rules | ❌ (source gen can't emit await — out of scope) | ❌ | ✅ `MustAsync` |
+| Multiple errors returned | ✅ `ValidationResult.Errors` | ✅ `ValidationResult[]` | ✅ `ValidationResult.Errors` |
+| ASP.NET Core auto-integration | ✅ runs via ProblemDetails or [Dto] endpoints | ✅ built-in | ⚠️ `FluentValidation.AspNetCore` **deprecated in v12** |
+| DTO / TS / OpenAPI cross-target consistency | ✅ picked up by ZibStack.NET.TypeGen → OpenAPI `minLength`, `pattern`, Zod `.email()`, `.gte()` | n/a | n/a |
+| Install footprint | NuGet (source gen only, no runtime lib) | zero (BCL) | NuGet |
 
 ## What you give up
 

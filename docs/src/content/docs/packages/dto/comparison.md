@@ -5,21 +5,29 @@ description: "How ZibStack.NET.Dto compares to AutoMapper/Mapster/Mapperly (mapp
 
 "CRUD in .NET" isn't one library — it's usually a **stack**: a mapper (AutoMapper / Mapster / Mapperly), a query DSL (Sieve / OData), a validation lib (FluentValidation), a pipeline (MediatR), a scaffolding template (OnionAPI / VS). ZibStack.NET.Dto collapses the request/response/query/mapping/endpoints surface into compile-time generation from one `[CrudApi]` attribute, while deliberately staying out of the mediator and sink business.
 
-| Feature | AutoMapper | Mapster | Mapperly | Sieve | OData | MediatR | VS Scaffolding | **ZibStack.NET.Dto** |
-|---|---|---|---|---|---|---|---|---|
-| Scope | object mapping | object mapping | object mapping | filter / sort / paging | full query protocol + endpoints | request pipeline | one-time scaffold | CRUD DTO + endpoints + query + mapping + JSON Merge Patch |
-| Dispatch | runtime reflection + expression trees | runtime + optional codegen (Mapster.Tool) | Roslyn source gen | runtime reflection | runtime + query translator | runtime + DI | none (drops code) | **Roslyn source gen (compile time)** |
-| Price | **Commercial (2025 change)** | MIT free | MIT free | MIT free | MIT free | **Commercial (2025 change)** | free | ✅ MIT free |
-| DTOs from entity | manual `CreateMap<T, TDto>()` | manual / attributes | manual partial class | n/a | auto-project | n/a | one-shot template | ✅ auto from `[CrudApi]` (Create / Update / Response / Query variants) |
-| JSON Merge Patch / partial update | ❌ | ❌ | ❌ | ❌ | partial via PATCH verb | ❌ | ❌ | ✅ `PatchField<T>` tri-state (null / missing / set) |
-| Filter / sort / paging DSL | n/a | n/a | n/a | ✅ `Sieve(CanSort=true)` | ✅ heavy OData protocol | n/a | n/a | ✅ `[QueryDto]` + filter/sort DSL |
-| Minimal API endpoint generation | ❌ | ❌ | ❌ | ❌ | ❌ (controller only) | ❌ | one-shot | ✅ `Map{Entity}Endpoints(...)` |
-| `[ApiController]` generation | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | one-shot | ✅ both Minimal API and Controller styles |
-| Sensitive / response-filtering attrs | ❌ | ❌ | ❌ | ❌ | `[Select]` | ❌ | ❌ | ✅ `[DtoIgnore(target)]`, `[DtoOnly]`, `[ListIgnore]`, `[QueryIgnore]` |
-| External-type configuration | `Profile`s | fluent `TypeAdapterConfig` | partial class | attribute | EDM builder | n/a | n/a | ✅ `IDtoConfigurator` fluent + `[CreateDtoFor]` / `[UpdateDtoFor]` |
-| Runtime reflection | ✅ heavy | optional | ❌ | ✅ | ✅ | ✅ | n/a | ❌ zero reflection |
-| Output visibility | obscure (runtime) | opt-in file | ✅ visible partials | obscure | obscure | n/a | ✅ scaffolded once then yours to edit | ✅ generated `.g.cs` in `obj/` on build |
-| Regenerates on source change | n/a | on `mapster gen` | ✅ on build | n/a | n/a | n/a | ❌ manual rerun | ✅ on every build, no drift |
+The main table below compares the four most common picks — AutoMapper, Mapperly, Sieve, OData. Additional tools (Mapster, MediatR, VS Scaffolding) are discussed in prose below.
+
+| Feature | **ZibStack.NET.Dto** | AutoMapper | Mapperly | Sieve | OData |
+|---|---|---|---|---|---|
+| Scope | CRUD DTO + endpoints + query + mapping + JSON Merge Patch | object mapping | object mapping | filter / sort / paging | full query protocol + endpoints |
+| Dispatch | **Roslyn source gen (compile time)** | runtime reflection + expression trees | Roslyn source gen | runtime reflection | runtime + query translator |
+| Price | ✅ MIT free | **Commercial (2025 change)** | MIT free | MIT free | MIT free |
+| DTOs from entity | ✅ auto from `[CrudApi]` (Create / Update / Response / Query variants) | manual `CreateMap<T, TDto>()` | manual partial class | n/a | auto-project |
+| JSON Merge Patch / partial update | ✅ `PatchField<T>` tri-state (null / missing / set) | ❌ | ❌ | ❌ | partial via PATCH |
+| Filter / sort / paging DSL | ✅ `[QueryDto]` + filter/sort DSL | n/a | n/a | ✅ `Sieve(CanSort=true)` | ✅ heavy OData protocol |
+| Minimal API endpoint generation | ✅ `Map{Entity}Endpoints(...)` | ❌ | ❌ | ❌ | ❌ (controller only) |
+| `[ApiController]` generation | ✅ both Minimal API and Controller styles | ❌ | ❌ | ❌ | ❌ |
+| Sensitive / response-filtering attrs | ✅ `[DtoIgnore(target)]`, `[DtoOnly]`, `[ListIgnore]`, `[QueryIgnore]` | ❌ | ❌ | ❌ | `[Select]` |
+| External-type configuration | ✅ `IDtoConfigurator` fluent + `[CreateDtoFor]` / `[UpdateDtoFor]` | `Profile`s | partial class | attribute | EDM builder |
+| Runtime reflection | ❌ zero reflection | ✅ heavy | ❌ | ✅ | ✅ |
+| Output visibility | ✅ generated `.g.cs` in `obj/` on build | obscure (runtime) | ✅ visible partials | obscure | obscure |
+| Regenerates on source change | ✅ on every build, no drift | n/a | ✅ on build | n/a | n/a |
+
+**Other tools worth mentioning:**
+
+- **Mapster** — mapping-only; runtime with optional Mapster.Tool codegen. Active but development stalled in 2025; MIT free. Good pick if you need just mapping and don't want AutoMapper's new commercial license.
+- **MediatR** — request/response pipeline with behaviors (validation, logging, caching). **Went commercial in 2025.** Solves a different problem than Dto — cross-cutting pipelines for any request, not just CRUD. Use both if you need pipelines on top of CRUD.
+- **VS Scaffolding / OnionAPI templates** — drop code once, then you own it. No regeneration; the moment your entity changes, you maintain the scaffold by hand.
 
 ## What you give up
 

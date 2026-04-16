@@ -5,18 +5,18 @@ description: "How ZibStack.NET.Log compares to Microsoft.Extensions.Logging + $\
 
 Structured logging in .NET has several mature options. ZibStack.NET.Log **isn't a replacement for them** — it plugs into `ILogger`, so any of these sinks/backends still work. It's a **compile-time rewrite layer** that changes *how the call sites look* (`$"..."` ergonomics) without changing where the logs end up.
 
-| Feature | M.E.Logging + `$"..."` | `[LoggerMessage]` (.NET 6+) | Serilog | NLog | **ZibStack.NET.Log** |
+| Feature | **ZibStack.NET.Log** | M.E.Logging + `$"..."` | `[LoggerMessage]` (.NET 6+) | Serilog | NLog |
 |---|---|---|---|---|---|
-| Call-site style | `log.LogInformation($"user {id}")` | `[LoggerMessage] partial void LogUser(int id);` | `log.Information("user {Id}", id)` | `log.Info("user {0}", id)` | `log.LogInformation($"user {id}")` |
-| Preserves template (structured) | ❌ flattens to one string | ✅ compile-time | ✅ | ✅ | ✅ |
-| CA2254 warning on `$"..."` | ⚠️ yes | n/a | n/a | n/a | ✅ silenced — structured preserved |
-| Alloc per call (level off) | 104 B | 0 B | ~80–160 B | ~80 B | **0 B** |
-| Per-call latency (level off) | ~15 ns | ~3 ns | ~25 ns | ~30 ns | **~3 ns** |
-| Zero boilerplate new call sites | ✅ | ❌ declare each `[LoggerMessage]` | ✅ | ✅ | ✅ |
-| Automatic entry/exit/exception | ❌ | ❌ | ❌ | ❌ | ✅ `[Log]` attribute |
-| Parameter masking / exclusion | ❌ | ❌ | custom enricher | ❌ | ✅ `[Sensitive]` / `[NoLog]` |
-| Sink ecosystem (Seq/Elastic/Loki) | via adapters | via adapters | ✅ huge native | ✅ huge native | ✅ any `ILogger` sink (Serilog/NLog/Seq/…) |
-| Project-wide defaults | appsettings log levels only | n/a | `LoggerConfiguration` | XML config | ✅ fluent `ILogConfigurator` |
+| Call-site style | `log.LogInformation($"user {id}")` | `log.LogInformation($"user {id}")` | `[LoggerMessage] partial void LogUser(int id);` | `log.Information("user {Id}", id)` | `log.Info("user {0}", id)` |
+| Preserves template (structured) | ✅ | ❌ flattens to one string | ✅ compile-time | ✅ | ✅ |
+| CA2254 warning on `$"..."` | ✅ silenced — structured preserved | ⚠️ yes | n/a | n/a | n/a |
+| Alloc per call (level off) | **0 B** | 104 B | 0 B | ~80–160 B | ~80 B |
+| Per-call latency (level off) | **~3 ns** | ~15 ns | ~3 ns | ~25 ns | ~30 ns |
+| Zero boilerplate new call sites | ✅ | ✅ | ❌ declare each `[LoggerMessage]` | ✅ | ✅ |
+| Automatic entry/exit/exception | ✅ `[Log]` attribute | ❌ | ❌ | ❌ | ❌ |
+| Parameter masking / exclusion | ✅ `[Sensitive]` / `[NoLog]` | ❌ | ❌ | custom enricher | ❌ |
+| Sink ecosystem (Seq/Elastic/Loki) | ✅ any `ILogger` sink (Serilog/NLog/Seq/…) | via adapters | via adapters | ✅ huge native | ✅ huge native |
+| Project-wide defaults | ✅ fluent `ILogConfigurator` | appsettings log levels only | n/a | `LoggerConfiguration` | XML config |
 
 ## What you give up
 

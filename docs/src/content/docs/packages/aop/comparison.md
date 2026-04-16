@@ -11,22 +11,22 @@ description: "How ZibStack.NET.Aop compares to PostSharp, Metalama, Castle.Dynam
 
 Resilience patterns (retry / timeout / circuit-breaker / cache) have their own fluent libraries — Polly and Microsoft.Extensions.Caching.Hybrid — that ZibStack.NET.Aop wraps with a declarative attribute instead of fluent plumbing at every call site.
 
-| Feature | PostSharp | Metalama | Castle.DynamicProxy | Polly / HybridCache (standalone) | **ZibStack.NET.Aop** |
+| Feature | **ZibStack.NET.Aop** | PostSharp | Metalama | Castle.DynamicProxy | Polly / HybridCache |
 |---|---|---|---|---|---|
-| Dispatch | MSIL post-processing | Roslyn + T# template | Runtime proxy gen | Direct API calls | Roslyn source gen + C# 12 interceptors |
-| Price | Commercial (paid) | Commercial (free tier) | MIT free | MIT free | ✅ MIT free |
-| Needs `virtual`/interface? | ❌ | ❌ | ✅ yes — can't wrap sealed/non-virtual | n/a (wrapping) | ❌ works on any method |
-| Runtime reflection | ❌ | ❌ | ✅ proxy generation | ❌ | ❌ |
-| Overhead per call | near zero | near zero | proxy + dispatch | single delegate | **zero dispatch** (direct inline via interceptor) |
-| Declarative attributes | ✅ | ✅ | ❌ (wire via DI container) | ❌ (fluent API) | ✅ `[Retry]`, `[Timeout]`, `[Trace]`, `[Cache]`, … |
-| Retry / timeout / circuit-breaker | custom aspect | custom aspect | custom interceptor | ✅ built-in | ✅ built-in + Polly bridge (`[PollyRetry]`, `[PollyCircuitBreaker]`, `[PollyRateLimiter]`, `[HttpRetry]`) |
-| HybridCache (.NET 9+) | n/a | n/a | n/a | ✅ library API | ✅ `[HybridCache]` attribute |
-| Entry/exit/exception logging | custom aspect | custom aspect | n/a | n/a | ✅ `[Log]` (via ZibStack.NET.Log inline emitter — zero alloc) |
-| OpenTelemetry Activities | custom aspect | custom aspect | n/a | n/a | ✅ `[Trace]` |
-| `System.Diagnostics.Metrics` | custom aspect | custom aspect | n/a | n/a | ✅ `[Metrics]` |
-| Project-wide defaults | via convention | via fabric class | n/a | fluent per-client | ✅ fluent `IAopConfigurator` |
-| Source-visible generated code | ❌ (IL only) | ✅ T# previews | n/a | n/a | ✅ `EmitCompilerGeneratedFiles=true` writes `.g.cs` |
-| Analyzer feedback at write time | via build step | ✅ real-time | n/a | n/a | ✅ AOP0xxx diagnostics |
+| Dispatch | Roslyn source gen + C# 12 interceptors | MSIL post-processing | Roslyn + T# template | Runtime proxy gen | Direct API calls |
+| Price | ✅ MIT free | Commercial (paid) | Commercial (free tier) | MIT free | MIT free |
+| Needs `virtual`/interface? | ❌ works on any method | ❌ | ❌ | ✅ yes — can't wrap sealed/non-virtual | n/a (wrapping) |
+| Runtime reflection | ❌ | ❌ | ❌ | ✅ proxy generation | ❌ |
+| Overhead per call | **zero dispatch** (direct inline via interceptor) | near zero | near zero | proxy + dispatch | single delegate |
+| Declarative attributes | ✅ `[Retry]`, `[Timeout]`, `[Trace]`, `[Cache]`, … | ✅ | ✅ | ❌ (wire via DI container) | ❌ (fluent API) |
+| Retry / timeout / circuit-breaker | ✅ built-in + Polly bridge (`[PollyRetry]`, `[PollyCircuitBreaker]`, `[PollyRateLimiter]`, `[HttpRetry]`) | custom aspect | custom aspect | custom interceptor | ✅ built-in |
+| HybridCache (.NET 9+) | ✅ `[HybridCache]` attribute | n/a | n/a | n/a | ✅ library API |
+| Entry/exit/exception logging | ✅ `[Log]` (via ZibStack.NET.Log inline emitter — zero alloc) | custom aspect | custom aspect | n/a | n/a |
+| OpenTelemetry Activities | ✅ `[Trace]` | custom aspect | custom aspect | n/a | n/a |
+| `System.Diagnostics.Metrics` | ✅ `[Metrics]` | custom aspect | custom aspect | n/a | n/a |
+| Project-wide defaults | ✅ fluent `IAopConfigurator` | via convention | via fabric class | n/a | fluent per-client |
+| Source-visible generated code | ✅ `EmitCompilerGeneratedFiles=true` writes `.g.cs` | ❌ (IL only) | ✅ T# previews | n/a | n/a |
+| Analyzer feedback at write time | ✅ AOP0xxx diagnostics | via build step | ✅ real-time | n/a | n/a |
 
 ## What you give up
 

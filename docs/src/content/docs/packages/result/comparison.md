@@ -12,18 +12,18 @@ The "Result pattern" for functional error handling in .NET has four well-known l
 
 ZibStack.NET.Result sits in the same space, **opinionated toward pragmatic server-side APIs**: one `Result<T>` / `Result<T, TError>` with typed errors, Railway-oriented composition (`Then` / `Map` / `Bind`), and ergonomic converters to ASP.NET Core `ProblemDetails` / HTTP responses.
 
-| Feature | FluentResults | OneOf | ErrorOr | LanguageExt | **ZibStack.NET.Result** |
+| Feature | **ZibStack.NET.Result** | FluentResults | OneOf | ErrorOr | LanguageExt |
 |---|---|---|---|---|---|
-| Philosophy | one result + collection of errors | true discriminated unions | typed `Error` records + result | full FP stack (Option/Try/Either) | pragmatic Result + Error, HTTP-friendly |
-| Learning curve | low | low–medium | low | **high** (FP background needed) | low |
-| Multiple outcome branches (not just success/fail) | single error bag | ✅ via `OneOf<T1, T2, T3>` | single error | ✅ via `Either` | ✅ `Result<T, TError>` typed error channel |
-| ASP.NET Core `ProblemDetails` helpers | community | ❌ | ✅ | ❌ | ✅ native `ToProblemDetails()` / `ToHttpResult()` |
-| Railway-oriented ops (Map / Bind / Then) | ✅ | partial (via switch) | ✅ | ✅ deep | ✅ |
-| Pattern matching on outcome | `.IsSuccess` / `.Errors` | ✅ `Match(a => …, b => …)` | `.Match(val, err)` | ✅ | ✅ `.Match(val, err)` |
-| Error metadata / hierarchy | ✅ rich `IError` objects | via `TError` | typed `Error` with category | via `Error` type | typed `Error` with `Type`/`Code`/`Description` + metadata |
-| Implicit conversions (`return value;` / `return error;`) | partial | partial | ✅ | ❌ | ✅ |
-| Runtime cost | alloc per result | union-sized struct possible | struct | variable | struct-based where possible |
-| Install footprint | small | small | small | **large** | small |
+| Philosophy | pragmatic Result + Error, HTTP-friendly | one result + collection of errors | true discriminated unions | typed `Error` records + result | full FP stack (Option/Try/Either) |
+| Learning curve | low | low | low–medium | low | **high** (FP background needed) |
+| Multiple outcome branches | ✅ `Result<T, TError>` typed error channel | single error bag | ✅ via `OneOf<T1, T2, T3>` | single error | ✅ via `Either` |
+| ASP.NET Core `ProblemDetails` helpers | ✅ native `ToProblemDetails()` / `ToHttpResult()` | community | ❌ | ✅ | ❌ |
+| Railway ops (Map / Bind / Then) | ✅ | ✅ | partial (via switch) | ✅ | ✅ deep |
+| Pattern matching on outcome | ✅ `.Match(val, err)` | `.IsSuccess` / `.Errors` | ✅ `Match(a => …, b => …)` | `.Match(val, err)` | ✅ |
+| Error metadata / hierarchy | typed `Error` with `Type`/`Code`/`Description` + metadata | ✅ rich `IError` objects | via `TError` | typed `Error` with category | via `Error` type |
+| Implicit conversions (`return value;` / `return error;`) | ✅ | partial | partial | ✅ | ❌ |
+| Runtime cost | struct-based where possible | alloc per result | union-sized struct possible | struct | variable |
+| Install footprint | small | small | small | small | **large** |
 
 ## What you give up
 

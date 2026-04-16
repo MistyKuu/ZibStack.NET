@@ -7,24 +7,31 @@ description: "How ZibStack.NET.TypeGen compares to NSwag, jburzynski/TypeGen, Ta
 
 Note: there is a separate project called **TypeGen** ([jburzynski/TypeGen](https://github.com/jburzynski/TypeGen)) — reflection-based single-target C#→TS tool. Our package is `ZibStack.NET.TypeGen` (namespaced) to avoid collision, but keep this in mind when searching.
 
-| Feature | NSwag | jburzynski/TypeGen | Tapper | Reinforced.Typings | AutoRest | OpenAPI Generator | **ZibStack.NET.TypeGen** |
-|---|---|---|---|---|---|---|---|
-| Mechanism | reflection + OpenAPI intermediate | reflection + CLI / `dotnet tool` | dotnet tool CLI | reflection + MSBuild | OpenAPI-driven | OpenAPI-driven | **Roslyn source gen (runs in compiler)** |
-| Needs running app / compiled DLL | ✅ yes | ✅ yes | ❌ | ✅ compiled DLL | external spec | external spec | ❌ pure compile-time |
-| Regenerates on `dotnet build` | partial (build target) | ❌ manual rerun | ❌ manual rerun | ✅ | ❌ | ❌ | ✅ + live on IDE save |
-| TypeScript | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| TS string-literal unions (modern) | partial | ❌ (TS enum only) | ✅ | partial | ❌ | ❌ | ✅ default |
-| OpenAPI 3.0 document | ✅ (core feature) | ❌ | ❌ | ❌ | consumes, doesn't emit | consumes | ✅ from same DTOs |
-| OpenAPI `paths:` without a running app | ❌ needs host | n/a | n/a | n/a | n/a | n/a | ✅ synthesized from `[CrudApi]` + scanned from `[ApiController]` + Minimal API |
-| Python (Pydantic v2) | ❌ | ❌ | ❌ | ❌ | via OpenAPI | via OpenAPI | ✅ native |
-| Zod (runtime TS validation schemas) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ native |
-| MessagePack | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Compile-time fluent configurator (Roslyn-parsed) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ `ITypeGenConfigurator` |
-| Per-class / per-property override attributes | partial | ✅ `[ExportTsClass]` | ✅ `[TranspilationSource]` | ✅ | ❌ | ❌ | ✅ `[TsName]`, `[TsType]`, `[UseType<T>]`, `[OpenApiProperty]`, … |
-| Validation → schema constraints | ❌ | ❌ | ❌ | ❌ | from OpenAPI spec | from OpenAPI spec | ✅ DataAnnotations + `[Z…]` → OpenAPI `minLength`/`pattern`, Zod `.email()`, Pydantic |
-| Polymorphic types (`[JsonPolymorphic]`) → discriminated union | partial | ❌ | ❌ | ❌ | from spec | from spec | ✅ TS + OpenAPI + Zod |
-| Dto-companion synthesis (`CreateXRequest`, etc.) | ❌ | ❌ | ❌ | ❌ | n/a | n/a | ✅ `[CrudApi]` integration |
-| License | LGPL (with MIT portions) | MIT | MIT | MIT | MIT | Apache 2.0 | MIT |
+The main table compares the four closest tools — NSwag (OpenAPI + TS client), Tapper (Roslyn-adjacent C#→TS), jburzynski/TypeGen (reflection-based C#→TS with attributes), and AutoRest (multi-language from OpenAPI). Reinforced.Typings and OpenAPI Generator are discussed in prose below.
+
+| Feature | **ZibStack.NET.TypeGen** | NSwag | Tapper | jburzynski/TypeGen | AutoRest |
+|---|---|---|---|---|---|
+| Mechanism | **Roslyn source gen (runs in compiler)** | reflection + OpenAPI intermediate | dotnet tool CLI | reflection + CLI / `dotnet tool` | OpenAPI-driven |
+| Needs running app / compiled DLL | ❌ pure compile-time | ✅ yes | ❌ | ✅ yes | external spec |
+| Regenerates on `dotnet build` | ✅ + live on IDE save | partial (build target) | ❌ manual rerun | ❌ manual rerun | ❌ |
+| TypeScript | ✅ | ✅ | ✅ | ✅ | ✅ |
+| TS string-literal unions (modern) | ✅ default | partial | ✅ | ❌ (TS enum only) | ❌ |
+| OpenAPI 3.0 document | ✅ from same DTOs | ✅ (core feature) | ❌ | ❌ | consumes, doesn't emit |
+| OpenAPI `paths:` without a running app | ✅ synthesized from `[CrudApi]` + scanned from `[ApiController]` + Minimal API | ❌ needs host | n/a | n/a | n/a |
+| Python (Pydantic v2) | ✅ native | ❌ | ❌ | ❌ | via OpenAPI |
+| Zod (runtime TS validation schemas) | ✅ native | ❌ | ❌ | ❌ | ❌ |
+| MessagePack | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Compile-time fluent configurator | ✅ `ITypeGenConfigurator` | ❌ | ❌ | ❌ | ❌ |
+| Per-class / per-property attributes | ✅ `[TsName]`, `[TsType]`, `[UseType<T>]`, `[OpenApiProperty]`, … | partial | ✅ `[TranspilationSource]` | ✅ `[ExportTsClass]` | ❌ |
+| Validation → schema constraints | ✅ DataAnnotations + `[Z…]` → OpenAPI `minLength`/`pattern`, Zod `.email()`, Pydantic | ❌ | ❌ | ❌ | from OpenAPI spec |
+| Polymorphic types → discriminated union | ✅ TS + OpenAPI + Zod | partial | ❌ | ❌ | from spec |
+| Dto-companion synthesis (`CreateXRequest`, etc.) | ✅ `[CrudApi]` integration | ❌ | ❌ | ❌ | n/a |
+| License | MIT | LGPL (with MIT portions) | MIT | MIT | MIT |
+
+**Other tools worth mentioning:**
+
+- **Reinforced.Typings** — reflection + MSBuild, attribute-based TS generation. Older approach; closer to jburzynski/TypeGen in design. Works on .NET Framework too.
+- **OpenAPI Generator** (Apache 2.0) — the Swiss Army knife for generating clients from OpenAPI specs in 30+ languages. Pair it with our OpenAPI output if you want multi-language HTTP clients: `ZibStack.NET.TypeGen` → `openapi.yaml` → `openapi-generator` → Java/Ruby/PHP/…
 
 ## What you give up
 
