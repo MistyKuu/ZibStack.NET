@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Microsoft.CodeAnalysis;
 
 namespace ZibStack.NET.TypeGen.Generator;
 
@@ -192,6 +193,14 @@ internal sealed class SchemaProperty
 
     /// <summary>True if the property is nullable in the C# source (NRT or <c>T?</c>).</summary>
     public bool IsNullable { get; set; }
+
+    /// <summary>
+    /// Source <see cref="Location"/> of the property's declaration, used when the
+    /// generator needs to surface a diagnostic about this specific property
+    /// (e.g. <c>TG0002 Unsupported type → 'unknown'</c>). Null when discovery
+    /// added the property from a symbol with no source (metadata-only reference).
+    /// </summary>
+    public Location? Location { get; set; }
 
     /// <summary>Per-target name overrides.</summary>
     public string? TsNameOverride { get; set; }

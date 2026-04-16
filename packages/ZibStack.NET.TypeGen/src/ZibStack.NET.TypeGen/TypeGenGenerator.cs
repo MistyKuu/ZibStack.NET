@@ -265,6 +265,13 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
 
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
+            // Surface every property whose C# type won't render into a sane TS /
+            // OpenAPI expression (fell back to `unknown` / `object` because the type
+            // isn't primitive, isn't in the model, isn't overridden, isn't ignored).
+            // This used to fail silently and the user was left with unusable output
+            // until they spotted the `unknown` in their .ts files by chance.
+            ReportUntranslatableProperties(spc, model);
+
             var settings = config?.Settings ?? new GlobalSettings();
             // Detect ZibStack.NET.Query presence by probing a well-known type. When
             // referenced, the Dto CRUD list endpoint binds additional query-string params
@@ -596,6 +603,131 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 sym.Locations.FirstOrDefault() ?? Location.None,
                 outputDir ?? "<null>",
                 sym.Name));
+    }
+
+    /// <summary>
+    /// Flags every property the emitters would render as <c>unknown</c> (TS) /
+    /// <c>object</c> (OpenAPI) because its C# type is neither a primitive, nor in
+    /// the emitted model, nor overridden via <c>[TsType]</c>/<c>[OpenApiProperty]</c>,
+    /// nor suppressed via <c>[TsIgnore]</c>/<c>[OpenApiIgnore]</c>. Surfaces as
+    /// <c>TG0002</c> with the property's source location so the user sees the
+    /// warning in their Errors panel instead of discovering the degraded output
+    /// by chance.
+    /// </summary>
+    private static void ReportUntranslatableProperties(SourceProductionContext spc, SchemaModel model) =>
+        ValidateTranslatableProperties(model, spc.ReportDiagnostic);
+
+    /// <summary>
+    /// Pure-function variant of <see cref="ReportUntranslatableProperties"/> —
+    /// takes a callback so tests can drive it without a <see cref="SourceProductionContext"/>
+    /// (which has no public constructor).
+    /// </summary>
+    internal static void ValidateTranslatableProperties(SchemaModel model, System.Action<Diagnostic> report)
+    {
+        // Build a fast lookup for every type the emitters know how to render: the
+        // in-model classes / enums by FQN plus the primitive C# types the emitters
+        // map natively (mirrors TypeScriptEmitter.MapCSharpToTs + OpenApiEmitter).
+        var known = new HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "bool", "byte", "sbyte", "short", "ushort", "int", "uint", "long", "ulong",
+            "float", "double", "decimal", "string", "char",
+            "System.Boolean", "System.Byte", "System.SByte", "System.Int16", "System.UInt16",
+            "System.Int32", "System.UInt32", "System.Int64", "System.UInt64",
+            "System.Single", "System.Double", "System.Decimal", "System.String", "System.Char",
+            "System.Guid", "System.DateTime", "System.DateTimeOffset", "System.DateOnly",
+            "System.TimeOnly", "System.TimeSpan", "System.Uri", "System.Version",
+            "object", "System.Object",
+            // Binary / stream types map to string+format in OpenAPI, `string` in TS.
+            "byte[]", "System.IO.Stream",
+        };
+        foreach (var c in model.Classes) known.Add(c.CSharpFullName);
+        foreach (var e in model.Enums) known.Add(e.CSharpFullName);
+
+        foreach (var cls in model.Classes)
+        {
+            if (cls.TsIgnore && cls.OpenApiIgnore) continue;
+            var needsTs = (cls.Targets & TypeTarget.TypeScript) != 0 && !cls.TsIgnore;
+            var needsOa = (cls.Targets & TypeTarget.OpenApi) != 0 && !cls.OpenApiIgnore;
+            if (!needsTs && !needsOa) continue;
+
+            foreach (var prop in cls.Properties)
+            {
+                // Per-target opt-outs — user already said "don't emit this."
+                var checkTs = needsTs && !prop.TsIgnore && prop.TsTypeOverride is null;
+                var checkOa = needsOa && !prop.OpenApiIgnore && prop.OpenApiTypeOverride is null && prop.OpenApiRefOverride is null;
+                if (!checkTs && !checkOa) continue;
+
+                if (IsTranslatableType(prop.CSharpTypeFullName, known)) continue;
+
+                if (checkTs)
+                    report(Diagnostic.Create(
+                        TypeGenDiagnostics.UnsupportedType,
+                        prop.Location ?? Location.None,
+                        cls.SourceName, prop.SourceName, prop.CSharpTypeFullName, "TypeScript"));
+                if (checkOa)
+                    report(Diagnostic.Create(
+                        TypeGenDiagnostics.UnsupportedType,
+                        prop.Location ?? Location.None,
+                        cls.SourceName, prop.SourceName, prop.CSharpTypeFullName, "OpenAPI"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks whether <paramref name="cSharpType"/> unwraps to something in
+    /// <paramref name="known"/>. Handles nullable, array, common collection
+    /// wrappers (<c>List</c>, <c>Dictionary</c>, <c>IEnumerable</c>, etc.) and
+    /// <c>PatchField</c> so the validator doesn't false-positive on legitimate
+    /// composite types.
+    /// </summary>
+    private static bool IsTranslatableType(string cSharpType, HashSet<string> known)
+    {
+        var t = cSharpType.TrimEnd('?').Trim();
+        if (known.Contains(t)) return true;
+        if (t.EndsWith("[]", System.StringComparison.Ordinal))
+            return IsTranslatableType(t.Substring(0, t.Length - 2), known);
+
+        // Generic wrappers we unwrap — same list the emitter uses.
+        var wrappers = new[]
+        {
+            "PatchField", "System.Nullable",
+            "System.Collections.Generic.List", "System.Collections.Generic.IList",
+            "System.Collections.Generic.ICollection", "System.Collections.Generic.IEnumerable",
+            "System.Collections.Generic.IReadOnlyList", "System.Collections.Generic.IReadOnlyCollection",
+            "System.Collections.Generic.HashSet", "System.Collections.Generic.ISet", "System.Collections.Generic.IReadOnlySet",
+            "List", "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection", "HashSet", "ISet", "IReadOnlySet",
+            "System.Collections.Generic.Dictionary", "System.Collections.Generic.IDictionary", "System.Collections.Generic.IReadOnlyDictionary",
+            "Dictionary", "IDictionary", "IReadOnlyDictionary",
+        };
+        foreach (var w in wrappers)
+        {
+            var prefix = w + "<";
+            if (!t.StartsWith(prefix, System.StringComparison.Ordinal) || !t.EndsWith(">", System.StringComparison.Ordinal))
+                continue;
+            var inner = t.Substring(prefix.Length, t.Length - prefix.Length - 1);
+            // Split on commas at depth 0 for Dictionary<K, V> — each arg must be translatable.
+            foreach (var arg in SplitTopLevelGenericArgs(inner))
+                if (!IsTranslatableType(arg.Trim(), known)) return false;
+            return true;
+        }
+        return false;
+    }
+
+    private static IEnumerable<string> SplitTopLevelGenericArgs(string inner)
+    {
+        int depth = 0, start = 0;
+        for (int i = 0; i < inner.Length; i++)
+        {
+            var ch = inner[i];
+            if (ch == '<') depth++;
+            else if (ch == '>') depth--;
+            else if (ch == ',' && depth == 0)
+            {
+                yield return inner.Substring(start, i - start);
+                start = i + 1;
+            }
+        }
+        yield return inner.Substring(start);
     }
 
     /// <summary>

@@ -71,6 +71,88 @@ public class BugfixBundle2Tests
     }
 
     [Fact]
+    public void UntranslatableProperty_SurfacesAsDiagnostic_ViaValidator()
+    {
+        // Hand-build the model — the validator is what we're testing, not the
+        // full generator pipeline. JsonObject isn't in the model and has no
+        // override — TG0002 must fire for both TS and OpenAPI.
+        var cls = new SchemaClass
+        {
+            CSharpFullName = "Ns.Root", SourceName = "Root", EmittedName = "Root",
+            OutputDir = ".", Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
+        };
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Opaque",
+            CSharpTypeFullName = "System.Text.Json.Nodes.JsonObject",
+        });
+        var model = new SchemaModel();
+        model.Classes.Add(cls);
+
+        var diags = RunValidatorOnly(model);
+        Assert.True(diags.Any(d => d.Id == "TG0002" && d.GetMessage().Contains("Opaque")),
+            $"Expected TG0002 for Opaque. Got: [{string.Join(", ", diags.Select(d => d.Id + ":" + d.GetMessage()))}]");
+    }
+
+    [Fact]
+    public void TranslatableProperty_NoDiagnostic()
+    {
+        // Root's properties all resolve — no spurious TG0002.
+        var root = new SchemaClass
+        {
+            CSharpFullName = "Ns.Root", SourceName = "Root", EmittedName = "Root",
+            OutputDir = ".", Targets = TypeTarget.TypeScript,
+        };
+        root.Properties.Add(new SchemaProperty { SourceName = "Id", CSharpTypeFullName = "int" });
+        root.Properties.Add(new SchemaProperty { SourceName = "Name", CSharpTypeFullName = "string" });
+        root.Properties.Add(new SchemaProperty { SourceName = "Items", CSharpTypeFullName = "System.Collections.Generic.List<Ns.Item>" });
+
+        var item = new SchemaClass
+        {
+            CSharpFullName = "Ns.Item", SourceName = "Item", EmittedName = "Item",
+            OutputDir = ".", Targets = TypeTarget.TypeScript,
+        };
+        item.Properties.Add(new SchemaProperty { SourceName = "Qty", CSharpTypeFullName = "int" });
+
+        var model = new SchemaModel();
+        model.Classes.Add(root);
+        model.Classes.Add(item);
+
+        var diags = RunValidatorOnly(model);
+        Assert.Empty(diags.Where(d => d.Id == "TG0002"));
+    }
+
+    [Fact]
+    public void TsIgnoreProperty_SuppressesDiagnostic()
+    {
+        // Property has an untranslatable type but is marked [TsIgnore] —
+        // emitter won't render it, so validator shouldn't complain about it.
+        var cls = new SchemaClass
+        {
+            CSharpFullName = "Ns.R", SourceName = "R", EmittedName = "R",
+            OutputDir = ".", Targets = TypeTarget.TypeScript,
+        };
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Internal",
+            CSharpTypeFullName = "System.Text.Json.Nodes.JsonObject",
+            TsIgnore = true,
+        });
+        var model = new SchemaModel();
+        model.Classes.Add(cls);
+
+        var diags = RunValidatorOnly(model);
+        Assert.Empty(diags.Where(d => d.Id == "TG0002"));
+    }
+
+    private static System.Collections.Generic.List<Diagnostic> RunValidatorOnly(SchemaModel model)
+    {
+        var diags = new System.Collections.Generic.List<Diagnostic>();
+        TypeGenGenerator.ValidateTranslatableProperties(model, diags.Add);
+        return diags;
+    }
+
+    [Fact]
     public void GenericTsType_TargetInReferencedAssembly_StillSeedsAndImports()
     {
         // Split into two compilations: the referenced lib defines Payload, the

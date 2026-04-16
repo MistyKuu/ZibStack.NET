@@ -564,6 +564,7 @@ internal static class SchemaParser
             CSharpTypeFullName = prop.Type.ToDisplayString(),
             // NRT-aware nullable. For value types `int?` Type.NullableAnnotation is also Annotated.
             IsNullable = prop.NullableAnnotation == NullableAnnotation.Annotated,
+            Location = prop.Locations.FirstOrDefault(),
             TsNameOverride = ReadStringArg(prop, TsNameAttr, "Name"),
             TsTypeOverride = ReadStringArg(prop, TsTypeAttr, "TypeExpression"),
             TsImportFrom = ReadNamedStringArg(prop, TsTypeAttr, "ImportFrom"),
