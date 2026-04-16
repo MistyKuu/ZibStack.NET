@@ -45,6 +45,151 @@ internal static class SchemaParser
     public static SchemaClass? ParseAuxiliaryClass(INamedTypeSymbol symbol, TypeTarget target, string outputDir) =>
         ParseClassCore(symbol, target, outputDir);
 
+    /// <summary>
+    /// Walks the property graph of every class already in <paramref name="model"/>,
+    /// pulling in any user-defined type (class, record, struct, enum) referenced by
+    /// a property but not yet emitted. Discovered types inherit the root class's
+    /// <c>Targets</c> and <c>OutputDir</c>, guaranteeing generated TS / OpenAPI
+    /// references resolve (no stray <c>unknown</c> / missing <c>$ref</c>). External
+    /// types — BCL (<c>System.*</c>, <c>Microsoft.*</c>, <c>Newtonsoft.*</c>) and
+    /// any type outside the current compilation's assembly — are left alone; the
+    /// user opts those in explicitly via <c>[TsType(..., ImportFrom = "...")]</c>.
+    /// Cycles and diamond references are handled by an FQN-keyed "seen" set.
+    /// </summary>
+    public static void DiscoverTransitive(SchemaModel model, Compilation compilation)
+    {
+        // Symbol-equality-based tracking so `Node` (in the seed) and `Node?` (via a
+        // nullable property) hash to the same entry and the cycle terminates.
+        // `SymbolEqualityComparer.Default` already disregards nullable annotations.
+        var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+        foreach (var c in model.Classes)
+        {
+            var s = compilation.GetTypeByMetadataName(StripGlobal(c.CSharpFullName));
+            if (s is not null) seen.Add(s);
+        }
+        foreach (var e in model.Enums)
+        {
+            var s = compilation.GetTypeByMetadataName(StripGlobal(e.CSharpFullName));
+            if (s is not null) seen.Add(s);
+        }
+
+        // BFS over the current classes — every new class we discover gets its
+        // own properties walked too, transitively.
+        var queue = new Queue<SchemaClass>(model.Classes);
+        while (queue.Count > 0)
+        {
+            var cls = queue.Dequeue();
+            var clsSymbol = compilation.GetTypeByMetadataName(StripGlobal(cls.CSharpFullName));
+            if (clsSymbol is null) continue;
+
+            foreach (var prop in clsSymbol.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (prop.IsStatic || prop.IsIndexer) continue;
+                if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+
+                foreach (var nested in ExtractNestedUserTypes(prop.Type, compilation))
+                {
+                    // Normalize nullable reference annotation so `Node` and `Node?`
+                    // share a cache slot — `Add` returns false the second time.
+                    var key = nested.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+                    if (!seen.Add(key)) continue;
+
+                    if (nested.TypeKind == TypeKind.Enum)
+                    {
+                        var e = ParseAuxiliaryEnum(nested, cls.Targets, cls.OutputDir);
+                        if (e is not null) model.Enums.Add(e);
+                    }
+                    else
+                    {
+                        var sub = ParseAuxiliaryClass(nested, cls.Targets, cls.OutputDir);
+                        if (sub is not null)
+                        {
+                            model.Classes.Add(sub);
+                            queue.Enqueue(sub);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Yields every user-defined <see cref="INamedTypeSymbol"/> reachable from
+    /// <paramref name="type"/>, unwrapping nullable, array, and common collection
+    /// wrappers along the way. A "user-defined" type is one declared in the
+    /// compilation's own assembly with a non-BCL namespace.
+    /// </summary>
+    private static IEnumerable<INamedTypeSymbol> ExtractNestedUserTypes(ITypeSymbol type, Compilation compilation)
+    {
+        // Unwrap nullable value types: T? -> T.
+        if (type is INamedTypeSymbol nts1
+            && nts1.IsGenericType
+            && nts1.ConstructedFrom.SpecialType == SpecialType.System_Nullable_T)
+        {
+            foreach (var x in ExtractNestedUserTypes(nts1.TypeArguments[0], compilation)) yield return x;
+            yield break;
+        }
+
+        // Unwrap array: T[] -> T.
+        if (type is IArrayTypeSymbol arr)
+        {
+            foreach (var x in ExtractNestedUserTypes(arr.ElementType, compilation)) yield return x;
+            yield break;
+        }
+
+        if (type is not INamedTypeSymbol named) yield break;
+
+        // Unwrap common collection wrappers — walk their type arguments.
+        if (IsCollectionType(named))
+        {
+            foreach (var arg in named.TypeArguments)
+                foreach (var x in ExtractNestedUserTypes(arg, compilation))
+                    yield return x;
+            yield break;
+        }
+
+        if (IsUserDefinedType(named, compilation))
+            yield return named;
+    }
+
+    private static bool IsCollectionType(INamedTypeSymbol t)
+    {
+        var ctor = t.ConstructedFrom.ToDisplayString();
+        return ctor == "System.Collections.Generic.List<T>"
+            || ctor == "System.Collections.Generic.IList<T>"
+            || ctor == "System.Collections.Generic.ICollection<T>"
+            || ctor == "System.Collections.Generic.IEnumerable<T>"
+            || ctor == "System.Collections.Generic.IReadOnlyList<T>"
+            || ctor == "System.Collections.Generic.IReadOnlyCollection<T>"
+            || ctor == "System.Collections.Generic.HashSet<T>"
+            || ctor == "System.Collections.Generic.ISet<T>"
+            || ctor == "System.Collections.Generic.IReadOnlySet<T>"
+            || ctor == "System.Collections.Generic.Dictionary<TKey, TValue>"
+            || ctor == "System.Collections.Generic.IDictionary<TKey, TValue>"
+            || ctor == "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>";
+    }
+
+    private static bool IsUserDefinedType(INamedTypeSymbol t, Compilation compilation)
+    {
+        // Primitives and well-known BCL types (int, string, Guid, DateTime, decimal, etc.).
+        if (t.SpecialType != SpecialType.None) return false;
+        if (t.TypeKind != TypeKind.Class && t.TypeKind != TypeKind.Struct && t.TypeKind != TypeKind.Enum)
+            return false;
+        // Must live in the compilation's own assembly — external packages are opaque
+        // unless the user opts them in with [TsType(..., ImportFrom = "...")].
+        if (!SymbolEqualityComparer.Default.Equals(t.ContainingAssembly, compilation.Assembly))
+            return false;
+        // Skip BCL namespaces even if somehow compiled in-assembly (polyfills, etc.).
+        var ns = t.ContainingNamespace?.ToDisplayString() ?? "";
+        if (ns == "System" || ns.StartsWith("System.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Microsoft.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Newtonsoft.", System.StringComparison.Ordinal)) return false;
+        return true;
+    }
+
+    private static string StripGlobal(string fqn) =>
+        fqn.StartsWith("global::", System.StringComparison.Ordinal) ? fqn.Substring("global::".Length) : fqn;
+
     private static SchemaClass? ParseClassCore(INamedTypeSymbol symbol, TypeTarget? forceTarget, string? forceOutputDir)
     {
         TypeTarget targets;
@@ -171,14 +316,34 @@ internal static class SchemaParser
         return v;
     }
 
-    public static SchemaEnum? ParseEnum(INamedTypeSymbol symbol)
+    public static SchemaEnum? ParseEnum(INamedTypeSymbol symbol) => ParseEnumCore(symbol, null, null);
+
+    /// <summary>
+    /// Same as <see cref="ParseEnum"/> but forces <c>Targets</c> / <c>OutputDir</c>
+    /// instead of reading them from <c>[GenerateTypes]</c>. Used by transitive
+    /// discovery — the enum inherits its root's emission config.
+    /// </summary>
+    public static SchemaEnum? ParseAuxiliaryEnum(INamedTypeSymbol symbol, TypeTarget target, string outputDir) =>
+        ParseEnumCore(symbol, target, outputDir);
+
+    private static SchemaEnum? ParseEnumCore(INamedTypeSymbol symbol, TypeTarget? forceTarget, string? forceOutputDir)
     {
         if (symbol.TypeKind != TypeKind.Enum) return null;
-        var generateAttr = symbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == GenerateTypesAttr);
-        if (generateAttr is null) return null;
 
-        var (targets, outputDir) = ReadGenerateTypesArgs(generateAttr);
+        TypeTarget targets;
+        string outputDir;
+        if (forceTarget is not null)
+        {
+            targets = forceTarget.Value;
+            outputDir = forceOutputDir ?? ".";
+        }
+        else
+        {
+            var generateAttr = symbol.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == GenerateTypesAttr);
+            if (generateAttr is null) return null;
+            (targets, outputDir) = ReadGenerateTypesArgs(generateAttr);
+        }
 
         var e = new SchemaEnum
         {

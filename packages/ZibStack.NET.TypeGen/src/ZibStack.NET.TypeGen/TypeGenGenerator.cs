@@ -235,6 +235,21 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 }
             }
 
+            // Transitive discovery: walk property types of everything already in the
+            // model, pull in any user-defined type (class / record / struct / enum) not
+            // already present. Inherits Targets + OutputDir from the root that reached
+            // it, so Order.ts has `thing: Foo;` with a real `import { Foo } from './Foo';`
+            // instead of `thing: unknown;`. Fluent / attribute overrides still apply —
+            // after discovery we re-run the fluent pass over the freshly added entries
+            // so `b.ForType<Foo>().TsName("Bar")` etc. take effect on discovered types.
+            var classCountBefore = model.Classes.Count;
+            var enumCountBefore = model.Enums.Count;
+            SchemaParser.DiscoverTransitive(model, compilation);
+            for (int i = classCountBefore; i < model.Classes.Count; i++)
+                ApplyFluentToClass(model.Classes[i], config);
+            for (int i = enumCountBefore; i < model.Enums.Count; i++)
+                ApplyFluentToEnum(model.Enums[i], config);
+
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
             var settings = config?.Settings ?? new GlobalSettings();

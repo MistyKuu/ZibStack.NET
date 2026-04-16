@@ -478,6 +478,70 @@ type through:
 `extends`/`allOf` shape — base properties + derived-only props + the additional
 properties marker, all in the right place.
 
+## Transitive discovery of nested types
+
+`[GenerateTypes]` only needs to go on **root** types — the generator walks every
+public property recursively and pulls in any user-defined class, record, struct
+or enum it finds, inheriting `Targets` and `OutputDir` from whichever root
+reached it. Without this the reference types would fall through to `unknown`
+in TS / `type: object` in OpenAPI, producing output that doesn't type-check.
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = "../client/src/api")]
+public class Order
+{
+    public Customer Buyer { get; set; } = new();   // ← Customer has NO [GenerateTypes]
+    public List<LineItem> Lines { get; set; } = new();
+    public OrderStatus Status { get; set; }
+}
+
+public class Customer { public string Name { get; set; } = ""; }
+public class LineItem { public int Qty { get; set; } public Product Item { get; set; } = new(); }
+public class Product { public string Sku { get; set; } = ""; }
+public enum OrderStatus { Pending, Shipped }
+```
+
+All of `Customer`, `LineItem`, `Product`, `OrderStatus` get emitted into
+`../client/src/api/` alongside `Order.ts`, with the right cross-file imports
+(`import { Customer } from './Customer';` etc.).
+
+**What counts as "user-defined":**
+- Declared in the current compilation's own assembly (not NuGet packages)
+- Namespace isn't `System.*`, `Microsoft.*`, or `Newtonsoft.*`
+- Class, record, struct, or enum — primitives (`int`, `string`, `Guid`,
+  `DateTime`, `decimal`, etc.) stay mapped to TS primitives / OpenAPI scalars
+
+**Collection unwrapping:** `List<T>`, `T[]`, `IEnumerable<T>`, `HashSet<T>`,
+`Dictionary<K, V>` and the common readonly / interface variants are walked
+transparently — the generator discovers `T` (and `V` for dictionaries) without
+you writing anything extra.
+
+**Cycles** (`Node.Parent : Node?`, `A→B→A`) terminate via a visited-set keyed
+by symbol identity — each type is emitted exactly once.
+
+**Overrides win over discovery.** Attributes and fluent config on a discovered
+type still apply:
+
+```csharp
+// Attribute on a nested class — still honored.
+[TsName("BuyerDto")]
+public class Customer { ... }
+
+// Fluent on a discovered type — also honored. The fluent pass runs again
+// after discovery, so freshly-pulled-in types go through the same merge.
+b.ForType<Customer>()
+    .TsName("BuyerDto")
+    .Property(c => c.Name).TsName("displayName");
+```
+
+If a discovered type happens to carry its own `[GenerateTypes]` attribute with
+different `Targets` / `OutputDir`, that explicit configuration wins — discovery
+never overwrites it.
+
+**Opt out** with `[TsIgnore]` / `[OpenApiIgnore]` on the nested class, or
+`[TsIgnore]` on the property itself (skips the reference entirely so the type
+isn't walked through that path).
+
 ## Dictionaries, inheritance
 
 - `Dictionary<string, V>` (and `IDictionary` / `IReadOnlyDictionary`) emits as
