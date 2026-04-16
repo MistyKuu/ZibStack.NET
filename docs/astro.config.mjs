@@ -46,7 +46,21 @@ export default defineConfig({
 						{ label: 'Core — Relations & Utility Types', slug: 'packages/core' },
 						{ label: 'Validation — Compile-Time Rules', slug: 'packages/validation' },
 						{ label: 'Result — Functional Errors', slug: 'packages/result' },
-						{ label: 'TypeGen — TS & OpenAPI from C#', slug: 'packages/typegen' },
+						{
+						label: 'TypeGen — TS & OpenAPI from C#',
+						items: [
+							{ label: 'Overview', slug: 'packages/typegen' },
+							{ label: 'Type mapping', slug: 'packages/typegen/type-mapping' },
+							{ label: 'Configuration & output', slug: 'packages/typegen/configuration' },
+							{ label: 'Diagnostic reference', slug: 'packages/typegen/diagnostics' },
+							{ label: 'Validation → OpenAPI', slug: 'packages/typegen/validation-mapping' },
+							{ label: 'Endpoint discovery', slug: 'packages/typegen/endpoint-discovery' },
+							{ label: 'Polymorphism & interfaces', slug: 'packages/typegen/polymorphism-and-interfaces' },
+							{ label: 'Advanced type features', slug: 'packages/typegen/advanced-types' },
+							{ label: 'Python emitter', slug: 'packages/typegen/emitters/python' },
+							{ label: 'Zod emitter', slug: 'packages/typegen/emitters/zod' },
+						],
+					},
 					],
 				},
 				{
