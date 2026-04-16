@@ -1,6 +1,12 @@
 using ZibStack.NET.Dto;
 using ZibStack.NET.Core;
 
+// Test fixtures deliberately reproduce the `required` + `[DtoIgnore]` combination
+// that SDTO007 warns about — their whole point is to exercise how the generator
+// handles that shape. Suppress the diagnostic file-wide; production models must
+// still obey it.
+#pragma warning disable SDTO007
+
 namespace ZibStack.NET.Dto.Tests;
 
 // ─── Separate mode (default) ───────────────────────────────────────

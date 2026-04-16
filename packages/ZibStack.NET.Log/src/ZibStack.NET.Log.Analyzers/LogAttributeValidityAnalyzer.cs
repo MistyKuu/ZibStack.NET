@@ -43,7 +43,7 @@ public sealed class LogAttributeValidityAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor PrivateContainingTypeRule = new(
         PrivateContainingTypeId,
         title: "[Log] on a method whose containing type is private/file-scoped",
-        messageFormat: "[Log] on '{0}' won't intercept — the containing type '{1}' is not visible to the generated extension-method interceptor (declared in a separate ZibStack.Generated namespace).",
+        messageFormat: "[Log] on '{0}' won't intercept — the containing type '{1}' is not visible to the generated extension-method interceptor (declared in a separate ZibStack.Generated namespace)",
         category: "Usage",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);

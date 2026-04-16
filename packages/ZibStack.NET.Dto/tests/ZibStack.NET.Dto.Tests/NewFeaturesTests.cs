@@ -1,5 +1,8 @@
 using ZibStack.NET.Dto;
 
+// `required` + `[DtoIgnore]` below is the whole point of these tests.
+#pragma warning disable SDTO007
+
 namespace ZibStack.NET.Dto.Tests;
 
 // ─── Test models ───────────────────────────────────────────────────

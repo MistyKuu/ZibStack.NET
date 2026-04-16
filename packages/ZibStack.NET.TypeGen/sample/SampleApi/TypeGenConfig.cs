@@ -50,9 +50,9 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
 }
 public class Root { public object? El { get; set; } }
 public class Dupa {
-    public string Title;
-    public Detail Info;
-    public List<Tag> Tags;
+    public string Title { get; set; } = "";
+    public Detail Info { get; set; } = new();
+    public List<Tag> Tags { get; set; } = new();
 }
-public class Detail { public int Score; }
-public class Tag { public string Name; }
+public class Detail { public int Score { get; set; } }
+public class Tag { public string Name { get; set; } = ""; }

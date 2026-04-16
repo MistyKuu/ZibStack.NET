@@ -464,7 +464,7 @@ public class AopBehaviorTests
 
         // Direct call — interceptor fires (sanity check).
         _ = svc.Direct(1);
-        Assert.Single(_handler.Calls.Where(c => c.Phase == "Before"));
+        Assert.Single(_handler.Calls, c => c.Phase == "Before");
 
         // Now via delegate — interceptor should NOT fire (this is what AOP0020 warns).
         // Suppress the analyzer here since we're INTENTIONALLY exercising the bypass.

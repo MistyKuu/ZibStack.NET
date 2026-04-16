@@ -86,11 +86,11 @@ public class PaginatedResponseTests
     }
 
     [Fact]
-    public void CreateAsync_PaginatesQueryable()
+    public async System.Threading.Tasks.Task CreateAsync_PaginatesQueryable()
     {
         var source = Enumerable.Range(1, 20).AsQueryable();
 
-        var page = PaginatedResponse<int>.CreateAsync(source, page: 2, pageSize: 5).Result;
+        var page = await PaginatedResponse<int>.CreateAsync(source, page: 2, pageSize: 5);
 
         Assert.Equal(new[] { 6, 7, 8, 9, 10 }, page.Items);
         Assert.Equal(20, page.TotalCount);

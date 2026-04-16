@@ -58,7 +58,9 @@ public partial class Player
     [ZMinLength(8)]
     [UiFormField(Label = "Password", Group = "contact")]
     [PasswordInput]
+#pragma warning disable SDTO007     // required + [DtoIgnore(Response)] is intentional — passwords never ship to clients.
     public required string Password { get; set; }
+#pragma warning restore SDTO007
 
     // ─── Relation: belongs to Team ──────────────────────────────────
     [UiFormField(Label = "Team", Group = "basic")]

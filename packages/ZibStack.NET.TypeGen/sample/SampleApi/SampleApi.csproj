@@ -9,6 +9,10 @@
     <IsPackable>false</IsPackable>
     <!-- Force the manifest .g.cs to land on disk so the targets file can read it. -->
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- SDTO012: this sample's Order has [CrudApi] but no DbContext / ICrudStore
+         wiring because TypeGen-sample focuses on OpenAPI emission, not runtime
+         CRUD. Production projects should keep the warning. -->
+    <NoWarn>$(NoWarn);SDTO012</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
