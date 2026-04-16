@@ -23,9 +23,11 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <!-- Pick up the post-build .ts/.yaml writer target. NuGet consumers get this
-       automatically via build/<pkg>.targets; in-repo ProjectReference users have
-       to wire it explicitly. -->
+  <!-- Pick up the .props (CompilerVisibleProperty for live-regen path) AND the
+       post-build .ts/.yaml writer target. NuGet consumers get both automatically
+       via build/<pkg>.props + build/<pkg>.targets — in-repo ProjectReference
+       users have to wire them explicitly. -->
+  <Import Project="..\..\src\ZibStack.NET.TypeGen\build\ZibStack.NET.TypeGen.props" />
   <Import Project="..\..\src\ZibStack.NET.TypeGen\build\ZibStack.NET.TypeGen.targets" />
 
 </Project>

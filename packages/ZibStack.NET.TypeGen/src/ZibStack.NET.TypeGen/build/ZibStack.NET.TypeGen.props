@@ -10,4 +10,17 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 
+  <!--
+    Expose MSBuildProjectDirectory to the analyzer so the generator can resolve
+    the user's relative OutputDir (e.g. "../client/src/api") to an absolute path
+    during the in-IDE / on-save live-regen write. Without this CompilerVisibleProperty
+    entry, the analyzer-side AnalyzerConfigOptionsProvider returns null for this key
+    and TryWriteFilesDirectly is silently skipped — only the MSBuild post-build target
+    writes files, and only at `dotnet build` time. (This was the actual cause of "live
+    regen on save doesn't work" — not analyzer-host I/O sandboxing.)
+  -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="MSBuildProjectDirectory" />
+  </ItemGroup>
+
 </Project>

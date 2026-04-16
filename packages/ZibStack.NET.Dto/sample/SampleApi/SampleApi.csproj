@@ -23,8 +23,11 @@
     <ProjectReference Include="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen.Abstractions\ZibStack.NET.TypeGen.Abstractions.csproj" />
   </ItemGroup>
 
-  <!-- Pick up the TypeGen post-build .ts/.yaml writer (NuGet consumers get this
-       auto via build/<pkg>.targets; in-repo ProjectReference users wire manually). -->
+  <!-- Pick up the TypeGen .props (CompilerVisibleProperty for live-regen on save)
+       AND the post-build .ts/.yaml writer target. NuGet consumers get both auto
+       via build/<pkg>.props + build/<pkg>.targets; in-repo ProjectReference users
+       wire both manually. -->
+  <Import Project="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen\build\ZibStack.NET.TypeGen.props" />
   <Import Project="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen\build\ZibStack.NET.TypeGen.targets" />
 
   <ItemGroup>
