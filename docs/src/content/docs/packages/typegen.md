@@ -197,27 +197,30 @@ b.ForType<Article>()
 When `ImportFrom` is null / omitted (or the type expression is a primitive like
 `"string"`), no import is emitted — the override is treated as opaque.
 
-### `[TsType<T>]` — generic variant (C# 11+)
+### `[UseType<T>]` — cross-target generic override (C# 11+)
 
-Refactor-safe version of `[TsType("Foo")]`. The TS name is read from `T`'s
-symbol at compile time — renaming the target class auto-updates every reference.
-When `T` is reachable from a `[GenerateTypes]` root (directly annotated or
-pulled in by transitive discovery), the import path is **computed** from its
-`OutputDir` relative to the consuming class's output. Zero string literals:
+Refactor-safe, cross-target replacement for the string form. One attribute —
+every emitter handles it in its own idiom:
+
+| target | emitted |
+|---|---|
+| TypeScript | `prop: T;` + `import { T } from './T';` (path auto-computed) |
+| OpenAPI | `$ref: '#/components/schemas/T'` |
+| Python | `prop: T` + `from t import T` |
 
 ```csharp
-[GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi, OutputDir = ".")]
 public class Rule
 {
-    [TsType<AutomationRulePayload>]
+    [UseType<AutomationRulePayload>]
     public JsonObject? Element { get; set; }
 }
 
-[GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi, OutputDir = ".")]
 public class AutomationRulePayload { public string Body { get; set; } = ""; }
 ```
 
-→
+→ TypeScript:
 ```typescript
 import { AutomationRulePayload } from './AutomationRulePayload';
 
@@ -226,10 +229,19 @@ export interface Rule {
 }
 ```
 
-**Cross-directory imports** — different `OutputDir` values, one per type:
+→ OpenAPI:
+```yaml
+Rule:
+  type: object
+  properties:
+    Element:
+      $ref: '#/components/schemas/AutomationRulePayload'
+```
+
+**Cross-directory TS imports** — different `OutputDir` values, one per type:
 ```csharp
 [GenerateTypes(OutputDir = "client/src/rules")] public class Rule {
-    [TsType<Payload>] public object? El { get; set; }
+    [UseType<Payload>] public object? El { get; set; }
 }
 [GenerateTypes(OutputDir = "client/src/types")] public class Payload { /* … */ }
 ```
@@ -237,26 +249,29 @@ export interface Rule {
 computed automatically from the two `OutputDir`s' common ancestor.
 
 **External targets** (BCL types, NuGet packages, hand-written `.d.ts`) — the
-symbol lives outside the current compilation so auto-path doesn't apply. Pair
-with explicit `ImportFrom`:
+symbol lives outside the current compilation so TS auto-path doesn't apply.
+Pair with explicit `ImportFrom` (TS-only — OpenAPI / Python reference `T` by
+name regardless):
 ```csharp
-[TsType<Widget>(ImportFrom = "@acme/widgets")]
+[UseType<ExternalLib.Widget>(ImportFrom = "@acme/widgets")]
 public object? W { get; set; }
 ```
-If you leave `ImportFrom` off for an external target, the TS type expression
-still gets `T`'s simple name but no `import` line is written — same semantics
-as today's opaque `[TsType("…")]` without a path.
 
 **[TsName] on the target is honored** — if `Payload` carries `[TsName("PayloadDto")]`,
-both the type expression and the import use `PayloadDto`.
+both the TS type expression and the import use `PayloadDto`.
 
-**Enums work too:** `[TsType<Priority>]` against `[GenerateTypes] public enum Priority { … }`.
+**Enums work too:** `[UseType<Priority>]` against `[GenerateTypes] public enum Priority { … }`.
 
 **Fluent equivalent:**
 ```csharp
 b.ForType<Rule>()
-    .Property(r => r.Element).TsType<AutomationRulePayload>();
+    .Property(r => r.Element).UseType<AutomationRulePayload>();
 ```
+
+**When to use `[TsType("…")]` instead** — for TS-only opaque expressions that
+have no semantic in OpenAPI or Python: literal unions (`"'pending' | 'done'"`),
+branded types (`"string & { __brand: 'email' }"`), complex generics hand-written
+in TypeScript. Those stay on the string form.
 
 **Requires C# 11+** in the consuming project (generic attributes).
 
