@@ -89,6 +89,91 @@ public class InheritedPropertyDedupeTests
     }
 
     [Fact]
+    public void MultiLevelInheritance_AllProperties_Flatten()
+    {
+        // A → B → C → D chain, none of the intermediates annotated. D's emitted
+        // schema must include every property up the chain, inlined once each.
+        const string src = """
+            using ZibStack.NET.TypeGen;
+            namespace Multi;
+
+            public class Lvl0 { public int Id { get; set; } }
+            public class Lvl1 : Lvl0 { public string Name { get; set; } = ""; }
+            public class Lvl2 : Lvl1 { public string Email { get; set; } = ""; }
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public class D : Lvl2 { public int Extra { get; set; } }
+            """;
+        var compilation = MakeCompilation(src);
+        var cls = SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.D")!);
+        Assert.NotNull(cls);
+        var names = cls!.Properties.Select(p => p.SourceName).ToList();
+        Assert.Contains("Id", names);
+        Assert.Contains("Name", names);
+        Assert.Contains("Email", names);
+        Assert.Contains("Extra", names);
+        // No duplicates — each name appears exactly once.
+        Assert.Equal(names.Count, names.Distinct().Count());
+    }
+
+    [Fact]
+    public void MultiLevelInheritance_WithGenerateTypesOnAncestor_NoDuplication()
+    {
+        // A[GenerateTypes] → B → C → D[GenerateTypes]. A's props must appear on
+        // A's own emitted schema but NOT be inlined into D — D should point at A
+        // via the inheritance chain rather than duplicating A's members.
+        const string src = """
+            using ZibStack.NET.TypeGen;
+            namespace Multi;
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public class A { public int Id { get; set; } }
+
+            public class B : A { public string Middle { get; set; } = ""; }
+            public class C : B { public string Inner { get; set; } = ""; }
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public class D : C { public int Leaf { get; set; } }
+            """;
+        var compilation = MakeCompilation(src);
+        var d = SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.D")!);
+        Assert.NotNull(d);
+        var names = d!.Properties.Select(p => p.SourceName).ToList();
+        // D owns Leaf, inherits Middle + Inner from non-annotated bases (flattened).
+        // A's Id must NOT appear — A is a separately-emitted [GenerateTypes] class
+        // and D should express the relationship via extends / $ref.
+        Assert.Contains("Leaf", names);
+        Assert.Contains("Middle", names);
+        Assert.Contains("Inner", names);
+        Assert.DoesNotContain("Id", names);
+    }
+
+    private static CSharpCompilation MakeCompilation(string src)
+    {
+        const string stubs = """
+            namespace ZibStack.NET.TypeGen
+            {
+                [System.Flags] public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
+                [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct | System.AttributeTargets.Enum)]
+                public sealed class GenerateTypesAttribute : System.Attribute {
+                    public TypeTarget Targets { get; set; }
+                    public string? OutputDir { get; set; }
+                }
+            }
+            """;
+        var refs = new[]
+        {
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Attribute).Assembly.Location),
+        };
+        return CSharpCompilation.Create(
+            "MultiInheritTest",
+            new[] { CSharpSyntaxTree.ParseText(stubs), CSharpSyntaxTree.ParseText(src) },
+            refs,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+    }
+
+    [Fact]
     public void InheritedAbstractProperty_TypeScriptEmitsTypeOnce()
     {
         var symbol = ParseClass("InheritFix.D");

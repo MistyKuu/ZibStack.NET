@@ -392,12 +392,30 @@ internal static class SchemaParser
         }
 
         var baseSymbol = symbol.BaseType;
-        // Treat `object` / `ValueType` as "no base" — no inheritance to express.
-        var baseFullName = baseSymbol is not null
-                           && baseSymbol.SpecialType != SpecialType.System_Object
-                           && baseSymbol.SpecialType != SpecialType.System_ValueType
-            ? baseSymbol.ToDisplayString()
-            : null;
+        // Walk up the chain looking for the nearest ancestor that's independently
+        // emitted (has its own [GenerateTypes]). If one exists, we express the
+        // relationship against THAT ancestor via extends/allOf — regardless of
+        // whether there are un-annotated intermediates between us and it. The
+        // intermediates' properties still get inlined into this class below,
+        // stopping the walk at the emitted ancestor so its members don't
+        // duplicate across both schemas.
+        INamedTypeSymbol? emittedAncestor = null;
+        for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
+        {
+            if (HasGenerateTypes(b)) { emittedAncestor = b; break; }
+        }
+
+        // Pick the base to render against:
+        //   - nearest [GenerateTypes] ancestor if present (hoists over intermediates),
+        //   - else the immediate base (flattened via inlineInherited below),
+        //   - else null for `object` / `ValueType` terminations.
+        string? baseFullName =
+            emittedAncestor?.ToDisplayString()
+            ?? (baseSymbol is not null
+                && baseSymbol.SpecialType != SpecialType.System_Object
+                && baseSymbol.SpecialType != SpecialType.System_ValueType
+                ? baseSymbol.ToDisplayString()
+                : null);
 
         var cls = new SchemaClass
         {
@@ -414,35 +432,27 @@ internal static class SchemaParser
             BaseClassFullName = baseFullName,
         };
 
-        // If the base is itself [GenerateTypes]-annotated, emitters will express
-        // the relationship via allOf / extends — keep `cls.Properties` to declared-only.
-        // If not, inline inherited properties into this class so they aren't lost.
-        var inlineInherited = baseSymbol is not null
-            && baseFullName is not null
-            && !HasGenerateTypes(baseSymbol);
+        // Inline inherited properties from un-annotated ancestors only — those
+        // classes don't get their own schema, so their members have to land on us
+        // or they're lost. Stop the walk at the first [GenerateTypes] ancestor
+        // (exclusive): its properties ARE emitted separately, and the extends/allOf
+        // we wrote above covers them. This is always safe to run — when there are
+        // no un-annotated ancestors the loop terminates before doing anything.
+        var seen = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var m in symbol.GetMembers().OfType<IPropertySymbol>())
+            if (!m.IsStatic && !m.IsIndexer && m.DeclaredAccessibility == Accessibility.Public)
+                seen.Add(m.Name);
 
-        if (inlineInherited)
+        for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
         {
-            // Track names already accounted for so inheritance walks don't duplicate.
-            // Pre-seed with this class's declared properties so an `override` / `new`
-            // here shadows whatever the base declares (most-derived wins).
-            var seen = new HashSet<string>(System.StringComparer.Ordinal);
-            foreach (var m in symbol.GetMembers().OfType<IPropertySymbol>())
-                if (!m.IsStatic && !m.IsIndexer && m.DeclaredAccessibility == Accessibility.Public)
-                    seen.Add(m.Name);
-
-            // Walk bases from nearest to furthest. First occurrence (closest base) wins —
-            // an abstract `T Type {get;}` on a grandparent gets skipped if the parent
-            // already provides a concrete `override`. Without this dedupe, `class D : B,
-            // B : C<T>` where C declares abstract Type would emit `type:` twice in TS.
-            for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
-                foreach (var member in b.GetMembers().OfType<IPropertySymbol>())
-                {
-                    if (member.IsStatic || member.IsIndexer) continue;
-                    if (member.DeclaredAccessibility != Accessibility.Public) continue;
-                    if (!seen.Add(member.Name)) continue;
-                    cls.Properties.Add(ParseProperty(member));
-                }
+            if (HasGenerateTypes(b)) break;   // emitted separately; extends/$ref covers it.
+            foreach (var member in b.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (member.IsStatic || member.IsIndexer) continue;
+                if (member.DeclaredAccessibility != Accessibility.Public) continue;
+                if (!seen.Add(member.Name)) continue;
+                cls.Properties.Add(ParseProperty(member));
+            }
         }
 
         foreach (var member in symbol.GetMembers().OfType<IPropertySymbol>())
