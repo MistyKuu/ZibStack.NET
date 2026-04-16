@@ -51,11 +51,10 @@ public class InheritedPropertyDedupeTests
     public void InheritedAbstractProperty_NotDuplicatedWhenBaseOverrides()
     {
         // New semantics: inheritance structure is preserved, not flattened.
-        //   D : B : C<int>
-        //   C<int> is generic → can't stand alone → flattens into B
-        //   B is emittable → stays as its own schema, D extends B
-        // `Type` appears exactly ONCE across the whole emitted hierarchy
-        // (on B — B's concrete override shadows C's abstract declaration).
+        //   D : B : C<int>  (generic bases now emittable too)
+        // Each level gets its own schema — `Type` is declared ONCE, on C<T>
+        // (where the abstract declaration lives); B's override is suppressed
+        // because an emittable ancestor already carries it (extends covers it).
         var model = BuildModelWithBaseDiscovery();
 
         var d = model.Classes.Single(c => c.SourceName == "D");
@@ -63,10 +62,13 @@ public class InheritedPropertyDedupeTests
         Assert.EndsWith(".B", d.BaseClassFullName);
 
         var b = model.Classes.Single(c => c.SourceName == "B");
-        // B's declared override wins over C<int>'s abstract declaration —
-        // Type is on B exactly once.
-        Assert.Equal(1, b.Properties.Count(p => p.SourceName == "Type"));
+        // B's override of Type is covered by the extends C<int> chain — no
+        // redeclaration on B. Only Name remains on B.
+        Assert.Equal(0, b.Properties.Count(p => p.SourceName == "Type"));
         Assert.Contains(b.Properties, p => p.SourceName == "Name");
+
+        var c = model.Classes.Single(cc => cc.SourceName == "C");
+        Assert.Contains(c.Properties, p => p.SourceName == "Type");
     }
 
     private static SchemaModel BuildModelWithBaseDiscovery()
@@ -142,6 +144,49 @@ public class InheritedPropertyDedupeTests
         Assert.EndsWith(".Lvl1", model.Classes.Single(c => c.SourceName == "Lvl2").BaseClassFullName);
         Assert.EndsWith(".Lvl0", model.Classes.Single(c => c.SourceName == "Lvl1").BaseClassFullName);
         Assert.Null(model.Classes.Single(c => c.SourceName == "Lvl0").BaseClassFullName);
+    }
+
+    [Fact]
+    public void GenericBase_EmittedAsStandaloneGenericInterface_NotFlattened()
+    {
+        // Base<T> records the open generic as its own schema; Derived : Base<SomeType>
+        // references it via `extends Base<SomeType>`. Should NOT flatten — the
+        // generic base's properties belong to Base, not duplicated into every
+        // concrete derived.
+        const string src = """
+            using ZibStack.NET.TypeGen;
+            namespace GenBase;
+
+            public record Base<T>(T Payload);
+            public record SomeType(string Val);
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public record Derived(int Extra, SomeType Body) : Base<SomeType>(Body);
+            """;
+        var compilation = MakeCompilation(src);
+        var model = new SchemaModel();
+        model.Classes.Add(SchemaParser.ParseClass(compilation.GetTypeByMetadataName("GenBase.Derived")!)!);
+        SchemaParser.DiscoverBaseClasses(model, compilation);
+        SchemaParser.DiscoverTransitive(model, compilation);
+
+        // Base<T> got pulled in as its own schema.
+        Assert.Contains(model.Classes, c => c.SourceName == "Base");
+        var baseCls = model.Classes.Single(c => c.SourceName == "Base");
+        // Payload (type T) lives ON Base, not inlined into Derived.
+        Assert.Contains(baseCls.Properties, p => p.SourceName == "Payload");
+
+        var derived = model.Classes.Single(c => c.SourceName == "Derived");
+        var derivedProps = derived.Properties.Select(p => p.SourceName).ToList();
+        Assert.Contains("Extra", derivedProps);
+        Assert.DoesNotContain("Payload", derivedProps);   // belongs to Base, not Derived
+
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings()).ToList();
+        var baseTs = files.First(f => f.FileName == "Base.ts").Content;
+        Assert.Contains("export interface Base<T>", baseTs);
+        Assert.Contains("payload: T;", baseTs);
+
+        var derivedTs = files.First(f => f.FileName == "Derived.ts").Content;
+        Assert.Contains("extends Base<SomeType>", derivedTs);
     }
 
     [Fact]

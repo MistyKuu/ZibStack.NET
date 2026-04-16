@@ -67,12 +67,12 @@ internal static class SchemaParser
         var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
         foreach (var c in model.Classes)
         {
-            var s = compilation.GetTypeByMetadataName(StripGlobal(c.CSharpFullName));
+            var s = compilation.GetTypeByMetadataName(ToMetadataName(c.CSharpFullName));
             if (s is not null) seen.Add(s);
         }
         foreach (var e in model.Enums)
         {
-            var s = compilation.GetTypeByMetadataName(StripGlobal(e.CSharpFullName));
+            var s = compilation.GetTypeByMetadataName(ToMetadataName(e.CSharpFullName));
             if (s is not null) seen.Add(s);
         }
 
@@ -82,7 +82,7 @@ internal static class SchemaParser
         while (queue.Count > 0)
         {
             var cls = queue.Dequeue();
-            var clsSymbol = compilation.GetTypeByMetadataName(StripGlobal(cls.CSharpFullName));
+            var clsSymbol = compilation.GetTypeByMetadataName(ToMetadataName(cls.CSharpFullName));
             if (clsSymbol is null) continue;
 
             // Walk the full inheritance chain, not just declared members. `inlineInherited`
@@ -152,7 +152,7 @@ internal static class SchemaParser
             {
                 if (prop.TsTypeTargetCSharpFqn is null) continue;
                 if (inModel.Contains(prop.TsTypeTargetCSharpFqn)) continue;
-                var sym = compilation.GetTypeByMetadataName(StripGlobal(prop.TsTypeTargetCSharpFqn));
+                var sym = compilation.GetTypeByMetadataName(ToMetadataName(prop.TsTypeTargetCSharpFqn));
                 if (sym is null) continue;
                 // `[TsType<T>]` is an explicit request to emit T — relax the
                 // same-assembly check that DiscoverTransitive uses. Still skip
@@ -266,7 +266,9 @@ internal static class SchemaParser
     {
         if (t.SpecialType != SpecialType.None) return false;
         if (t.TypeKind != TypeKind.Class) return false;
-        if (t.IsGenericType) return false;
+        // Generic bases ARE emittable — we seed the open definition
+        // (ConstructedFrom), the derived's `extends Base<Arg>` carries the
+        // concrete type args via SchemaClass.BaseClassTypeArguments.
         var ns = t.ContainingNamespace?.ToDisplayString() ?? "";
         if (ns == "System" || ns.StartsWith("System.", System.StringComparison.Ordinal)) return false;
         if (ns.StartsWith("Microsoft.", System.StringComparison.Ordinal)) return false;
@@ -289,7 +291,7 @@ internal static class SchemaParser
         var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
         foreach (var c in model.Classes)
         {
-            var s = compilation.GetTypeByMetadataName(StripGlobal(c.CSharpFullName));
+            var s = compilation.GetTypeByMetadataName(ToMetadataName(c.CSharpFullName));
             if (s is not null) seen.Add(s);
         }
 
@@ -297,18 +299,57 @@ internal static class SchemaParser
         while (queue.Count > 0)
         {
             var cls = queue.Dequeue();
-            if (cls.BaseClassFullName is null) continue;
+            // Walk the live symbol's BaseType chain rather than re-resolving via
+            // FQN — handles generics cleanly (constructed base → we seed the open
+            // definition exactly once, regardless of how many concrete derived
+            // instances land in the model).
+            var clsSym = compilation.GetTypeByMetadataName(ToMetadataName(cls.CSharpFullName));
+            if (clsSym is null) continue;
+            var baseSym = clsSym.BaseType;
+            if (baseSym is null
+                || baseSym.SpecialType == SpecialType.System_Object
+                || baseSym.SpecialType == SpecialType.System_ValueType) continue;
 
-            var baseSym = compilation.GetTypeByMetadataName(StripGlobal(cls.BaseClassFullName));
-            if (baseSym is null) continue;
-            if (!seen.Add(baseSym)) continue;      // already in model
-            if (!IsEmittableAsBaseClass(baseSym)) continue;
+            // For `Derived : Base<SomeType>`, seed the OPEN `Base<T>` — one shared
+            // schema regardless of instantiation count. The concrete args stay on
+            // the derived's SchemaClass.BaseClassTypeArguments (set in ParseClassCore).
+            var toSeed = baseSym.IsGenericType ? baseSym.ConstructedFrom : baseSym;
+            if (!seen.Add(toSeed)) continue;
+            if (!IsEmittableAsBaseClass(toSeed)) continue;
 
-            var baseCls = ParseAuxiliaryClass(baseSym, cls.Targets, cls.OutputDir);
+            var baseCls = ParseAuxiliaryClass(toSeed, cls.Targets, cls.OutputDir);
             if (baseCls is null) continue;
             model.Classes.Add(baseCls);
             queue.Enqueue(baseCls);
         }
+    }
+
+    /// <summary>
+    /// Converts a display-form FQN like <c>"Ns.Foo&lt;T&gt;"</c> or
+    /// <c>"Ns.Pair&lt;K, V&gt;"</c> to the metadata form
+    /// (<c>"Ns.Foo`1"</c> / <c>"Ns.Pair`2"</c>) that
+    /// <see cref="Compilation.GetTypeByMetadataName(string)"/> expects.
+    /// Non-generic names pass through unchanged, with any <c>global::</c>
+    /// prefix stripped.
+    /// </summary>
+    internal static string ToMetadataName(string displayFqn)
+    {
+        var name = displayFqn.StartsWith("global::", System.StringComparison.Ordinal)
+            ? displayFqn.Substring("global::".Length)
+            : displayFqn;
+        var lt = name.IndexOf('<');
+        if (lt < 0) return name;
+        var gt = name.LastIndexOf('>');
+        if (gt < 0) return name;
+        int depth = 0, arity = 1;
+        for (int i = lt + 1; i < gt; i++)
+        {
+            var ch = name[i];
+            if (ch == '<') depth++;
+            else if (ch == '>') depth--;
+            else if (ch == ',' && depth == 0) arity++;
+        }
+        return name.Substring(0, lt) + "`" + arity;
     }
 
     /// <summary>
@@ -473,11 +514,26 @@ internal static class SchemaParser
             flatten.Add(b);
         }
 
-        string? baseFullName = nearestEmittableBase?.ToDisplayString();
+        // When the base is a constructed generic (`Base<SomeType>`), point
+        // BaseClassFullName at the OPEN definition (`Base<T>`) so DiscoverBaseClasses
+        // seeds / looks up a single canonical schema per generic definition.
+        // The concrete type args go into BaseClassTypeArguments so the emitter can
+        // render `extends Base<SomeType>` on the derived.
+        string? baseFullName = null;
+        var baseTypeArgs = new List<string>();
+        if (nearestEmittableBase is not null)
+        {
+            baseFullName = nearestEmittableBase.IsGenericType
+                ? nearestEmittableBase.ConstructedFrom.ToDisplayString()
+                : nearestEmittableBase.ToDisplayString();
+            if (nearestEmittableBase.IsGenericType)
+                foreach (var arg in nearestEmittableBase.TypeArguments)
+                    baseTypeArgs.Add(arg.ToDisplayString());
+        }
 
         var cls = new SchemaClass
         {
-            CSharpFullName = symbol.ToDisplayString(),
+            CSharpFullName = symbol.IsGenericType ? symbol.ConstructedFrom.ToDisplayString() : symbol.ToDisplayString(),
             SourceName = symbol.Name,
             EmittedName = symbol.Name,   // global StripSuffixes applied later in pipeline
             Targets = targets,
@@ -489,6 +545,10 @@ internal static class SchemaParser
             Crud = ReadCrudApi(symbol),
             BaseClassFullName = baseFullName,
         };
+        if (symbol.IsGenericType)
+            foreach (var tp in symbol.TypeParameters)
+                cls.TypeParameters.Add(tp.Name);
+        foreach (var a in baseTypeArgs) cls.BaseClassTypeArguments.Add(a);
 
         // Dedupe by name across (this class + flattened ancestors) so an abstract
         // property on a generic base that a middle class overrides doesn't land

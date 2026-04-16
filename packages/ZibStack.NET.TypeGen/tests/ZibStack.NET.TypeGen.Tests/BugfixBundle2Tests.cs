@@ -206,6 +206,67 @@ public class BugfixBundle2Tests
     }
 
     [Fact]
+    public void Fluent_PropertyTsTypeGeneric_OnTransitivelyDiscoveredClass_SeedsTarget()
+    {
+        // User repro: XD is the only fluent root. A is transitively discovered
+        // (via XD.As : List<A>). Fluent sets `.Property(a => a.Element).TsType<Side>()`
+        // on A — Side must land in the model so Element renders as Side (not unknown).
+        var userCode = """
+            using ZibStack.NET.TypeGen;
+            using System.Collections.Generic;
+            using System.Text.Json;
+            using System.Text.Json.Nodes;
+            namespace Ns;
+
+            public record XD
+            {
+                public JsonObject? Element { get; init; }
+                public List<A> As { get; set; } = new();
+                public List<B> Bs { get; set; } = new();
+            }
+
+            public abstract record C
+            {
+                public string Hehe1 { get; set; } = "";
+            }
+
+            public record B : C;
+
+            public record A : B
+            {
+                public string Test { get; set; } = "";
+                public JsonElement Element { get; set; }
+            }
+
+            public record Side
+            {
+                public string A { get; set; } = "";
+            }
+
+            public sealed class Cfg : ITypeGenConfigurator
+            {
+                public void Configure(ITypeGenBuilder b)
+                {
+                    b.ForType<XD>().WithGeneratedTypes(TypeTarget.TypeScript).OutputDir(".");
+                    b.ForType<A>().Property(x => x.Element).TsType<Side>();
+                }
+            }
+            """;
+        var (model, _) = RunFullPipeline(userCode);
+
+        // Side must have been seeded by SeedGenericTsTypeTargets after fluent
+        // merge made A.Element.TsTypeTargetCSharpFqn = Side's FQN.
+        Assert.Contains(model.Classes, c => c.SourceName == "Side");
+
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings()).ToList();
+        Assert.Contains(files, f => f.FileName == "Side.ts");
+        var aTs = files.First(f => f.FileName == "A.ts").Content;
+        Assert.Contains("import { Side } from './Side';", aTs);
+        Assert.Contains("Side", aTs);
+        Assert.Matches(@"[Ee]lement:\s*Side", aTs);
+    }
+
+    [Fact]
     public void AllFluent_WithGeneratedTypes_PropertyTsTypeGeneric_ChainsNested()
     {
         // 100% fluent: no [GenerateTypes] anywhere, no [TsType] attribute. Everything
@@ -371,12 +432,41 @@ public class BugfixBundle2Tests
         do
         {
             lastCount = model.Classes.Count + model.Enums.Count;
+            var clsBefore = model.Classes.Count;
             SchemaParser.SeedGenericTsTypeTargets(model, compilation);
             SchemaParser.DiscoverBaseClasses(model, compilation);
             SchemaParser.DiscoverTransitive(model, compilation);
+            // Mirror the generator: newly added classes go through a fluent
+            // merge pass so config-side per-property overrides (TsType<T>,
+            // TsName, Ignore, …) reach their SchemaProperty before the next
+            // SeedGeneric iteration reads TsTypeTargetCSharpFqn.
+            for (int i = clsBefore; i < model.Classes.Count; i++)
+                MergeFluentInto(model.Classes[i], config);
         } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
         SchemaParser.ResolveGenericTsTypeReferences(model);
         return (model, compilation);
+    }
+
+    private static void MergeFluentInto(SchemaClass cls, ConfiguratorParser.Parsed? config)
+    {
+        if (config is null) return;
+        if (!config.PerType.TryGetValue(cls.CSharpFullName, out var pto)) return;
+        cls.TsNameOverride ??= pto.TsName;
+        cls.OpenApiNameOverride ??= pto.OpenApiName;
+        if (pto.Ignore) { cls.TsIgnore = true; cls.OpenApiIgnore = true; }
+        cls.TsIgnore |= pto.TsIgnore;
+        cls.OpenApiIgnore |= pto.OpenApiIgnore;
+        foreach (var prop in cls.Properties)
+            if (pto.Properties.TryGetValue(prop.SourceName, out var po))
+            {
+                prop.TsNameOverride ??= po.TsName;
+                prop.TsTypeOverride ??= po.TsType;
+                prop.TsImportFrom ??= po.TsImportFrom;
+                prop.TsTypeTargetCSharpFqn ??= po.TsTypeTargetCSharpFqn;
+                if (po.Ignore) { prop.TsIgnore = true; prop.OpenApiIgnore = true; }
+                prop.TsIgnore |= po.TsIgnore;
+                prop.OpenApiIgnore |= po.OpenApiIgnore;
+            }
     }
 
     [Fact]

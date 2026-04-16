@@ -140,6 +140,9 @@ internal static class TypeScriptEmitter
         // Pick up the base class so FilePerClass mode imports it for `extends`.
         if (cls.BaseClassFullName is { } bfn && nameLookup.TryGetValue(bfn, out var bn))
             acc.Add(bn);
+        // Generic base args (e.g. `extends Base<SomeType>` → SomeType import).
+        foreach (var arg in cls.BaseClassTypeArguments)
+            CollectRefs(arg, nameLookup, acc);
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
@@ -209,20 +212,36 @@ internal static class TypeScriptEmitter
         // properties were pre-inlined by the parser and there's nothing to extend.
         var baseTs = cls.BaseClassFullName is { } bfn && nameLookup.TryGetValue(bfn, out var bn) ? bn : null;
 
+        // Generic class header: `interface Foo<T, U>`. Type-parameter symbols
+        // come straight from the open generic definition — one letter per slot.
+        var typeParamsSuffix = cls.TypeParameters.Count > 0
+            ? "<" + string.Join(", ", cls.TypeParameters) + ">"
+            : "";
+
+        // Constructed base: `extends Base<SomeType>`. Args get mapped like any
+        // other C# type so enum / user DTO / collection args render correctly.
+        var baseSuffix = "";
+        if (baseTs is not null && cls.BaseClassTypeArguments.Count > 0)
+        {
+            var args = cls.BaseClassTypeArguments
+                .Select(a => MapCSharpToTs(a, isNullable: false, nameLookup, cls.TypeParameters));
+            baseSuffix = "<" + string.Join(", ", args) + ">";
+        }
+
         if (ts.UseInterfaces)
             sb.AppendLine(baseTs is null
-                ? $"export interface {cls.EmittedName} {{"
-                : $"export interface {cls.EmittedName} extends {baseTs} {{");
+                ? $"export interface {cls.EmittedName}{typeParamsSuffix} {{"
+                : $"export interface {cls.EmittedName}{typeParamsSuffix} extends {baseTs}{baseSuffix} {{");
         else
             sb.AppendLine(baseTs is null
-                ? $"export type {cls.EmittedName} = {{"
-                : $"export type {cls.EmittedName} = {baseTs} & {{");
+                ? $"export type {cls.EmittedName}{typeParamsSuffix} = {{"
+                : $"export type {cls.EmittedName}{typeParamsSuffix} = {baseTs}{baseSuffix} & {{");
 
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
             var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, ts.PropertyNameStyle);
-            var typeExpr = prop.TsTypeOverride ?? MapCSharpToTs(prop.CSharpTypeFullName, prop.IsNullable, nameLookup);
+            var typeExpr = prop.TsTypeOverride ?? MapCSharpToTs(prop.CSharpTypeFullName, prop.IsNullable, nameLookup, cls.TypeParameters);
             var optionalMarker = prop.IsNullable ? "?" : "";
             sb.AppendLine($"    {name}{optionalMarker}: {typeExpr};");
         }
@@ -264,29 +283,35 @@ internal static class TypeScriptEmitter
     /// <c>any</c> for unknown / unsupported types — those are surfaced separately
     /// by the analyzer (TG0002) so the developer sees a warning at the call site.
     /// </summary>
-    private static string MapCSharpToTs(string cSharpType, bool isNullable, IReadOnlyDictionary<string, string> nameLookup)
+    private static string MapCSharpToTs(string cSharpType, bool isNullable, IReadOnlyDictionary<string, string> nameLookup,
+        IReadOnlyList<string>? typeParameters = null)
     {
         // Strip nullable annotation marker if present.
         var t = cSharpType.TrimEnd('?');
 
+        // When emitting inside a generic class, the property type may BE one of
+        // the declaring class's type parameters (e.g. `T Payload` on `Base<T>`).
+        // Render the parameter name verbatim — no lookup, no style.
+        if (typeParameters is not null && typeParameters.Contains(t)) return t;
+
         // Unwrap Dto's PatchField<T> tri-state wrapper — TS consumers see plain T.
         var patchInner = ExtractGeneric(t, "PatchField");
-        if (patchInner != null) return MapCSharpToTs(patchInner, isNullable, nameLookup);
+        if (patchInner != null) return MapCSharpToTs(patchInner, isNullable, nameLookup, typeParameters);
 
         // Direct user-DTO reference?
         if (nameLookup.TryGetValue(t, out var mapped)) return mapped;
 
         // Collections: List<T>, IList<T>, IEnumerable<T>, T[]
         if (t.EndsWith("[]"))
-            return MapCSharpToTs(t.Substring(0, t.Length - 2), false, nameLookup) + "[]";
+            return MapCSharpToTs(t.Substring(0, t.Length - 2), false, nameLookup, typeParameters) + "[]";
         var listMatch = ExtractGeneric(t, "List", "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection");
         if (listMatch != null)
-            return MapCSharpToTs(listMatch, false, nameLookup) + "[]";
+            return MapCSharpToTs(listMatch, false, nameLookup, typeParameters) + "[]";
 
         // Dictionary<K, V> → Record<K, V> (keys must be string|number)
         var dictMatch = ExtractTwoGenericArgs(t, "Dictionary", "IDictionary", "IReadOnlyDictionary");
         if (dictMatch != null)
-            return $"Record<{MapCSharpToTs(dictMatch.Value.K, false, nameLookup)}, {MapCSharpToTs(dictMatch.Value.V, false, nameLookup)}>";
+            return $"Record<{MapCSharpToTs(dictMatch.Value.K, false, nameLookup, typeParameters)}, {MapCSharpToTs(dictMatch.Value.V, false, nameLookup, typeParameters)}>";
 
         return t switch
         {

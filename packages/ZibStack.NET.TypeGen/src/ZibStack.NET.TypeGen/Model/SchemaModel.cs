@@ -178,6 +178,25 @@ internal sealed class SchemaClass
     /// the base's properties were pre-inlined by the parser so the output stays flat.
     /// </summary>
     public string? BaseClassFullName { get; set; }
+
+    /// <summary>
+    /// Open generic type-parameter names when this class is itself generic
+    /// (e.g. <c>["T"]</c> for <c>Base&lt;T&gt;</c>). Empty for non-generic
+    /// classes. Driven by the emitter: <c>interface Base&lt;T&gt; { … }</c> in
+    /// TS, <c>$ref</c> without args in OpenAPI (OpenAPI 3.0 has no first-class
+    /// generics — the generic is emitted as a distinct schema per
+    /// instantiation by DiscoverBaseClasses with the arg filled in).
+    /// </summary>
+    public List<string> TypeParameters { get; } = new();
+
+    /// <summary>
+    /// Concrete type arguments applied to <see cref="BaseClassFullName"/> when
+    /// the base is a constructed generic. E.g. for
+    /// <c>Derived : Base&lt;SomeType&gt;</c> this holds <c>["SomeType"]</c>
+    /// (fully qualified C# display strings; emitter maps them like any other
+    /// property type). Empty when the base is non-generic.
+    /// </summary>
+    public List<string> BaseClassTypeArguments { get; } = new();
 }
 
 internal sealed class SchemaProperty
