@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using ZibStack.NET.Dto;
 using ZibStack.NET.TypeGen;
 
@@ -39,8 +40,13 @@ public class OrderItem
     public decimal UnitPrice { get; set; }
 }
 
+// [JsonStringEnumConverter] flips the wire format from integers to member names — the
+// realistic shape for most JSON APIs. TypeGen's default TsEnumStyle.Union then emits a
+// string-literal union (`export type OrderStatus = "Pending" | ...`) which tree-shakes
+// better than a TS enum and matches the wire contract 1:1.
 [GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi | TypeTarget.Python | TypeTarget.Zod,
                OutputDir = "generated")]
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum OrderStatus
 {
     Pending = 0,

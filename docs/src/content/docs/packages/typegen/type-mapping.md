@@ -20,7 +20,7 @@ The emitters translate C# types to target-language equivalents. Defaults:
 | `Dictionary<K, V>` | `Record<K, V>` | `type: object, additionalProperties: V` | `dict[K, V]` |
 | User DTO | `TypeName` | `$ref: '#/components/schemas/TypeName'` | `TypeName` (imported) |
 | `enum` | `export enum` (numeric values) | `type: string, enum: [...]` | `IntEnum` |
-| `enum` with `[JsonConverter(typeof(JsonStringEnumConverter))]` | `export enum` (string values) | `type: string, enum: [...]` | `(str, Enum)` |
+| `enum` with `[JsonConverter(typeof(JsonStringEnumConverter))]` | `export type X = "A" \| "B";` (default — `TsEnumStyle.Union`) | `type: string, enum: [...]` | `(str, Enum)` |
 
 Override any single property with `[TsType("...")]` or `[OpenApiProperty(Format = "...")]`.
 
