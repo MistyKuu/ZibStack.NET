@@ -145,6 +145,44 @@ public class InheritedPropertyDedupeTests
     }
 
     [Fact]
+    public void AbstractBaseOverride_NotDuplicatedAcrossLevels()
+    {
+        // AbsBase (abstract, non-generic) → Concrete (override Shared) → Leaf[GenerateTypes].
+        // All three are emittable as standalone schemas. `Shared` is declared
+        // abstract on AbsBase, overridden on Concrete. Without special handling
+        // Concrete.ts would emit Shared again (redundant with the inherited
+        // declaration from AbsBase). Skip overrides whose counterpart already
+        // exists on an emittable ancestor — extends covers them.
+        const string src = """
+            using ZibStack.NET.TypeGen;
+            namespace Multi;
+
+            public abstract class AbsBase { public abstract int Shared { get; } }
+            public class Concrete : AbsBase
+            {
+                public override int Shared => 0;
+                public int Extra { get; set; }
+            }
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public class Leaf : Concrete { public int More { get; set; } }
+            """;
+        var compilation = MakeCompilation(src);
+        var model = new SchemaModel();
+        model.Classes.Add(SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.Leaf")!)!);
+        SchemaParser.DiscoverBaseClasses(model, compilation);
+
+        var abs = model.Classes.Single(c => c.SourceName == "AbsBase");
+        var concrete = model.Classes.Single(c => c.SourceName == "Concrete");
+        var leaf = model.Classes.Single(c => c.SourceName == "Leaf");
+
+        Assert.Equal(new[] { "Shared" }, abs.Properties.Select(p => p.SourceName));
+        // Concrete should NOT repeat Shared — it's inherited from AbsBase via extends.
+        Assert.Equal(new[] { "Extra" }, concrete.Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "More" }, leaf.Properties.Select(p => p.SourceName));
+    }
+
+    [Fact]
     public void MultiLevelInheritance_WithGenerateTypesOnAncestor_NoDuplication()
     {
         // A[GenerateTypes] → B → C → D[GenerateTypes]. A and D are initial roots.

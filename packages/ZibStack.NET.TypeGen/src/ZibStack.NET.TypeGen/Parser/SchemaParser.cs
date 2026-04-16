@@ -507,6 +507,17 @@ internal static class SchemaParser
                 cls.Properties.Add(ParseProperty(member));
             }
 
+        // Every property name declared on an ancestor that will END UP emitted as
+        // its own schema (nearest emittable base + everything above it up to object).
+        // When this class `override`s one of those, the property is already covered
+        // by the `extends` chain — re-declaring it here is pure noise. Flattened
+        // ancestors aren't in this set because their members fold INTO us above.
+        var emittedAncestorNames = new HashSet<string>(System.StringComparer.Ordinal);
+        for (var anc = nearestEmittableBase; anc is not null && anc.SpecialType != SpecialType.System_Object; anc = anc.BaseType)
+            foreach (var m in anc.GetMembers().OfType<IPropertySymbol>())
+                if (!m.IsStatic && !m.IsIndexer && m.DeclaredAccessibility == Accessibility.Public)
+                    emittedAncestorNames.Add(m.Name);
+
         foreach (var member in symbol.GetMembers().OfType<IPropertySymbol>())
         {
             if (member.IsStatic) continue;
@@ -524,6 +535,12 @@ internal static class SchemaParser
                 cls.AdditionalPropertiesValueCSharpType = ExtractDictionaryValueType(member.Type);
                 continue;
             }
+
+            // Override whose counterpart already sits on an emittable ancestor —
+            // extends covers it, emitting again would just duplicate the line.
+            // `new`-declared members (IsOverride=false) stay, since they're a
+            // deliberate redeclaration rather than an inheritance artifact.
+            if (member.IsOverride && emittedAncestorNames.Contains(member.Name)) continue;
 
             cls.Properties.Add(ParseProperty(member));
         }
