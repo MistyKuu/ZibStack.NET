@@ -275,7 +275,7 @@ public class BugfixBundle2Tests
             using System;
             namespace ZibStack.NET.TypeGen {
                 [System.Flags] public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
-                public enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
+                public enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
                 public enum TypeScriptFileLayout { FilePerClass, SingleFile }
                 public sealed class TypeScriptSettings {
                     public string? OutputDir { get; set; } public string SingleFileName { get; set; } = "m.ts";
@@ -367,9 +367,14 @@ public class BugfixBundle2Tests
             }
         }
 
-        SchemaParser.DiscoverBaseClasses(model, compilation);
-        SchemaParser.SeedGenericTsTypeTargets(model, compilation);
-        SchemaParser.DiscoverTransitive(model, compilation);
+        int lastCount, guard = 0;
+        do
+        {
+            lastCount = model.Classes.Count + model.Enums.Count;
+            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+            SchemaParser.DiscoverBaseClasses(model, compilation);
+            SchemaParser.DiscoverTransitive(model, compilation);
+        } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
         SchemaParser.ResolveGenericTsTypeReferences(model);
         return (model, compilation);
     }
@@ -471,9 +476,14 @@ public class BugfixBundle2Tests
                 }
             }
         }
-        SchemaParser.DiscoverBaseClasses(model, compilation);
-        SchemaParser.SeedGenericTsTypeTargets(model, compilation);
-        SchemaParser.DiscoverTransitive(model, compilation);
+        int lastCount, guard = 0;
+        do
+        {
+            lastCount = model.Classes.Count + model.Enums.Count;
+            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+            SchemaParser.DiscoverBaseClasses(model, compilation);
+            SchemaParser.DiscoverTransitive(model, compilation);
+        } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
         SchemaParser.ResolveGenericTsTypeReferences(model);
         return model;
     }

@@ -340,7 +340,7 @@ public class ConfiguratorParserTests
             namespace ZibStack.NET.TypeGen {
                 [System.Flags]
                 public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
-                public enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
+                public enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
                 public enum TypeScriptFileLayout { FilePerClass, SingleFile }
                 public sealed class TypeScriptSettings {
                     public string? OutputDir { get; set; }

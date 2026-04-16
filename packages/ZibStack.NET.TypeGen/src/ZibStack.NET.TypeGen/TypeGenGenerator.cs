@@ -235,32 +235,37 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 }
             }
 
-            // Preserve C# inheritance in the emitted schema: for every class in
-            // the model, pull in any un-annotated ancestor that can stand alone
-            // as its own schema. Runs BEFORE DiscoverTransitive so discovered
-            // bases get their own property graphs walked too.
-            SchemaParser.DiscoverBaseClasses(model, compilation);
-
-            // Seed any `[TsType<T>]` targets that aren't already in the model —
-            // a generic override is an explicit request to emit T, even if nothing
-            // else references T by its C# type. Runs before DiscoverTransitive so
-            // the freshly-seeded target gets its own property graph walked too.
-            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
-
-            // Transitive discovery: walk property types of everything already in the
-            // model, pull in any user-defined type (class / record / struct / enum) not
-            // already present. Inherits Targets + OutputDir from the root that reached
-            // it, so Order.ts has `thing: Foo;` with a real `import { Foo } from './Foo';`
-            // instead of `thing: unknown;`. Fluent / attribute overrides still apply —
-            // after discovery we re-run the fluent pass over the freshly added entries
-            // so `b.ForType<Foo>().TsName("Bar")` etc. take effect on discovered types.
-            var classCountBefore = model.Classes.Count;
-            var enumCountBefore = model.Enums.Count;
-            SchemaParser.DiscoverTransitive(model, compilation);
-            for (int i = classCountBefore; i < model.Classes.Count; i++)
-                ApplyFluentToClass(model.Classes[i], config);
-            for (int i = enumCountBefore; i < model.Enums.Count; i++)
-                ApplyFluentToEnum(model.Enums[i], config);
+            // Iterate seed → base discovery → nested discovery until the model
+            // stops growing. Each pass can unlock new work for the others:
+            //   * SeedGeneric pulls in a [TsType<A>] target; that target's base
+            //     chain needs DiscoverBaseClasses,
+            //   * DiscoverBaseClasses pulls in a base; that base's own properties
+            //     may hit [TsType<T>] overrides or nested user types — so
+            //     SeedGeneric + DiscoverTransitive get another look.
+            // Fluent overrides get applied inside the loop too — any freshly
+            // added class goes through ApplyFluentToClass so per-property
+            // TsTypeTargetCSharpFqn from the configurator is visible to the next
+            // SeedGeneric iteration. Terminates when no pass adds anything.
+            // Each pass is strict-additive, so a hard iteration cap is a safety
+            // net — should exit in 2-3 turns for realistic graphs. If we hit the
+            // cap something's pathological (cyclic symbol equality maybe?) —
+            // better to emit a possibly-incomplete model than spin forever.
+            int lastCount;
+            int guard = 0;
+            const int maxIter = 16;
+            do
+            {
+                lastCount = model.Classes.Count + model.Enums.Count;
+                var clsBefore = model.Classes.Count;
+                var enumBefore = model.Enums.Count;
+                SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+                SchemaParser.DiscoverBaseClasses(model, compilation);
+                SchemaParser.DiscoverTransitive(model, compilation);
+                for (int i = clsBefore; i < model.Classes.Count; i++)
+                    ApplyFluentToClass(model.Classes[i], config);
+                for (int i = enumBefore; i < model.Enums.Count; i++)
+                    ApplyFluentToEnum(model.Enums[i], config);
+            } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < maxIter);
 
             // Late-bind `[TsType<T>]` references: replace each property's fallback
             // TsTypeOverride with T's emitted TS name, and when the user didn't

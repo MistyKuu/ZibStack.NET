@@ -186,6 +186,44 @@ public class TsTypeGenericTests
     }
 
     [Fact]
+    public void GenericTsType_SeededTarget_WithBaseClass_BaseAlsoAutoSeeded()
+    {
+        // [TsType<A>] where A inherits from Base. Both A and Base must show up
+        // in the emitted set — A via generic seed, Base via the inheritance
+        // auto-seed pass. Needs the pipeline to run DiscoverBaseClasses AFTER
+        // (or iterated with) SeedGenericTsTypeTargets; otherwise A's base chain
+        // is missed.
+        var model = ParseAll("""
+            using System.Text.Json.Nodes;
+            using ZibStack.NET.TypeGen;
+            namespace Gen;
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public class Rule
+            {
+                [TsType<A>]
+                public JsonObject? Element { get; set; }
+            }
+
+            public class Base { public int Id { get; set; } }
+            public class A : Base { public string Extra { get; set; } = ""; }
+            """);
+
+        Assert.Contains(model.Classes, c => c.SourceName == "A");
+        Assert.Contains(model.Classes, c => c.SourceName == "Base");
+
+        var a = model.Classes.Single(c => c.SourceName == "A");
+        Assert.EndsWith(".Base", a.BaseClassFullName);
+
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings()).ToList();
+        Assert.Contains(files, f => f.FileName == "A.ts");
+        Assert.Contains(files, f => f.FileName == "Base.ts");
+        var aTs = files.First(f => f.FileName == "A.ts").Content;
+        Assert.Contains("import { Base } from './Base';", aTs);
+        Assert.Contains("export interface A extends Base", aTs);
+    }
+
+    [Fact]
     public void GenericTsType_SeededTarget_GoesThroughNestedDiscoveryToo()
     {
         // The T in [TsType<T>] enters the model via SeedGenericTsTypeTargets
@@ -374,9 +412,14 @@ public class TsTypeGenericTests
                 }
             }
         }
-        SchemaParser.DiscoverBaseClasses(model, compilation);
-        SchemaParser.SeedGenericTsTypeTargets(model, compilation);
-        SchemaParser.DiscoverTransitive(model, compilation);
+        int lastCount, guard = 0;
+        do
+        {
+            lastCount = model.Classes.Count + model.Enums.Count;
+            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+            SchemaParser.DiscoverBaseClasses(model, compilation);
+            SchemaParser.DiscoverTransitive(model, compilation);
+        } while (model.Classes.Count + model.Enums.Count > lastCount && ++guard < 16);
         SchemaParser.ResolveGenericTsTypeReferences(model);
         return model;
     }
@@ -387,7 +430,7 @@ public class TsTypeGenericTests
             using System;
             namespace ZibStack.NET.TypeGen {
                 [System.Flags] public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
-                public enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
+                public enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
                 public enum TypeScriptFileLayout { FilePerClass, SingleFile }
                 public sealed class TypeScriptSettings {
                     public string? OutputDir { get; set; } public string SingleFileName { get; set; } = "m.ts";

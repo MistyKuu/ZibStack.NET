@@ -62,7 +62,7 @@ internal sealed class CrudApiInfo
     public CrudOperations Operations { get; set; } = CrudOperations.All;
 }
 
-internal enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
+internal enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
 internal enum TypeScriptFileLayout { FilePerClass, SingleFile }
 internal enum PythonFileLayout { FilePerClass, SingleFile }
 internal enum PythonStyle { Pydantic, Dataclass }

@@ -17,9 +17,6 @@ public enum NameStyle
     /// <summary><c>order_id</c> — words separated by underscore, all lowercase.</summary>
     SnakeCase,
 
-    /// <summary><c>order-id</c> — words separated by hyphen, all lowercase.</summary>
-    KebabCase,
-
     /// <summary><c>OrderId</c> — first letter uppercase, rest as-is.</summary>
     PascalCase,
 }

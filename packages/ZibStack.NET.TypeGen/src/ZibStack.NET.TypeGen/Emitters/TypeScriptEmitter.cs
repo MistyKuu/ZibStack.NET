@@ -356,7 +356,6 @@ internal static class TypeScriptEmitter
             NameStyle.CamelCase => char.ToLowerInvariant(name[0]) + name.Substring(1),
             NameStyle.PascalCase => char.ToUpperInvariant(name[0]) + name.Substring(1),
             NameStyle.SnakeCase => ToSeparated(name, '_'),
-            NameStyle.KebabCase => ToSeparated(name, '-'),
             _ => name,
         };
     }
