@@ -196,6 +196,69 @@ b.ForType<Article>()
 When `ImportFrom` is null / omitted (or the type expression is a primitive like
 `"string"`), no import is emitted — the override is treated as opaque.
 
+### `[TsType<T>]` — generic variant (C# 11+)
+
+Refactor-safe version of `[TsType("Foo")]`. The TS name is read from `T`'s
+symbol at compile time — renaming the target class auto-updates every reference.
+When `T` is reachable from a `[GenerateTypes]` root (directly annotated or
+pulled in by transitive discovery), the import path is **computed** from its
+`OutputDir` relative to the consuming class's output. Zero string literals:
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+public class Rule
+{
+    [TsType<AutomationRulePayload>]
+    public JsonObject? Element { get; set; }
+}
+
+[GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+public class AutomationRulePayload { public string Body { get; set; } = ""; }
+```
+
+→
+```typescript
+import { AutomationRulePayload } from './AutomationRulePayload';
+
+export interface Rule {
+    element?: AutomationRulePayload;
+}
+```
+
+**Cross-directory imports** — different `OutputDir` values, one per type:
+```csharp
+[GenerateTypes(OutputDir = "client/src/rules")] public class Rule {
+    [TsType<Payload>] public object? El { get; set; }
+}
+[GenerateTypes(OutputDir = "client/src/types")] public class Payload { /* … */ }
+```
+→ `import { Payload } from '../types/Payload';` — the `..` up-traversal is
+computed automatically from the two `OutputDir`s' common ancestor.
+
+**External targets** (BCL types, NuGet packages, hand-written `.d.ts`) — the
+symbol lives outside the current compilation so auto-path doesn't apply. Pair
+with explicit `ImportFrom`:
+```csharp
+[TsType<Widget>(ImportFrom = "@acme/widgets")]
+public object? W { get; set; }
+```
+If you leave `ImportFrom` off for an external target, the TS type expression
+still gets `T`'s simple name but no `import` line is written — same semantics
+as today's opaque `[TsType("…")]` without a path.
+
+**[TsName] on the target is honored** — if `Payload` carries `[TsName("PayloadDto")]`,
+both the type expression and the import use `PayloadDto`.
+
+**Enums work too:** `[TsType<Priority>]` against `[GenerateTypes] public enum Priority { … }`.
+
+**Fluent equivalent:**
+```csharp
+b.ForType<Rule>()
+    .Property(r => r.Element).TsType<AutomationRulePayload>();
+```
+
+**Requires C# 11+** in the consuming project (generic attributes).
+
 ## Configuration
 
 Two layers, in increasing specificity:

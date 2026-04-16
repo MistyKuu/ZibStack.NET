@@ -15,6 +15,9 @@ internal static class SchemaParser
     private const string GenerateTypesAttr = "ZibStack.NET.TypeGen.GenerateTypesAttribute";
     private const string TsNameAttr = "ZibStack.NET.TypeGen.TsNameAttribute";
     private const string TsTypeAttr = "ZibStack.NET.TypeGen.TsTypeAttribute";
+    // Generic variant `[TsType<T>]`. Constructed form is `...TsTypeAttribute<T>` —
+    // we match on the open-generic's name after a GetGenericTypeDefinition-style check.
+    private const string TsTypeGenericAttrOpen = "ZibStack.NET.TypeGen.TsTypeAttribute<T>";
     private const string TsIgnoreAttr = "ZibStack.NET.TypeGen.TsIgnoreAttribute";
     private const string OpenApiSchemaNameAttr = "ZibStack.NET.TypeGen.OpenApiSchemaNameAttribute";
     private const string OpenApiPropertyAttr = "ZibStack.NET.TypeGen.OpenApiPropertyAttribute";
@@ -111,6 +114,130 @@ internal static class SchemaParser
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Walks every property's <c>[TsType&lt;T&gt;]</c> generic target and, when
+    /// <c>T</c> is user-defined but not yet in the model, adds it as an auxiliary
+    /// class / enum inheriting the referencing class's <c>Targets</c> and
+    /// <c>OutputDir</c>. Call before <see cref="DiscoverTransitive"/> so that
+    /// transitively-reached types of newly-seeded targets get pulled in too.
+    /// External targets (BCL, other assemblies) are left alone — the user owns
+    /// their <c>.ts</c> / <c>.d.ts</c> definition.
+    /// </summary>
+    public static void SeedGenericTsTypeTargets(SchemaModel model, Compilation compilation)
+    {
+        // Snapshot the current classes — we add to model.Classes while iterating.
+        var inModel = new HashSet<string>(
+            System.Linq.Enumerable.Concat(
+                model.Classes.Select(c => c.CSharpFullName),
+                model.Enums.Select(e => e.CSharpFullName)),
+            System.StringComparer.Ordinal);
+        var toAdd = new List<(SchemaClass Owner, INamedTypeSymbol Target)>();
+
+        foreach (var cls in model.Classes)
+        {
+            foreach (var prop in cls.Properties)
+            {
+                if (prop.TsTypeTargetCSharpFqn is null) continue;
+                if (inModel.Contains(prop.TsTypeTargetCSharpFqn)) continue;
+                var sym = compilation.GetTypeByMetadataName(StripGlobal(prop.TsTypeTargetCSharpFqn));
+                if (sym is null) continue;
+                if (!IsUserDefinedType(sym, compilation)) continue;
+                toAdd.Add((cls, sym));
+                inModel.Add(prop.TsTypeTargetCSharpFqn);
+            }
+        }
+        foreach (var (owner, sym) in toAdd)
+        {
+            if (sym.TypeKind == TypeKind.Enum)
+            {
+                var e = ParseAuxiliaryEnum(sym, owner.Targets, owner.OutputDir);
+                if (e is not null) model.Enums.Add(e);
+            }
+            else
+            {
+                var c = ParseAuxiliaryClass(sym, owner.Targets, owner.OutputDir);
+                if (c is not null) model.Classes.Add(c);
+            }
+        }
+    }
+
+    /// <summary>
+    /// After the model is finalised (roots + companions + transitive discovery +
+    /// fluent merge), rewrites every property carrying
+    /// <see cref="SchemaProperty.TsTypeTargetCSharpFqn"/> so its
+    /// <see cref="SchemaProperty.TsTypeOverride"/> points at the target's emitted
+    /// TS name and its <see cref="SchemaProperty.TsImportFrom"/> — when unset by
+    /// the user — is computed as a relative path from the owning class's
+    /// <c>OutputDir</c> to the target's. Targets outside the model are left
+    /// alone (the name already falls back to the generic argument's simple name
+    /// during parsing; no import is emitted without an explicit <c>ImportFrom</c>).
+    /// </summary>
+    public static void ResolveGenericTsTypeReferences(SchemaModel model)
+    {
+        foreach (var cls in model.Classes)
+        {
+            foreach (var prop in cls.Properties)
+            {
+                if (prop.TsTypeTargetCSharpFqn is null) continue;
+
+                var fqn = prop.TsTypeTargetCSharpFqn;
+                var targetClass = model.Classes.FirstOrDefault(c => c.CSharpFullName == fqn);
+                var targetEnum = targetClass is null
+                    ? model.Enums.FirstOrDefault(e => e.CSharpFullName == fqn)
+                    : null;
+
+                string? emittedName = null;
+                string? targetDir = null;
+                if (targetClass is not null)
+                {
+                    emittedName = targetClass.TsNameOverride ?? targetClass.EmittedName;
+                    targetDir = targetClass.OutputDir;
+                }
+                else if (targetEnum is not null)
+                {
+                    emittedName = targetEnum.TsNameOverride ?? targetEnum.EmittedName;
+                    targetDir = targetEnum.OutputDir;
+                }
+
+                if (emittedName is null) continue;   // external — keep the fallback.
+                prop.TsTypeOverride = emittedName;
+                if (prop.TsImportFrom is null)
+                    prop.TsImportFrom = ComputeRelativeImport(cls.OutputDir, targetDir!, emittedName);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Forms a TypeScript module specifier pointing from <paramref name="fromDir"/>
+    /// to <paramref name="fileName"/> living in <paramref name="toDir"/>. Both
+    /// directories are treated as relative-style paths (e.g. <c>"."</c>,
+    /// <c>"client/src/api"</c>). Same directory collapses to <c>./Name</c>;
+    /// otherwise up-traversals (<c>..</c>) bridge back to the common ancestor
+    /// before descending.
+    /// </summary>
+    internal static string ComputeRelativeImport(string fromDir, string toDir, string fileName)
+    {
+        static string[] Segments(string dir) => dir.Replace('\\', '/')
+            .Split(new[] { '/' }, System.StringSplitOptions.RemoveEmptyEntries)
+            .Where(s => s != ".").ToArray();
+
+        var from = Segments(fromDir);
+        var to = Segments(toDir);
+
+        int common = 0;
+        while (common < from.Length && common < to.Length && from[common] == to[common])
+            common++;
+
+        var up = from.Length - common;
+        var downs = to.Skip(common);
+        var parts = new List<string>();
+        for (int i = 0; i < up; i++) parts.Add("..");
+        parts.AddRange(downs);
+        parts.Add(fileName);
+        var joined = string.Join("/", parts);
+        return joined.StartsWith("..", System.StringComparison.Ordinal) ? joined : "./" + joined;
     }
 
     /// <summary>
@@ -386,6 +513,28 @@ internal static class SchemaParser
             TsIgnore = HasAttr(prop, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(prop, OpenApiIgnoreAttr),
         };
+
+        // [TsType<T>] generic form — captures T's FQN now; actual TS name +
+        // import path get resolved late in the pipeline (see
+        // ResolveGenericTsTypeReferences) after discovery has finalised the model.
+        var genericTsType = prop.GetAttributes().FirstOrDefault(a =>
+            a.AttributeClass is INamedTypeSymbol nts
+            && nts.IsGenericType
+            && nts.ConstructedFrom.ToDisplayString() == TsTypeGenericAttrOpen
+            && nts.TypeArguments.Length == 1);
+        if (genericTsType is not null
+            && ((INamedTypeSymbol)genericTsType.AttributeClass!).TypeArguments[0] is ITypeSymbol tArg)
+        {
+            sp.TsTypeTargetCSharpFqn = tArg.ToDisplayString();
+            // Seed TsTypeOverride with the target's simple name as a fallback —
+            // the resolver will replace it with the target's EmittedName / [TsName]
+            // override once the model is finalised.
+            sp.TsTypeOverride ??= tArg.Name;
+            // Optional explicit ImportFrom override — falls through if absent.
+            foreach (var na in genericTsType.NamedArguments)
+                if (na.Key == "ImportFrom" && na.Value.Value is string imp)
+                    sp.TsImportFrom ??= imp;
+        }
 
         var openApiAttr = prop.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == OpenApiPropertyAttr);

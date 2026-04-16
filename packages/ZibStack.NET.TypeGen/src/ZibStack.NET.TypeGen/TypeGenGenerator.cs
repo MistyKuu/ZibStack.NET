@@ -235,6 +235,12 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 }
             }
 
+            // Seed any `[TsType<T>]` targets that aren't already in the model —
+            // a generic override is an explicit request to emit T, even if nothing
+            // else references T by its C# type. Runs before DiscoverTransitive so
+            // the freshly-seeded target gets its own property graph walked too.
+            SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+
             // Transitive discovery: walk property types of everything already in the
             // model, pull in any user-defined type (class / record / struct / enum) not
             // already present. Inherits Targets + OutputDir from the root that reached
@@ -249,6 +255,13 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 ApplyFluentToClass(model.Classes[i], config);
             for (int i = enumCountBefore; i < model.Enums.Count; i++)
                 ApplyFluentToEnum(model.Enums[i], config);
+
+            // Late-bind `[TsType<T>]` references: replace each property's fallback
+            // TsTypeOverride with T's emitted TS name, and when the user didn't
+            // supply an ImportFrom, compute the relative import path from the owning
+            // class's OutputDir to the target's. Must run AFTER discovery + fluent
+            // so target names / OutputDirs are final.
+            SchemaParser.ResolveGenericTsTypeReferences(model);
 
             if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
 
@@ -393,6 +406,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             prop.TsNameOverride ??= po.TsName;
             prop.TsTypeOverride ??= po.TsType;
             prop.TsImportFrom ??= po.TsImportFrom;
+            prop.TsTypeTargetCSharpFqn ??= po.TsTypeTargetCSharpFqn;
             prop.OpenApiNameOverride ??= po.OpenApiName;
             prop.OpenApiTypeOverride ??= po.OpenApiType;
             prop.OpenApiRefOverride ??= po.OpenApiRef;

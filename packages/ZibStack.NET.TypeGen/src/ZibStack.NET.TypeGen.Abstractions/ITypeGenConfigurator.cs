@@ -163,6 +163,17 @@ public interface IPropertyBuilder<TClass, TProp>
     /// </summary>
     IPropertyBuilder<TClass, TProp> TsType(string typeExpression, string? importFrom);
 
+    /// <summary>
+    /// Generic equivalent of <c>[TsType&lt;T&gt;]</c>. The TS name is read from
+    /// <typeparamref name="T"/>'s symbol (refactor-safe); when <typeparamref name="T"/>
+    /// is reachable from a <see cref="GenerateTypesAttribute"/> root — directly or via
+    /// transitive discovery — the import path is computed from its <c>OutputDir</c>
+    /// so no string-literal duplication is needed. Pair with
+    /// <see cref="TsType(string, string?)"/> or an explicit <c>ImportFrom</c> on the
+    /// attribute form when the target lives outside the generated model.
+    /// </summary>
+    IPropertyBuilder<TClass, TProp> TsType<T>();
+
     /// <summary>Equivalent to <c>[OpenApiSchemaName(name)]</c> on the property.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiName(string name);
 
