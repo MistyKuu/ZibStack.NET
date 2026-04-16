@@ -65,6 +65,9 @@ internal sealed class CrudApiInfo
 
 internal enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
 internal enum TypeScriptFileLayout { FilePerClass, SingleFile }
+// Mirrored from Abstractions TsEnumStyle — same ordinal layout so the int cast from
+// AttributeData / configurator parser matches across DLLs.
+internal enum TsEnumStyle { Union, Enum }
 internal enum PythonFileLayout { FilePerClass, SingleFile }
 internal enum PythonStyle { Pydantic, Dataclass }
 internal enum ZodFileLayout { FilePerClass, SingleFile }
@@ -102,6 +105,7 @@ internal sealed class TypeScriptSettings
     public IList<string> StripSuffixes { get; } = new List<string>();
     public bool EmitGeneratedBanner { get; set; } = true;
     public bool EmitInterfaces { get; set; } = false;
+    public TsEnumStyle EnumStyle { get; set; } = TsEnumStyle.Union;
 }
 
 internal sealed class OpenApiSettings

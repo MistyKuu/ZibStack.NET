@@ -99,7 +99,22 @@ deserialisation lines up automatically:
 public enum OrderStatus { Pending, Shipped, Delivered }
 ```
 
-→ TypeScript:
+→ TypeScript (default — `TsEnumStyle.Union`):
+```typescript
+export type OrderStatus = "Pending" | "Shipped" | "Delivered";
+```
+
+Modern idiomatic TS: tree-shakes better, narrower types, maps 1:1 to the wire format, and matches the discriminated-union pattern already used for polymorphic types. Consumers use the literal directly (`status: "Pending"`) — the runtime enum object is gone.
+
+Opt back into the legacy enum form when a consumer relies on the runtime object (iteration, reverse lookup):
+```csharp
+public sealed class TypeGenConfig : ITypeGenConfigurator
+{
+    public void Configure(ITypeGenBuilder b) => b.TypeScript(ts => ts.EnumStyle = TsEnumStyle.Enum);
+}
+```
+
+→ TypeScript (`TsEnumStyle.Enum`):
 ```typescript
 export enum OrderStatus {
     Pending = "Pending",
@@ -118,7 +133,7 @@ class OrderStatus(str, Enum):
     DELIVERED = "Delivered"
 ```
 
-Without the converter the defaults stay — numeric TS enum, `IntEnum` in Python.
+Without the converter the defaults stay — numeric TS `enum` (unaffected by `EnumStyle` since numeric unions of integer literals aren't useful), `IntEnum` in Python.
 OpenAPI always emits `type: string, enum: [...]` because that's what the OpenAPI
 ecosystem expects; numeric-enum integer discriminators are rarer and use
 `$ref` or explicit `type: integer` overrides instead.

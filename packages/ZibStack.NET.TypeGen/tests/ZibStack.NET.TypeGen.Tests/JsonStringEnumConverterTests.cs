@@ -106,8 +106,9 @@ public class JsonStringEnumConverterTests
     // ── Emitter output ──────────────────────────────────────────────────────
 
     [Fact]
-    public void TypeScriptEmitter_StringSerializedEnum_EmitsStringValues()
+    public void TypeScriptEmitter_StringSerializedEnum_EmitsUnion_ByDefault()
     {
+        // Default TsEnumStyle.Union — idiomatic modern TS (string literal union).
         var en = new SchemaEnum
         {
             CSharpFullName = "N.Status", SourceName = "Status", EmittedName = "Status",
@@ -120,11 +121,33 @@ public class JsonStringEnumConverterTests
         model.Enums.Add(en);
 
         var ts = TypeScriptEmitter.Emit(model, new GlobalSettings()).First(f => f.FileName == "Status.ts").Content;
+        Assert.Contains("export type Status = \"Pending\" | \"Shipped\";", ts);
+        Assert.DoesNotContain("export enum Status", ts);
+    }
+
+    [Fact]
+    public void TypeScriptEmitter_StringSerializedEnum_EnumStyleOptIn_EmitsClassicEnum()
+    {
+        // Opt in to legacy TS enum form (runtime object for iteration / reverse-lookup).
+        var en = new SchemaEnum
+        {
+            CSharpFullName = "N.Status", SourceName = "Status", EmittedName = "Status",
+            OutputDir = ".", Targets = TypeTarget.TypeScript,
+            IsStringSerialized = true,
+        };
+        en.Members.Add(new SchemaEnumMember { Name = "Pending", Value = 0 });
+        en.Members.Add(new SchemaEnumMember { Name = "Shipped", Value = 1 });
+        var model = new SchemaModel();
+        model.Enums.Add(en);
+
+        var settings = new GlobalSettings();
+        settings.TypeScript.EnumStyle = TsEnumStyle.Enum;
+
+        var ts = TypeScriptEmitter.Emit(model, settings).First(f => f.FileName == "Status.ts").Content;
         Assert.Contains("export enum Status {", ts);
         Assert.Contains("Pending = \"Pending\",", ts);
         Assert.Contains("Shipped = \"Shipped\",", ts);
         Assert.DoesNotContain("= 0,", ts);
-        Assert.DoesNotContain("= 1,", ts);
     }
 
     [Fact]

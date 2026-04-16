@@ -364,6 +364,18 @@ internal static class TypeScriptEmitter
     private static void EmitEnum(StringBuilder sb, SchemaEnum en, TypeScriptSettings ts)
     {
         if (en.TsIgnore || (en.Targets & TypeTarget.TypeScript) == 0) return;
+
+        // Union form applies only to string-serialized enums — numeric unions of literals
+        // (`0 | 1 | 2`) are less useful and break existing iteration patterns. Numeric
+        // enums always emit as `export enum` regardless of ts.EnumStyle.
+        if (en.IsStringSerialized && ts.EnumStyle == TsEnumStyle.Union)
+        {
+            var literals = string.Join(" | ", en.Members.Select(m => $"\"{m.Name}\""));
+            sb.AppendLine($"export type {en.EmittedName} = {literals};");
+            sb.AppendLine();
+            return;
+        }
+
         sb.AppendLine($"export enum {en.EmittedName} {{");
         foreach (var m in en.Members)
         {

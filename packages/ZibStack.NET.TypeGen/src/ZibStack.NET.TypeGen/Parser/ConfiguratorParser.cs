@@ -353,6 +353,7 @@ internal static class ConfiguratorParser
             case "TypeNameStyle": if (val is int tn) s.TypeNameStyle = (NameStyle)tn; break;
             case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
             case "EmitInterfaces": if (val is bool ei) s.EmitInterfaces = ei; break;
+            case "EnumStyle": if (val is int es) s.EnumStyle = (TsEnumStyle)es; break;
             // StripSuffixes is a collection — not supported via simple assignment; users
             // need the collection initializer form which this parser doesn't walk (yet).
         }

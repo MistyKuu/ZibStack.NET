@@ -37,6 +37,26 @@ public enum TypeScriptFileLayout
 }
 
 /// <summary>
+/// How string-serialized C# enums are rendered in TypeScript output.
+/// Numeric enums always emit as TS <c>enum</c> (unions of number literals aren't useful).
+/// </summary>
+public enum TsEnumStyle
+{
+    /// <summary>
+    /// <c>export type Status = "Pending" | "Shipped";</c> — idiomatic modern TS,
+    /// tree-shakes better, narrower types, matches wire format 1:1. Default.
+    /// </summary>
+    Union,
+
+    /// <summary>
+    /// <c>export enum Status { Pending = "Pending", ... }</c> — legacy TS enum object,
+    /// leaves a runtime value you can iterate (<c>Object.values(Status)</c>) or
+    /// reverse-lookup. Opt in when the consumer relies on the enum object.
+    /// </summary>
+    Enum,
+}
+
+/// <summary>
 /// TypeScript emitter settings. All fields have defaults; configure via
 /// <c>typegen.config.json</c> or <see cref="ITypeGenConfigurator.TypeScript"/>.
 /// </summary>
@@ -98,6 +118,17 @@ public sealed class TypeScriptSettings
     /// the same flag via <see cref="GlobalSettings"/>.
     /// </summary>
     public bool EmitInterfaces { get; set; } = false;
+
+    /// <summary>
+    /// How string-serialized enums are rendered. Default
+    /// <see cref="TsEnumStyle.Union"/> emits a string literal union
+    /// (<c>export type Status = "Pending" | "Shipped";</c>) — idiomatic modern TS.
+    /// Set to <see cref="TsEnumStyle.Enum"/> to restore the legacy
+    /// <c>export enum Status { ... }</c> form when a consumer relies on the
+    /// enum object (iteration, reverse-lookup). Numeric enums always emit as
+    /// <c>enum</c> regardless of this setting.
+    /// </summary>
+    public TsEnumStyle EnumStyle { get; set; } = TsEnumStyle.Union;
 }
 
 /// <summary>
