@@ -59,7 +59,11 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
             var ((symbols, compilation), projectDir) = source;
-            if (symbols.IsDefaultOrEmpty) return;
+            // Note: do NOT early-return on empty symbols — the configurator's
+            // .WithGeneratedTypes(...) fluent discovery (handled below) is a valid
+            // sole driver of generation. The bottom of this callback exits anyway
+            // if nothing accumulates in the model.
+            if (symbols.IsDefault) symbols = ImmutableArray<INamedTypeSymbol?>.Empty;
 
             // Warn about [CrudApi]-only classes that TypeGen can't emit paths for —
             // they need [GenerateTypes] so we discover them via the same provider.
