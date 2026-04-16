@@ -43,16 +43,27 @@ internal static class TypeScriptEmitter
             var sb = new StringBuilder();
             EmitBanner(sb, ts);
             // Roll up user-supplied imports from every emitted class so the single
-            // file gets one import block at the top.
+            // file gets one import block at the top. Exclude any symbol that is ALSO
+            // emitted into this file — an auto-computed [TsType<T>] importFrom for a
+            // locally-generated T is redundant in SingleFile mode (the type's
+            // definition lives a few lines down in the same file, no module boundary).
+            var localTsNames = new HashSet<string>(
+                model.Classes.Where(c => !c.TsIgnore && (c.Targets & TypeTarget.TypeScript) != 0)
+                    .Select(c => c.TsNameOverride ?? c.EmittedName)
+                .Concat(model.Enums.Where(e => !e.TsIgnore && (e.Targets & TypeTarget.TypeScript) != 0)
+                    .Select(e => e.TsNameOverride ?? e.EmittedName)),
+                System.StringComparer.Ordinal);
             var rolledImports = new Dictionary<string, HashSet<string>>(System.StringComparer.Ordinal);
             foreach (var cls in model.Classes)
             {
                 if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) continue;
                 foreach (var kvp in CollectUserImports(cls))
                 {
+                    var external = kvp.Value.Where(n => !localTsNames.Contains(n)).ToList();
+                    if (external.Count == 0) continue;
                     if (!rolledImports.TryGetValue(kvp.Key, out var names))
                         rolledImports[kvp.Key] = names = new HashSet<string>(System.StringComparer.Ordinal);
-                    foreach (var n in kvp.Value) names.Add(n);
+                    foreach (var n in external) names.Add(n);
                 }
             }
             EmitImports(sb, System.Linq.Enumerable.Empty<string>(), selfName: "", rolledImports);

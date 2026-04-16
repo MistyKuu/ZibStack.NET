@@ -85,10 +85,21 @@ internal static class SchemaParser
             var clsSymbol = compilation.GetTypeByMetadataName(StripGlobal(cls.CSharpFullName));
             if (clsSymbol is null) continue;
 
-            foreach (var prop in clsSymbol.GetMembers().OfType<IPropertySymbol>())
+            // Walk the full inheritance chain, not just declared members. `inlineInherited`
+            // in ParseClassCore has already flattened base properties into cls.Properties
+            // for non-emitted bases, but discovery uses the actual property type SYMBOLS
+            // to unwrap nullables / collections — and `GetMembers()` on the derived
+            // symbol returns declared-only. Without the chain walk an enum referenced
+            // only through an inherited property (e.g. `D : B : C<T>` where C declares
+            // abstract `Type` of an enum) falls through to `unknown` in TS.
+            // Duplicates from overrides are filtered by the name-keyed HashSet below.
+            var seenProps = new HashSet<string>(System.StringComparer.Ordinal);
+            for (var cur = clsSymbol; cur is not null && cur.SpecialType != SpecialType.System_Object; cur = cur.BaseType)
+            foreach (var prop in cur.GetMembers().OfType<IPropertySymbol>())
             {
                 if (prop.IsStatic || prop.IsIndexer) continue;
                 if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+                if (!seenProps.Add(prop.Name)) continue;
 
                 foreach (var nested in ExtractNestedUserTypes(prop.Type, compilation))
                 {

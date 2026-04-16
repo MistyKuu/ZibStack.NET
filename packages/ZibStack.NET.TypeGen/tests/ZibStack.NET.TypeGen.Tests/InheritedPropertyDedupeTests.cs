@@ -66,6 +66,29 @@ public class InheritedPropertyDedupeTests
     }
 
     [Fact]
+    public void InheritedPropertyEnumType_AutoDiscovered()
+    {
+        // Regression: transitive discovery used to walk `clsSymbol.GetMembers()`,
+        // which returns DECLARED members only — inherited ones (copied into
+        // cls.Properties by inlineInherited) were invisible, so enum / class types
+        // referenced ONLY through inherited properties fell back to `unknown`.
+        var symbol = ParseClass("InheritFix.D");
+        var cls = SchemaParser.ParseClass(symbol);
+        Assert.NotNull(cls);
+        var model = new SchemaModel();
+        model.Classes.Add(cls!);
+
+        // Drive the full parser pipeline — DiscoverTransitive must surface
+        // SolutionElementType even though no class IN the model (D) declares a
+        // property of that type directly; the only reference is via the
+        // inherited `Type` from B.
+        var compilation = GetCompilation();
+        SchemaParser.DiscoverTransitive(model, compilation);
+
+        Assert.Contains(model.Enums, e => e.SourceName == "SolutionElementType");
+    }
+
+    [Fact]
     public void InheritedAbstractProperty_TypeScriptEmitsTypeOnce()
     {
         var symbol = ParseClass("InheritFix.D");
@@ -92,6 +115,13 @@ public class InheritedPropertyDedupeTests
 
     private static INamedTypeSymbol ParseClass(string fullyQualifiedName)
     {
+        var symbol = GetCompilation().GetTypeByMetadataName(fullyQualifiedName);
+        Assert.NotNull(symbol);
+        return symbol!;
+    }
+
+    private static CSharpCompilation GetCompilation()
+    {
         // Stub the [GenerateTypes] attribute + TypeTarget enum so the parser sees
         // a real attribute class with the expected metadata name.
         const string stubs = """
@@ -110,14 +140,10 @@ public class InheritedPropertyDedupeTests
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(System.Attribute).Assembly.Location),
         };
-        var compilation = CSharpCompilation.Create(
+        return CSharpCompilation.Create(
             "InheritDedupeTest",
             new[] { CSharpSyntaxTree.ParseText(stubs), CSharpSyntaxTree.ParseText(SourceUnderTest) },
             refs,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-
-        var symbol = compilation.GetTypeByMetadataName(fullyQualifiedName);
-        Assert.NotNull(symbol);
-        return symbol!;
     }
 }

@@ -312,6 +312,20 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         var written = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         var touchedDirs = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
+        // Pre-seed touchedDirs with every OutputDir the current emit set targets.
+        // Sweep has to visit these even if individual writes fail — otherwise a
+        // rename (A.ts → B.ts, where A.ts exists but B.ts's write errors out) would
+        // leave the stale A.ts in place. Collecting directories is cheap and never
+        // trips on sandboxed-I/O the way actual writes do.
+        foreach (var f in files)
+        {
+            var fullDir = System.IO.Path.IsPathRooted(f.OutputDir)
+                ? f.OutputDir
+                : System.IO.Path.Combine(projectDir, f.OutputDir);
+            try { touchedDirs.Add(System.IO.Path.GetFullPath(fullDir)); } catch { /* bad path, skip */ }
+        }
+
+        bool anyWriteFailed = false;
         foreach (var f in files)
         {
             string fullPath;
@@ -323,7 +337,6 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 System.IO.Directory.CreateDirectory(fullDir);
                 fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(fullDir, f.FileName));
                 written.Add(fullPath);
-                touchedDirs.Add(System.IO.Path.GetFullPath(fullDir));
 
                 // Skip if unchanged — keeps mtime stable, prevents file-watcher spam
                 // downstream (Vite, webpack, etc.) on every keystroke that triggers
@@ -334,17 +347,18 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             }
             catch (System.Exception ex)
             {
-                // Surface ONCE per file — sandboxed hosts will hit this for every file
-                // in the run. We still report once-per-file because the build output
-                // panel collapses identical messages and IDE Errors/Problems list
-                // dedupes by location, so the noise stays bounded.
-                spc.ReportDiagnostic(Diagnostic.Create(
-                    TypeGenDiagnostics.LiveRegenSandboxed,
-                    Location.None,
-                    f.FileName, ex.GetType().Name + ": " + ex.Message));
-                // Stop trying — if one write blew up, the rest will too. Exit early
-                // so the user sees a single representative error per regen.
-                return;
+                // Surface once per run — sandboxed hosts hit this for every file.
+                // Still report once-per-file because IDE Problems list dedupes by
+                // location. Keep going so the sweep at the end still gets to run
+                // (renames should drop stale files even if some writes bombed).
+                if (!anyWriteFailed)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        TypeGenDiagnostics.LiveRegenSandboxed,
+                        Location.None,
+                        f.FileName, ex.GetType().Name + ": " + ex.Message));
+                }
+                anyWriteFailed = true;
             }
         }
 

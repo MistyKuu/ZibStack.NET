@@ -124,4 +124,23 @@ public class TsTypeImportFromTests
         // One merged import covering both classes — same path, both symbols.
         Assert.Matches(@"import \{ Bar, Foo \} from './shared';", ts);
     }
+
+    [Fact]
+    public void ImportFrom_SingleFileLayout_SkipsImportsForLocalDtos()
+    {
+        // When the [TsType<T>] target IS emitted into the single file, no import is
+        // needed — its declaration is right there. Only external symbols (which
+        // stay unknown to the model) should appear in the import block.
+        var owner = Cls("Owner",
+            ("Local", "System.Object", "Payload", "./Payload"),       // target in model → skip
+            ("External", "System.Object", "ExternalLib", "@vendor/ext"));  // external → keep
+        var payload = Cls("Payload", ("Name", "string", null, null));
+        var settings = new GlobalSettings();
+        settings.TypeScript.FileLayout = TypeScriptFileLayout.SingleFile;
+
+        var ts = TypeScriptEmitter.Emit(ModelWith(owner, payload), settings).Single().Content;
+
+        Assert.DoesNotContain("from './Payload'", ts);
+        Assert.Contains("import { ExternalLib } from '@vendor/ext';", ts);
+    }
 }
