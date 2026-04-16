@@ -34,34 +34,29 @@ app.MapScalarApiReference();
 app.MapPlayerEndpoints();
 app.MapTeamEndpoints();
 
-// ─── [Destructurable] demo ──────────────────────────────────────────
-// JS-style destructuring: var (name, rest) = person.PickName()
-// Generator scans PickXxx() call sites and emits typed picks on demand.
+// ─── [Destructurable<T>] demo ───────────────────────────────────────
+// Shape-record approach: a user-declared partial record carries the picked
+// property list; the generator fills in `Rest`, `FromSource`, `RestOf` and
+// `Split` — giving you typed `{ picked, ...rest }` with IDE support on both
+// sides.
 app.MapGet("/destructure", () =>
 {
-    var person = new Person
-    {
-        Name = "Alice",
-        Id = 42,
-        Email = "alice@example.com",
-        Age = 30,
-        City = "Warsaw"
-    };
+    var person = new Person("Alice", 42, "alice@example.com", 30, "Warsaw");
 
-    // Single property pick — rest contains everything else
-    var (name, rest1) = person.PickName();
+    // Pick Name only → rest has Id, Email, Age, City
+    var (just, rest1) = PersonJustName.Split(person);
 
-    // Multi-property pick — pick Name + Id, rest contains Email/Age/City
-    var (name2, id, rest2) = person.PickNameId();
+    // Pick Name + Id → rest has Email, Age, City
+    var (pair, rest2) = PersonNameId.Split(person);
 
-    // Three-property pick — pick Name + Id + Email, rest contains Age/City
-    var (name3, id3, email, rest3) = person.PickNameIdEmail();
+    // Body-style shape (no primary ctor) also works — object-initializer path
+    var (contact, rest3) = PersonContact.Split(person);
 
     return Results.Ok(new
     {
-        single = new { name, rest = new { rest1.Id, rest1.Email, rest1.Age, rest1.City } },
-        pair = new { name = name2, id, rest = new { rest2.Email, rest2.Age, rest2.City } },
-        triple = new { name = name3, id = id3, email, rest = new { rest3.Age, rest3.City } }
+        single = new { just.Name, rest = new { rest1.Id, rest1.Email, rest1.Age, rest1.City } },
+        pair = new { pair.Name, pair.Id, rest = new { rest2.Email, rest2.Age, rest2.City } },
+        contact = new { contact.Name, contact.Email, rest = new { rest3.Id, rest3.Age, rest3.City } }
     });
 });
 

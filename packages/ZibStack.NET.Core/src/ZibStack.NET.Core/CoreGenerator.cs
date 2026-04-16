@@ -37,7 +37,7 @@ public partial class CoreGenerator : IIncrementalGenerator
             ctx.AddSource("EntityAttribute.g.cs", EntityAttributeSource);
         });
 
-        // [Destructurable] — scans PickXxx() invocations and emits typed picks + rest types
+        // [Destructurable<TSource>] — shape-record path: emits nested Rest + Split factory
         RegisterDestructurable(context);
 
         // [PartialFrom]

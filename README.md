@@ -19,7 +19,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 **Tier 2 — Ergonomics. Opt-in per file.** TypeScript-inspired utility types and helpers you reach for when you want them. No framework, no configuration.
 
 - **TypeScript utility types** — `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, `Intersect<...>` via source generators.
-- **`[Destructurable]`** — JS-style object destructuring with rest: `var (name, id, rest) = person.PickNameId()`.
+- **`[Destructurable<T>]`** — JS-style `{ picked, ...rest }` destructuring on a partial shape record: `var (picked, rest) = PersonNameId.Split(person)` (both halves typed).
 - **`Result<T>`** — functional error handling with `Map`/`Bind`/`Match`.
 - **`[ZValidate]`** — compile-time validation from attributes.
 
@@ -41,7 +41,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 **TypeScript has it, C# doesn't.** `Partial<T>`, `Pick<T, K>`, `Omit<T, K>`, intersection types — if you write frontend code, you miss these in C#. Now you can: `[PartialFrom(typeof(Player))]` generates `PatchField<T>` properties with `ApplyTo()` for patching. `[PickFrom]`, `[OmitFrom]`, `[IntersectFrom]` — all source-generated, strongly-typed.
 
-**JS-style destructuring with rest.** `const { name, id, ...rest } = person` is one of the most missed features when moving from JS/TS to C#. Now: mark a type with `[Destructurable]` and write `var (name, id, rest) = person.PickNameId()` — fully typed, with autocomplete. The source generator scans your `PickXxx()` call sites and emits matching extension methods + 'rest' types on demand (no combinatorial explosion — only the combos you actually use).
+**JS-style destructuring with rest.** `const { name, id, ...rest } = person` is one of the most missed features when moving from JS/TS to C#. Now: declare a partial shape record `[Destructurable<Person>] partial record PersonNameId(string Name, int Id)`, then `var (picked, rest) = PersonNameId.Split(person)` — both `picked` and `rest` are fully typed, IDE-autocompleted, refactor-safe. The shape doubles as a reusable DTO (response/log payload/mapper input), so the cost of one declaration line buys you a named type used in more than just the destructure.
 
 **CRUD is 80% copy-paste.** Define a model, write Create/Update/Response DTOs, wire up endpoints, add validation, build query filters, set up EF stores. Or: `[ImTiredOfCrud]` — one attribute generates everything. CRUD API + DTOs + validation + query DSL (filter/sort/select with OR, grouping, IN, dot notation on relations) + form/table UI schemas with `filterOperators` per column. One attribute, full stack.
 
@@ -53,7 +53,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in: `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]`. Custom aspects via `IAspectHandler`. |
 | [**ZibStack.NET.Aop.Polly**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/) | `dotnet add package ZibStack.NET.Aop.Polly` | Polly-based resilience aspects: `[PollyRetry]` (named pipelines, backoff, exception filtering) and `[PollyHttpRetry]` (transient HTTP errors). |
 | [**ZibStack.NET.Aop.HybridCache**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/) | `dotnet add package ZibStack.NET.Aop.HybridCache` | `[HybridCache]` — L1/L2 caching (memory + Redis) via `Microsoft.Extensions.Caching.Hybrid`. |
-| [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable` → `PickXxx()` methods). |
+| [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable<TSource>` → shape-record + `Split(src)` factory + nested `Rest`). |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[ZRequired]`, `[ZEmail]`, `[ZRange]`, `[ZMatch]`). |
 | [**ZibStack.NET.TypeGen**](packages/ZibStack.NET.TypeGen/) | `dotnet add package ZibStack.NET.TypeGen` | Roslyn source generator that emits **TypeScript interfaces** and **OpenAPI 3.0** schemas from C# DTOs annotated with `[GenerateTypes]`. Compile-time, zero reflection, no running app required — `dotnet build` writes the `.ts` and `.yaml` files directly to your configured output directory. |
@@ -160,28 +160,30 @@ or call site exists (same idea as Metalama, scoped to focused attributes).
 
 ## Tier 2 — Ergonomics
 
-### ZibStack.NET.Core — `[Destructurable]`
+### ZibStack.NET.Core — `[Destructurable<TSource>]`
 
 ```csharp
-[Destructurable]
-public partial class Person
-{
-    public string Name { get; set; } = "";
-    public int Id { get; set; }
-    public string Email { get; set; }  = "";
-    public int Age { get; set; }
-    public string City { get; set; } = "";
-}
+// Source — plain record, no attributes here.
+public record Person(string Name, int Id, string Email, int Age, string City);
 
-// JS-style destructuring — fully typed, with autocomplete:
-var (name, rest) = person.PickName();             // rest: PersonRest_Name { Id, Email, Age, City }
-var (name, id, rest) = person.PickNameId();       // rest: PersonRest_NameId { Email, Age, City }
-var (name, id, email, rest) = person.PickNameIdEmail();
+// Shape — partial record listing the picked properties.
+[Destructurable<Person>]
+public partial record PersonNameId(string Name, int Id);
 
-// Generator scans every PickXxx() call site and emits matching extension methods
-// + 'rest' types on demand. No combinatorial explosion — only the combos you use.
-// Hover Person in the IDE → see all generated picks via <see cref> XML links.
+// Generator emits on PersonNameId:
+//   public sealed record Rest(string Email, int Age, string City);
+//   public static PersonNameId FromSource(Person src);
+//   public static Rest         RestOf(Person src);
+//   public static (PersonNameId Picked, Rest Remaining) Split(Person src);
+
+var person = new Person("Alice", 42, "a@b.c", 30, "Warsaw");
+var (picked, rest) = PersonNameId.Split(person);
+
+// picked.Name = "Alice", picked.Id = 42       — both typed
+// rest.Email  = "a@b.c", rest.Age = 30, rest.City = "Warsaw"  — typed, IDE-autocompleted
 ```
+
+**Why a shape record (and not a lambda or method-name encoding)?** Anonymous types in C# are nominal, not structural — they have no source-writable name a generator can emit code against, and the C# language team has explicitly declined both [anonymous-type deconstruction](https://github.com/dotnet/csharplang/discussions/244) and [spread/rest object syntax](https://github.com/dotnet/csharplang/discussions/7507). The shape record carries the shape in a *named* type, which lets the generator hand you a typed `Rest` back. The shape is also reusable as a regular DTO — no throwaway anon, no `dynamic`, no untyped dictionary.
 
 ### ZibStack.NET.Result
 

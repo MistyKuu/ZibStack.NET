@@ -78,28 +78,31 @@ namespace ZibStack.NET.Core
 namespace ZibStack.NET.Core
 {
     /// <summary>
-    /// Marks a type as destructurable. Enables JS-style destructuring via generated
-    /// <c>PickXxx()</c> extension methods, where <c>Xxx</c> is the concatenation of
-    /// property names in PascalCase. The generator scans usages and emits matching
-    /// methods + 'rest' types on demand.
+    /// Marks a partial record as a destructurable <em>shape</em> of <typeparamref name=""TSource""/>.
+    /// The generator fills the shape with a <c>Split(TSource)</c> factory plus a nested
+    /// <c>Rest</c> record containing the complement of properties — giving you typed JS-style
+    /// <c>{ picked, ...rest }</c> destructuring where both sides are IDE-friendly.
     /// </summary>
     /// <example>
     /// <code>
-    /// [Destructurable]
-    /// public partial class Person
-    /// {
-    ///     public string Name { get; set; } = """";
-    ///     public int Id { get; set; }
-    ///     public string Email { get; set; } = """";
-    /// }
+    /// public record Person(string FirstName, string LastName, string Email, int Age, int Height);
     ///
-    /// // Usage:
-    /// var (name, id, rest) = person.PickNameId();
-    /// // rest is PersonRest_NameId { Email }
+    /// [Destructurable&lt;Person&gt;]
+    /// public partial record PersonPublic(string FirstName, int Age);
+    ///
+    /// // Generator emits on PersonPublic:
+    /// //   public sealed record Rest(string LastName, string Email, int Height);
+    /// //   public static PersonPublic FromSource(Person src);
+    /// //   public static Rest RestOf(Person src);
+    /// //   public static (PersonPublic Picked, Rest Remaining) Split(Person src);
+    ///
+    /// var (pub, rest) = PersonPublic.Split(person);
+    /// Console.WriteLine(pub.FirstName);   // typed
+    /// Console.WriteLine(rest.LastName);   // typed
     /// </code>
     /// </example>
-    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct, Inherited = false)]
-    internal sealed class DestructurableAttribute : System.Attribute { }
+    [System.AttributeUsage(System.AttributeTargets.Class, Inherited = false)]
+    internal sealed class DestructurableAttribute<TSource> : System.Attribute { }
 }
 ";
 

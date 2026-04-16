@@ -271,7 +271,7 @@ if (request.Email is { HasValue: true, Value: var newEmail })
 
 The property pattern `{ HasValue: true, Value: var newEmail }` binds `newEmail` as `string?` (the wrapped type), so you can use it directly in the log line and assignment.
 
-See [Core → Pattern matching with `PickXxx()`](/ZibStack.NET/packages/core/#pattern-matching-with-pickxxx) for more C# pattern-matching idioms that work well alongside `PatchField<T>`.
+See [Core → Pattern matching on the `Split` tuple](/ZibStack.NET/packages/core/#pattern-matching-on-the-split-tuple) for more C# pattern-matching idioms that work well alongside `PatchField<T>`.
 
 ## Validation
 
@@ -321,4 +321,4 @@ A few things to keep in mind so you don't reach for `PatchField<T>` in the wrong
 
 - [Dto — CRUD API & DTOs](/ZibStack.NET/packages/dto/) — `[CreateDto]` / `[UpdateDto]` / `[CrudApi]` full reference
 - [Full CRUD with SQLite](/ZibStack.NET/guides/crud-sqlite/) — end-to-end project where `PatchField<T>` appears in the `PATCH` demo
-- [Core → Pattern matching with `PickXxx()`](/ZibStack.NET/packages/core/#pattern-matching-with-pickxxx) — more C# pattern idioms
+- [Core → Pattern matching on the `Split` tuple](/ZibStack.NET/packages/core/#pattern-matching-on-the-split-tuple) — more C# pattern idioms

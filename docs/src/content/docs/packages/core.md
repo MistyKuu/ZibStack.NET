@@ -173,148 +173,128 @@ Unlike `[PartialFrom]`, none of `[PickFrom]`/`[OmitFrom]`/`[IntersectFrom]` use 
 
 ## JS-Style Destructuring
 
-### `[Destructurable]`
+### `[Destructurable<TSource>]`
 
-Brings JavaScript-style destructuring with rest pattern to C#. Mark a type with `[Destructurable]`, then call any `PickXxx()` method where `Xxx` is the concatenation of property names — the source generator emits the matching extension method and a typed 'rest' object on demand.
+Brings JS-style `{ picked, ...rest }` destructuring to C# — both sides typed end-to-end.
+You declare a partial record describing the **shape** you want to pick; the generator
+fills it with a `Split(source)` factory and a nested `Rest` record holding the complement.
 
 ```csharp
 using ZibStack.NET.Core;
 
-[Destructurable]
-public partial class Person
+// Source — plain record, no attributes here.
+public record Person(string Name, int Id, string Email, int Age, string City);
+
+// Shape — primary-ctor record listing the picked properties.
+[Destructurable<Person>]
+public partial record PersonNameId(string Name, int Id);
+```
+
+The generator emits onto `PersonNameId`:
+
+```csharp
+public partial record PersonNameId
 {
-    public string Name { get; set; } = "";
-    public int Id { get; set; }
-    public string Email { get; set; } = "";
-    public int Age { get; set; }
-    public string City { get; set; } = "";
-}
+    public sealed record Rest(string Email, int Age, string City);
 
-// Usage — fully typed, with autocomplete and refactoring support:
-var person = new Person { Name = "Alice", Id = 42, Email = "a@b.c", Age = 30, City = "Warsaw" };
-
-// Single property pick
-var (name, rest) = person.PickName();
-// rest: PersonRest_Name { Id, Email, Age, City }
-
-// Multi-property pick
-var (name, id, rest) = person.PickNameId();
-// rest: PersonRest_NameId { Email, Age, City }
-
-// Three-property pick
-var (name, id, email, rest) = person.PickNameIdEmail();
-// rest: PersonRest_NameIdEmail { Age, City }
-```
-
-**How it works:** The source generator scans every `PickXxx()` invocation in your code. For each unique combination it finds, it emits:
-
-1. An extension method on the source type returning `(T1, T2, ..., RestType)` tuple
-2. A `TypeNameRest_<combo>` class containing the remaining properties
-
-Only the combos you actually use are generated — no combinatorial explosion. With 5 properties you could theoretically produce 31 rest types, but if you only use 3 distinct picks, the generator emits just 3.
-
-**Property name resolution:** Method names are parsed using greedy longest-match against the type's properties. So if `Person` has both `Name` and `NameId`, `PickNameId` matches the longer `NameId` property first; `PickNameIdEmail` is parsed as `NameId` + `Email`.
-
-**Code map for IDE navigation:** When the source type is declared `partial`, the generator emits a partial type with an XML `<summary>` listing all generated picks via clickable `<see cref>` links:
-
-```csharp
-[Destructurable]
-public partial class Person { ... }
-//                  ^^^^^^^ — required for code map
-```
-
-Hover `Person` in your IDE → tooltip shows:
-
-> **Destructurable code map for Person:**
-> - Pick methods: `__Person_Destructurable`
-> - `PickName(Person)` — picks Name, rest as `PersonRest_Name`
-> - `PickNameId(Person)` — picks Name, Id, rest as `PersonRest_NameId`
-> - `PickNameIdEmail(Person)` — picks Name, Id, Email, rest as `PersonRest_NameIdEmail`
-
-Each link is clickable — F12 / Go To Definition jumps to the generated type. Without `partial`, the extension methods and rest types still work, but the code map is not emitted.
-
-**Limits:**
-- Each property can only be picked once per call (`PickNameName` is invalid)
-- Picks are positional in the tuple — order in the method name determines order in the deconstruction (`PickNameId` returns `(Name, Id, rest)`, not `(Id, Name, rest)`)
-- Property names that aren't valid C# identifier prefixes won't resolve
-
-### Pattern matching with `PickXxx()`
-
-`PickXxx()` returns a regular C# `ValueTuple`, which means it plugs straight into **positional patterns**, **property patterns**, and `switch` expressions with `when` guards. One thing to keep in mind before you start writing patterns:
-
-> **Every `PickXxx()` produces exactly N+1 slots: one slot per picked property, then a single `rest` object at the end.** The `rest` is a strongly-typed object with properties for everything you didn't pick — not additional tuple elements. If you want to match on an unpicked field, go through the rest via a property pattern.
-
-Concretely, for `Person { Name, Id, Email, Age, City }`:
-
-```csharp
-person.PickName()              // (string, PersonRest_Name)            — 2 slots
-person.PickNameId()            // (string, int, PersonRest_NameId)     — 3 slots
-person.PickNameIdEmail()       // (string, int, string, PersonRest_…)  — 4 slots
-
-// rest is an object, NOT more tuple elements:
-var (name, id, rest) = person.PickNameId();
-// rest.Age, rest.Email, rest.City — access as properties
-```
-
-**Positional pattern in `if`** — match shape and values in one go:
-
-```csharp
-if (person.PickNameId() is ("Admin", 0, _))
-{
-    // Name == "Admin" AND Id == 0 — newly created admin
+    public static PersonNameId FromSource(Person src) => new(src.Name, src.Id);
+    public static Rest         RestOf(Person src)     => new(src.Email, src.Age, src.City);
+    public static (PersonNameId Picked, Rest Remaining) Split(Person src)
+        => (FromSource(src), RestOf(src));
 }
 ```
 
-**Pattern matching the rest object** — use a nested property pattern in the last slot:
+Usage:
 
 ```csharp
-// Match on a field that lives inside rest
-if (person.PickNameId() is (var name, _, { Age: < 18 }))
-{
-    Console.WriteLine($"underage: {name}");
-}
+var person = new Person("Alice", 42, "a@b.c", 30, "Warsaw");
 
-// Multiple rest fields at once
-if (person.PickName() is (var name, { Age: >= 18 and < 65, City: "Warsaw" }))
+var (picked, rest) = PersonNameId.Split(person);
+
+picked.Name        // "Alice"  — typed
+picked.Id          // 42       — typed
+rest.Email         // "a@b.c"  — typed, IDE-autocompleted
+rest.Age           // 30       — typed
+rest.City          // "Warsaw" — typed
+```
+
+**Why a shape record (and not a lambda or method-name encoding)?** Anonymous types in C#
+are nominal, not structural — they have no source-writable name a generator can emit code
+against. The C# language team has explicitly declined both
+[anonymous-type deconstruction](https://github.com/dotnet/csharplang/discussions/244) and
+[spread/rest object syntax](https://github.com/dotnet/csharplang/discussions/7507),
+positioning property mapping as "a job for a library method." Library methods, in turn,
+need a *named* type to hand back as the rest container — that's what the shape record is.
+
+The upside: every shape is also a regular DTO. Reuse it in responses, log payloads,
+mappers. No throwaway anon, no `dynamic`, no untyped dictionary.
+
+**Two declaration styles supported.** Primary-ctor records use positional construction;
+body-style records fall back to object initializers:
+
+```csharp
+// Primary-ctor — generator emits `new(src.Name, src.Id)`
+[Destructurable<Person>]
+public partial record PersonNameId(string Name, int Id);
+
+// Body — generator emits `new() { Name = src.Name, Email = src.Email }`
+[Destructurable<Person>]
+public partial record PersonContact
 {
-    Console.WriteLine($"working-age warsaw local: {name}");
+    public required string Name  { get; init; }
+    public required string Email { get; init; }
 }
 ```
 
-**`switch` expression with `when` guards** — full combination of positional + property + logical conditions:
+**Diagnostics.** Property name and type are validated against the source at compile time:
+
+| ID | Severity | Trigger |
+|---|---|---|
+| `ZDS0001` | Error   | Shape property does not exist on the source type |
+| `ZDS0002` | Error   | Shape property's type does not match source's declared type |
+| `ZDS0003` | Warning | Shape carries `[Destructurable<>]` but isn't `partial` (nothing emitted) |
+
+Renames are caught at the next build — no chance of silent drift between shape and source.
+
+### Pattern matching on the `Split` tuple
+
+`Split(src)` returns a regular `ValueTuple<TPicked, TRest>`, so it plugs into the full
+C# pattern-matching grammar — positional, property, switch with `when` guards.
 
 ```csharp
-var description = person.PickNameId() switch
+// Positional pattern — match the whole shape in one go
+if (PersonNameId.Split(person) is ({ Name: "Admin", Id: 0 }, _))
 {
-    // Guard on a picked slot (needs when because StartsWith is a method call)
-    (var n, _, _)            when n.StartsWith("Guest")  => $"guest: {n}",
+    // newly created admin
+}
 
-    // Constant pattern on slot 1
-    (_, 0, _)                                             => "unsaved",
+// Descend into rest via a property pattern
+if (PersonNameId.Split(person) is (var p, { Age: < 18 }))
+{
+    Console.WriteLine($"underage: {p.Name}");
+}
 
-    // Drill into rest via property pattern
-    (var n, _, { Age: < 18 })                             => $"minor: {n}",
-    (var n, _, { Age: >= 65 })                            => $"senior: {n}",
-
-    // Mix slot match with a rest-property guard
-    ("Admin", var id, { Email: var e })
-        when id > 0 && e.EndsWith("@company.com")         => $"internal admin ({e})",
-
-    // Bind rest and use it in `when` — equivalent to a nested property pattern,
-    // useful when the condition spans multiple rest fields
-    (var n, _, var rest) when rest.Age > 18 && rest.City == rest.Email.Split('@')[1]
-                                                            => $"{n} emails from home",
-
-    // Fallback
-    (var n, _, _)                                          => $"regular: {n}"
+// switch with when-guards — combine picked + rest constraints freely
+var label = PersonNameId.Split(person) switch
+{
+    ({ Name: var n }, _)               when n.StartsWith("Guest") => $"guest: {n}",
+    ({ Id: 0 }, _)                                                => "unsaved",
+    (var p, { Age: < 18 })                                        => $"minor: {p.Name}",
+    (var p, { Age: >= 65 })                                       => $"senior: {p.Name}",
+    ({ Name: "Admin" }, { Email: var e })
+        when e.EndsWith("@company.com")                           => $"internal admin ({e})",
+    (var p, var rest)
+        when rest.Age > 18 && rest.City == rest.Email.Split('@')[1] => $"{p.Name} emails from home",
+    (var p, _)                                                    => $"regular: {p.Name}",
 };
 ```
 
-Two patterns to notice:
-- `(var n, _, { Age: < 18 })` — the third slot isn't discarded, it's matched with a property pattern that descends into `rest.Age`. The compiler knows `rest` is `PersonRest_NameId` so `Age` is strongly typed.
-- `(var n, _, var rest)` + `when` — bind the whole rest object, then use it freely in the guard. Useful when you need multiple rest fields in one boolean expression.
-
-**Why this matters if you come from TypeScript:** `const { name, id, ...rest } = person` in TS gives you `rest` as a plain object, and you reach into it with `rest.age`. `PickXxx()` + positional pattern does exactly the same shape — picked fields are individual slots, everything else lives behind a typed `rest` handle. Positional patterns on `ValueTuple` happen to use parentheses `(...)` instead of square brackets `[...]`, but the mental model is identical.
+**Why this matters if you come from TypeScript:** `const { name, id, ...rest } = person`
+in TS gives you `rest` as a plain object, and you reach into it with `rest.age`. The
+shape-record approach gives you the same destructured shape (`picked` + typed `rest`)
+plus a named, reusable type for both halves. Where TS bakes the shape into the
+destructuring expression, C# moves it one level up into a partial record — the cost is
+one declaration line, the win is that the shape can be reused outside the destructure.
 
 ## Requirements
 
