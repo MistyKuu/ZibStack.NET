@@ -84,6 +84,20 @@ public sealed class TypeScriptSettings
     /// file. Default <c>true</c> to deter manual edits that would be overwritten.
     /// </summary>
     public bool EmitGeneratedBanner { get; set; } = true;
+
+    /// <summary>
+    /// When <c>true</c>, TypeGen discovers C# interfaces implemented by emitted
+    /// classes (and emits them as TS interfaces with <c>extends</c> / OpenAPI
+    /// schemas composed into <c>allOf</c>). Default <c>false</c> — interfaces
+    /// stay invisible to the generator, matching the original behaviour. Flip on
+    /// when your DTOs carry shared contracts via interfaces (<c>IAuditable</c>,
+    /// <c>IHasId</c>) and you want those contracts to surface in the emitted
+    /// types. The flag controls discovery across every target (TS, OpenAPI,
+    /// Python) — it lives on <see cref="TypeScriptSettings"/> because TS is the
+    /// most natural home for the interface concept; OpenAPI and Python pick up
+    /// the same flag via <see cref="GlobalSettings"/>.
+    /// </summary>
+    public bool EmitInterfaces { get; set; } = false;
 }
 
 /// <summary>

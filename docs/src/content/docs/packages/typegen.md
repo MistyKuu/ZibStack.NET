@@ -664,6 +664,35 @@ serializer expects.
 — they're pulled in by the polymorphic seed pass with the base's targets and
 output dir.
 
+## Interfaces
+
+By default TypeGen ignores C# interfaces — they're neither emitted nor wired
+into implementing classes. Flip `TypeScript.EmitInterfaces = true` in the
+configurator (single flag drives all three targets) and:
+
+```csharp
+b.TypeScript(ts => ts.EmitInterfaces = true);
+```
+
+- Every interface reached transitively from a `[GenerateTypes]` class gets
+  its own schema (TS `interface`, OpenAPI `type: object`). Annotate with
+  `[GenerateTypes]` directly to pull one in without an implementor.
+- Implementing classes `extends I1, I2` in TS / `allOf: [{$ref: I1}, {$ref: I2}, {type: object, …}]`
+  in OpenAPI, with inherited members deduplicated.
+- `[TsIgnore]` / `[OpenApiIgnore]` on an interface **member** takes effect —
+  the member never lands in the interface schema, and because the class
+  doesn't redeclare inherited members, it's gone from the output entirely.
+  This fixes a class of silent-swallow bugs where users put ignore attrs on
+  interface properties expecting them to propagate.
+- `[TsIgnore]` / `[OpenApiIgnore]` on the **interface itself** drops it from
+  the target's `extends` / `allOf` chain. The class then keeps its own
+  declaration of the inherited members so nothing is lost.
+- Marker interfaces (no public properties) are silently skipped — emitting
+  empty `type: object` schemas serves nobody.
+- Generic interfaces (`IHasPayload<T>`) are seeded by their open form;
+  implementing classes reference them with concrete type args
+  (`extends IHasPayload<string>`).
+
 ## Computed & immutable properties
 
 The C# accessor shape drives Create/Update participation and the generated

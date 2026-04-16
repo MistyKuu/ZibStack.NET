@@ -261,6 +261,11 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 SchemaParser.SeedGenericTypeTargets(model, compilation);
                 SchemaParser.SeedPolymorphicVariants(model, compilation);
                 SchemaParser.DiscoverBaseClasses(model, compilation);
+                // Interface discovery is opt-in via TypeScriptSettings.EmitInterfaces.
+                // When off, classes keep their inherited-from-interface members in
+                // their own body (original behaviour) — no extends/allOf chain.
+                if (config?.Settings.TypeScript.EmitInterfaces == true)
+                    SchemaParser.DiscoverInterfaces(model, compilation);
                 SchemaParser.DiscoverTransitive(model, compilation);
                 for (int i = clsBefore; i < model.Classes.Count; i++)
                     ApplyFluentToClass(model.Classes[i], config);

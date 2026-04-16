@@ -68,7 +68,7 @@ internal static class TypeScriptEmitter
             }
             EmitImports(sb, System.Linq.Enumerable.Empty<string>(), selfName: "", rolledImports);
             foreach (var cls in model.Classes)
-                EmitClass(sb, cls, ts, tsNameByCSharp);
+                EmitClass(sb, cls, ts, tsNameByCSharp, model);
             foreach (var en in model.Enums)
                 EmitEnum(sb, en, ts);
             files.Add(new EmittedFile(
@@ -85,7 +85,7 @@ internal static class TypeScriptEmitter
                 var sb = new StringBuilder();
                 EmitBanner(sb, ts);
                 EmitImports(sb, CollectClassReferences(cls, tsNameByCSharp), cls.EmittedName, CollectUserImports(cls));
-                EmitClass(sb, cls, ts, tsNameByCSharp);
+                EmitClass(sb, cls, ts, tsNameByCSharp, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.TypeScript,
                     OutputDir: cls.OutputDir,
@@ -143,6 +143,15 @@ internal static class TypeScriptEmitter
         // Generic base args (e.g. `extends Base<SomeType>` → SomeType import).
         foreach (var arg in cls.BaseClassTypeArguments)
             CollectRefs(arg, nameLookup, acc);
+        // Implemented interfaces each need their own import line when emitted in
+        // FilePerClass mode — the `extends` chain references them by name.
+        for (int i = 0; i < cls.ImplementedInterfaces.Count; i++)
+        {
+            var ifaceFqn = cls.ImplementedInterfaces[i];
+            if (nameLookup.TryGetValue(ifaceFqn, out var ifaceName)) acc.Add(ifaceName);
+            foreach (var arg in cls.ImplementedInterfaceTypeArguments[i])
+                CollectRefs(arg, nameLookup, acc);
+        }
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
@@ -205,7 +214,7 @@ internal static class TypeScriptEmitter
         sb.AppendLine();
     }
 
-    private static void EmitClass(StringBuilder sb, SchemaClass cls, TypeScriptSettings ts, IReadOnlyDictionary<string, string> nameLookup)
+    private static void EmitClass(StringBuilder sb, SchemaClass cls, TypeScriptSettings ts, IReadOnlyDictionary<string, string> nameLookup, SchemaModel model)
     {
         if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) return;
 
@@ -255,14 +264,47 @@ internal static class TypeScriptEmitter
             baseSuffix = "<" + string.Join(", ", args) + ">";
         }
 
-        if (ts.UseInterfaces)
-            sb.AppendLine(baseTs is null
-                ? $"export interface {cls.EmittedName}{typeParamsSuffix} {{"
-                : $"export interface {cls.EmittedName}{typeParamsSuffix} extends {baseTs}{baseSuffix} {{");
+        // Build the TS extends list: base class first, then implemented interfaces
+        // that survive the TS-visibility gate (present in model, not TsIgnored,
+        // targeted for TypeScript). Interfaces that fail the gate stay out — the
+        // class keeps its own redeclaration of their members below instead.
+        var extendsParts = new List<string>();
+        if (baseTs is not null) extendsParts.Add(baseTs + baseSuffix);
+        var coveredMemberNames = new HashSet<string>(System.StringComparer.Ordinal);
+        for (int i = 0; i < cls.ImplementedInterfaces.Count; i++)
+        {
+            var ifaceFqn = cls.ImplementedInterfaces[i];
+            var ifaceCls = model.Classes.FirstOrDefault(c => c.CSharpFullName == ifaceFqn);
+            if (ifaceCls is null) continue;
+            if (ifaceCls.TsIgnore || (ifaceCls.Targets & TypeTarget.TypeScript) == 0) continue;
+            if (!nameLookup.TryGetValue(ifaceFqn, out var ifaceName)) continue;
+
+            var argList = cls.ImplementedInterfaceTypeArguments[i];
+            var ifaceSuffix = argList.Count == 0 ? "" :
+                "<" + string.Join(", ", argList.Select(a => MapCSharpToTs(a, false, nameLookup, cls.TypeParameters))) + ">";
+            extendsParts.Add(ifaceName + ifaceSuffix);
+
+            // Track member names that the interface covers — those get skipped
+            // in the class's own property loop so we don't redeclare them.
+            foreach (var p in ifaceCls.Properties)
+                coveredMemberNames.Add(p.SourceName);
+        }
+        // Base-class members already contribute via existing "emittedAncestorNames"
+        // dedupe done at parse time (cls.Properties are the declared-minus-inherited
+        // set). Interfaces weren't visible then; cover them here.
+
+        var extendsClause = extendsParts.Count > 0 ? " extends " + string.Join(", ", extendsParts) : "";
+
+        if (cls.IsInterface || ts.UseInterfaces)
+            sb.AppendLine($"export interface {cls.EmittedName}{typeParamsSuffix}{extendsClause} {{");
         else
-            sb.AppendLine(baseTs is null
-                ? $"export type {cls.EmittedName}{typeParamsSuffix} = {{"
-                : $"export type {cls.EmittedName}{typeParamsSuffix} = {baseTs}{baseSuffix} & {{");
+        {
+            // `type` aliases don't support `extends` — use an intersection block.
+            var intersectPrefix = extendsParts.Count > 0
+                ? string.Join(" & ", extendsParts) + " & "
+                : "";
+            sb.AppendLine($"export type {cls.EmittedName}{typeParamsSuffix} = {intersectPrefix}{{");
+        }
 
         // Polymorphic variant: stamp the discriminator property as a literal type
         // FIRST so narrowing works (`if (s.kind === "circle") …` → TS sees Circle).
@@ -275,6 +317,10 @@ internal static class TypeScriptEmitter
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
+            // Skip properties already carried by an extended interface — avoids
+            // duplicate declarations that'd widen the required set and confuse
+            // structural type compatibility on `extends` chains.
+            if (coveredMemberNames.Contains(prop.SourceName)) continue;
             var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, ts.PropertyNameStyle);
             var typeExpr = prop.TsTypeOverride ?? MapCSharpToTs(prop.CSharpTypeFullName, prop.IsNullable, nameLookup, cls.TypeParameters);
             // Server-computed getters (`public int X => …;` / `{ get; private set; }`)
@@ -302,7 +348,11 @@ internal static class TypeScriptEmitter
             sb.AppendLine($"    [key: string]: {valueType};");
         }
 
-        sb.AppendLine(ts.UseInterfaces ? "}" : "};");
+        // Match the closing brace to the opening form — an interface-kind schema
+        // was forced to emit as `interface {` above; everything else respects
+        // the user's UseInterfaces preference.
+        var emittedAsInterface = cls.IsInterface || ts.UseInterfaces;
+        sb.AppendLine(emittedAsInterface ? "}" : "};");
         sb.AppendLine();
     }
 

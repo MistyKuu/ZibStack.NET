@@ -87,6 +87,7 @@ internal sealed class TypeScriptSettings
     public NameStyle TypeNameStyle { get; set; } = NameStyle.AsIs;
     public IList<string> StripSuffixes { get; } = new List<string>();
     public bool EmitGeneratedBanner { get; set; } = true;
+    public bool EmitInterfaces { get; set; } = false;
 }
 
 internal sealed class OpenApiSettings
@@ -197,6 +198,34 @@ internal sealed class SchemaClass
     /// property type). Empty when the base is non-generic.
     /// </summary>
     public List<string> BaseClassTypeArguments { get; } = new();
+
+    /// <summary>
+    /// True when this schema represents a C# interface. Emitters treat these
+    /// slightly differently: TypeScript always uses the <c>interface</c> form
+    /// (not <c>type</c>) regardless of <see cref="TypeScriptSettings.UseInterfaces"/>,
+    /// and the generic class logic still applies (<c>interface IHasPayload&lt;T&gt;</c>).
+    /// </summary>
+    public bool IsInterface { get; set; }
+
+    /// <summary>
+    /// FQNs of C# interfaces this class directly implements and that were
+    /// accepted as emittable (same gate as base classes — user-defined, not BCL,
+    /// non-empty). Populated by <see cref="M:ZibStack.NET.TypeGen.Generator.SchemaParser.DiscoverInterfaces"/>
+    /// when the <c>EmitInterfaces</c> setting is on. TypeScript emitter turns
+    /// this into <c>extends I1, I2</c>; OpenAPI emits <c>allOf: [{$ref: I1}, {$ref: I2}, {type: object, …}]</c>.
+    /// Generic interfaces are stored by open form (<c>IPayload&lt;T&gt;</c>);
+    /// the type arguments live on <see cref="ImplementedInterfaceTypeArguments"/>
+    /// parallel to this list (one sub-list per entry).
+    /// </summary>
+    public List<string> ImplementedInterfaces { get; } = new();
+
+    /// <summary>
+    /// Parallel to <see cref="ImplementedInterfaces"/>: for each implemented
+    /// interface, the concrete type arguments if the reference is constructed-
+    /// generic (<c>IPayload&lt;string&gt;</c> → <c>["string"]</c>). Empty inner
+    /// list for non-generic interfaces or open-generic references.
+    /// </summary>
+    public List<List<string>> ImplementedInterfaceTypeArguments { get; } = new();
 
     /// <summary>
     /// Present when this class is a polymorphic base (carries

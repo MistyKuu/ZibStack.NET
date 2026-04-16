@@ -313,6 +313,22 @@ internal static class SchemaParser
     }
 
     /// <summary>
+    /// Interface counterpart to <see cref="IsEmittableAsBaseClass"/>: user-defined
+    /// interface in a non-BCL namespace. Marker interfaces (no members) are
+    /// additionally filtered at seed time — emitting an empty schema for them
+    /// just pollutes <c>components/schemas</c>.
+    /// </summary>
+    private static bool IsEmittableInterface(INamedTypeSymbol t)
+    {
+        if (t.TypeKind != TypeKind.Interface) return false;
+        var ns = t.ContainingNamespace?.ToDisplayString() ?? "";
+        if (ns == "System" || ns.StartsWith("System.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Microsoft.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Newtonsoft.", System.StringComparison.Ordinal)) return false;
+        return true;
+    }
+
+    /// <summary>
     /// After the initial root-parse, walks the inheritance chain of every class
     /// in the model and auto-seeds any un-annotated ancestor that's
     /// <see cref="IsEmittableAsBaseClass"/>-emittable. This guarantees every
@@ -357,6 +373,65 @@ internal static class SchemaParser
             if (baseCls is null) continue;
             model.Classes.Add(baseCls);
             queue.Enqueue(baseCls);
+        }
+    }
+
+    /// <summary>
+    /// Walks each class's <c>symbol.Interfaces</c> (directly-implemented only —
+    /// transitive inheritance through interfaces is intentionally NOT walked
+    /// here so <c>Child : IParent</c> doesn't end up <c>extends IParent, IBase</c>
+    /// when <c>IParent : IBase</c>). For every emittable interface reached,
+    /// records the reference on the class (<see cref="SchemaClass.ImplementedInterfaces"/>)
+    /// and seeds a standalone schema if one doesn't already exist. Skips marker
+    /// interfaces (no public properties) — emitting an empty schema would just
+    /// pollute the output. Open-generic seeding mirrors <see cref="DiscoverBaseClasses"/>:
+    /// a single canonical schema per generic definition, with concrete type args
+    /// captured on the referencing class.
+    /// </summary>
+    public static void DiscoverInterfaces(SchemaModel model, Compilation compilation)
+    {
+        var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+        foreach (var c in model.Classes)
+        {
+            var s = compilation.GetTypeByMetadataName(ToMetadataName(c.CSharpFullName));
+            if (s is not null) seen.Add(s);
+        }
+
+        var queue = new Queue<SchemaClass>(model.Classes);
+        while (queue.Count > 0)
+        {
+            var cls = queue.Dequeue();
+            var clsSym = compilation.GetTypeByMetadataName(ToMetadataName(cls.CSharpFullName));
+            if (clsSym is null) continue;
+
+            foreach (var iface in clsSym.Interfaces)
+            {
+                if (!IsEmittableInterface(iface)) continue;
+                // Marker interface filter — any public instance property makes
+                // it carry a contract worth emitting.
+                var hasProp = iface.GetMembers().OfType<IPropertySymbol>()
+                    .Any(p => !p.IsStatic && !p.IsIndexer && p.DeclaredAccessibility == Accessibility.Public);
+                if (!hasProp) continue;
+
+                var openIface = iface.IsGenericType ? iface.ConstructedFrom : iface;
+                var openFqn = openIface.ToDisplayString();
+
+                if (seen.Add(openIface))
+                {
+                    var aux = ParseAuxiliaryClass(openIface, cls.Targets, cls.OutputDir);
+                    if (aux is null) continue;
+                    model.Classes.Add(aux);
+                    queue.Enqueue(aux);
+                }
+
+                if (cls.ImplementedInterfaces.Contains(openFqn)) continue;
+                cls.ImplementedInterfaces.Add(openFqn);
+                var typeArgs = new List<string>();
+                if (iface.IsGenericType)
+                    foreach (var a in iface.TypeArguments)
+                        typeArgs.Add(a.ToDisplayString());
+                cls.ImplementedInterfaceTypeArguments.Add(typeArgs);
+            }
         }
     }
 
@@ -627,6 +702,7 @@ internal static class SchemaParser
             OpenApiIgnore = HasAttr(symbol, OpenApiIgnoreAttr),
             Crud = ReadCrudApi(symbol),
             BaseClassFullName = baseFullName,
+            IsInterface = symbol.TypeKind == TypeKind.Interface,
         };
         if (symbol.IsGenericType)
             foreach (var tp in symbol.TypeParameters)

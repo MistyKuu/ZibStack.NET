@@ -94,7 +94,7 @@ internal static class OpenApiEmitter
         foreach (var cls in model.Classes)
         {
             if (cls.OpenApiIgnore || (cls.Targets & TypeTarget.OpenApi) == 0) continue;
-            EmitClassYaml(sb, cls, nameByCSharp, indent: "    ");
+            EmitClassYaml(sb, cls, nameByCSharp, indent: "    ", model);
         }
         foreach (var en in model.Enums)
         {
@@ -393,7 +393,7 @@ internal static class OpenApiEmitter
         return (mapped.TypeKey, mapped.FmtKey);
     }
 
-    private static void EmitClassYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
+    private static void EmitClassYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent, SchemaModel model)
     {
         // Polymorphic base → `oneOf` with `discriminator.mapping`. Variants emit
         // as their own schemas (via ordinary EmitClassYaml on the variant); this
@@ -427,23 +427,45 @@ internal static class OpenApiEmitter
             && nameByCSharp.TryGetValue(bfn, out var bn)
             && cls.PolymorphicDiscriminatorValue is null
             ? bn : null;
-        if (baseRef is not null)
+
+        // Each implemented interface that's visible for OpenAPI (in the model,
+        // not OpenApiIgnored, targeted for OpenApi) contributes a $ref to the
+        // allOf chain — same mechanism as base-class inheritance, just a list.
+        // Also tracks the property names those interfaces cover, so the class
+        // body skips redeclaring them in the inline `type: object` block.
+        var ifaceRefs = new List<string>();
+        var coveredByIfaces = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var ifaceFqn in cls.ImplementedInterfaces)
+        {
+            var ifaceCls = model.Classes.FirstOrDefault(c => c.CSharpFullName == ifaceFqn);
+            if (ifaceCls is null) continue;
+            if (ifaceCls.OpenApiIgnore || (ifaceCls.Targets & TypeTarget.OpenApi) == 0) continue;
+            if (!nameByCSharp.TryGetValue(ifaceFqn, out var ifaceName)) continue;
+            ifaceRefs.Add(ifaceName);
+            foreach (var p in ifaceCls.Properties) coveredByIfaces.Add(p.SourceName);
+        }
+
+        if (baseRef is not null || ifaceRefs.Count > 0)
         {
             sb.AppendLine($"{indent}{cls.EmittedName}:");
             sb.AppendLine($"{indent}  allOf:");
-            sb.AppendLine($"{indent}    - $ref: '#/components/schemas/{baseRef}'");
+            if (baseRef is not null)
+                sb.AppendLine($"{indent}    - $ref: '#/components/schemas/{baseRef}'");
+            foreach (var r in ifaceRefs)
+                sb.AppendLine($"{indent}    - $ref: '#/components/schemas/{r}'");
             sb.AppendLine($"{indent}    - type: object");
-            EmitClassBodyYaml(sb, cls, nameByCSharp, indent + "      ");
+            EmitClassBodyYaml(sb, cls, nameByCSharp, indent + "      ", coveredByIfaces);
             return;
         }
         sb.AppendLine($"{indent}{cls.EmittedName}:");
         sb.AppendLine($"{indent}  type: object");
-        EmitClassBodyYaml(sb, cls, nameByCSharp, indent + "  ");
+        EmitClassBodyYaml(sb, cls, nameByCSharp, indent + "  ", coveredByIfaces);
     }
 
-    private static void EmitClassBodyYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
+    private static void EmitClassBodyYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent, HashSet<string>? coveredByIfaces = null)
     {
-        var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
+        var ifaceCovered = coveredByIfaces ?? new HashSet<string>(System.StringComparer.Ordinal);
+        var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore && !ifaceCovered.Contains(p.SourceName)).ToList();
         // Drop read-only properties from the `required` list: conventional OpenAPI
         // codegen treats `readOnly: true + required` as "present in response,
         // omitted from request". Since TypeGen emits a single schema per type,
@@ -632,7 +654,7 @@ internal static class OpenApiEmitter
             if (cls.OpenApiIgnore || (cls.Targets & TypeTarget.OpenApi) == 0) continue;
             if (!first) sb.AppendLine(",");
             first = false;
-            EmitClassJson(sb, cls, nameByCSharp, "      ");
+            EmitClassJson(sb, cls, nameByCSharp, "      ", model);
         }
         foreach (var en in model.Enums)
         {
@@ -657,22 +679,38 @@ internal static class OpenApiEmitter
         return sb.ToString();
     }
 
-    private static void EmitClassJson(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
+    private static void EmitClassJson(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent, SchemaModel model)
     {
-        // Inheritance: emit allOf[{$ref: base}, {type: object, ...}] when the base is
-        // in the model. Otherwise fall back to a single {type: object, ...} block.
+        // Inheritance: emit allOf[{$ref: base}, {$ref: iface…}, {type: object, ...}]
+        // when base or interfaces are in the model. Otherwise fall back to a
+        // single {type: object, ...} block.
         var baseRef = cls.BaseClassFullName is { } bfn && nameByCSharp.TryGetValue(bfn, out var bn) ? bn : null;
-        var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
+        var ifaceRefs = new List<string>();
+        var coveredByIfaces = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var ifaceFqn in cls.ImplementedInterfaces)
+        {
+            var ifaceCls = model.Classes.FirstOrDefault(c => c.CSharpFullName == ifaceFqn);
+            if (ifaceCls is null) continue;
+            if (ifaceCls.OpenApiIgnore || (ifaceCls.Targets & TypeTarget.OpenApi) == 0) continue;
+            if (!nameByCSharp.TryGetValue(ifaceFqn, out var ifaceName)) continue;
+            ifaceRefs.Add(ifaceName);
+            foreach (var p in ifaceCls.Properties) coveredByIfaces.Add(p.SourceName);
+        }
+
+        var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore && !coveredByIfaces.Contains(p.SourceName)).ToList();
         // See EmitClassBodyYaml for why IsReadOnly is excluded from required —
         // single-schema emission + readOnly convention means forcing them would
         // break client-side payload construction.
         var required = emittedProps.Where(p => !IsEffectivelyNullable(p) && !p.IsReadOnly).ToList();
 
         sb.AppendLine($"{indent}{JsonString(cls.EmittedName)}: {{");
-        if (baseRef is not null)
+        if (baseRef is not null || ifaceRefs.Count > 0)
         {
             sb.AppendLine($"{indent}  \"allOf\": [");
-            sb.AppendLine($"{indent}    {{ \"$ref\": \"#/components/schemas/{baseRef}\" }},");
+            if (baseRef is not null)
+                sb.AppendLine($"{indent}    {{ \"$ref\": \"#/components/schemas/{baseRef}\" }},");
+            foreach (var r in ifaceRefs)
+                sb.AppendLine($"{indent}    {{ \"$ref\": \"#/components/schemas/{r}\" }},");
             sb.Append($"{indent}    {{ \"type\": \"object\"");
             WriteRequiredAndPropsJson(sb, emittedProps, required, nameByCSharp, indent + "    ");
             sb.AppendLine();
