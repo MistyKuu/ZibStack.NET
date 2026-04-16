@@ -303,9 +303,13 @@ public class InheritedPropertyDedupeTests
         {
             var t = l.TrimStart();
             // `readonly` modifier prefixes getter-only props — the abstract
-            // `Type { get; }` declaration surfaces as `readonly type: …`.
+            // `Type { get; }` declaration surfaces as `readonly type?: …`
+            // (readonly implies optional since TypeGen's single-schema shape
+            // serves both reads and writes).
             return t.StartsWith("type:", System.StringComparison.OrdinalIgnoreCase)
                 || t.StartsWith("Type:", System.StringComparison.Ordinal)
+                || t.StartsWith("readonly type?:", System.StringComparison.Ordinal)
+                || t.StartsWith("readonly Type?:", System.StringComparison.Ordinal)
                 || t.StartsWith("readonly type:", System.StringComparison.Ordinal)
                 || t.StartsWith("readonly Type:", System.StringComparison.Ordinal);
         });

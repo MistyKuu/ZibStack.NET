@@ -669,20 +669,22 @@ output dir.
 The C# accessor shape drives Create/Update participation and the generated
 client contract:
 
-| C# property                   | TS                 | OpenAPI        | Python (Pydantic)        | Dto `Create` | Dto `Update` |
-| ----------------------------- | ------------------ | -------------- | ------------------------ | ------------ | ------------ |
-| `public int X { get; set; }`  | `x: number;`       | normal         | normal                   | ✓            | ✓            |
-| `public int X { get; init; }` | `x: number;`       | normal         | normal                   | ✓            | — *(init)*   |
-| `public int X { get; }`       | `readonly x:…`     | `readOnly: …`  | `Field(frozen=True)`     | —            | —            |
-| `public int X => Y * Z;`      | `readonly x:…`     | `readOnly: …`  | `Field(frozen=True)`     | —            | —            |
-| `public int X { get; private set; }` | `readonly x:…` | `readOnly: …` | `Field(frozen=True)`     | —            | —            |
+| C# property                   | TS                   | OpenAPI                      | Python (Pydantic)                 | Dto `Create` | Dto `Update` |
+| ----------------------------- | -------------------- | ---------------------------- | --------------------------------- | ------------ | ------------ |
+| `public int X { get; set; }`  | `x: number;`         | `required`                   | `x: int`                          | ✓            | ✓            |
+| `public int X { get; init; }` | `x: number;`         | `required`                   | `x: int`                          | ✓            | — *(init)*   |
+| `public int X { get; }`       | `readonly x?: number;` | `readOnly: true` + **not** required | `x: int \| None = Field(default=None, frozen=True)` | —            | —            |
+| `public int X => Y * Z;`      | `readonly x?: number;` | `readOnly: true` + **not** required | `x: int \| None = Field(default=None, frozen=True)` | —            | —            |
+| `public int X { get; private set; }` | `readonly x?: number;` | `readOnly: true` + **not** required | `x: int \| None = Field(default=None, frozen=True)` | —            | —            |
 
-Why it matters: a server-computed field (aggregate, timestamp, derived flag)
-would be silently dropped by the server if a client sent one — making the
-field visible in the request DTO is a footgun. The Dto generator excludes it
-from both `Create` and `Update`, and TypeGen publishes the read-only contract
-across all three targets so mainstream OpenAPI codegens (orval, Kiota,
-openapi-typescript-codegen) strip it from request models automatically.
+Why the `?` / optional: TypeGen emits a single schema per type, used for both
+reading responses and constructing request payloads. Leaving computed fields
+strictly required would force clients to provide values they shouldn't set
+(server-owned), so readonly props become **optional at the TS / Python level
+and excluded from the OpenAPI `required` list**. On the response side this
+still types-checks — consumers read the value normally; it's just not
+enforced at the type system during construction. `readOnly: true` / `readonly` /
+`frozen=True` still prevent mutation after the value lands on the object.
 
 `init`-only properties participate in `Create` (that's what `init` is for —
 ctor-time assignment), but drop out of `Update` (an `init` accessor rejects

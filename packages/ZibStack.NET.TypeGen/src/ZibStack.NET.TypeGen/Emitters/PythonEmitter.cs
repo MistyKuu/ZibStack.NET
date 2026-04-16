@@ -191,6 +191,12 @@ internal static class PythonEmitter
         {
             var srcName = prop.SourceName;
             var pyName = py.SnakeCaseProperties ? ToSnakeCase(srcName) : srcName;
+            // Read-only ⇒ treat as optional at the Pydantic level too: mirrors the
+            // TS `?` and the OpenAPI `readOnly` — single model serves both read
+            // and write, so server-computed fields don't need a value client-side.
+            // The `frozen=True` still blocks reassignment after construction, so
+            // you can't accidentally mutate a value parsed from a server response.
+            var pyOptional = prop.IsNullable || prop.IsReadOnly;
             // `[UseType<T>]` short-circuit: emit T's Python name directly when T
             // is in the model (CollectRefsRecursive picked it up for imports).
             // Nullable wrapping still applies. External targets (not in model)
@@ -199,13 +205,13 @@ internal static class PythonEmitter
             if (prop.TargetTypeCSharpFqn is { } useTypeFqn
                 && nameLookup.TryGetValue(useTypeFqn, out var useTypePy))
             {
-                typeExpr = prop.IsNullable ? useTypePy + " | None" : useTypePy;
+                typeExpr = pyOptional ? useTypePy + " | None" : useTypePy;
             }
             else
             {
-                typeExpr = MapCSharpToPy(prop.CSharpTypeFullName, prop.IsNullable, nameLookup);
+                typeExpr = MapCSharpToPy(prop.CSharpTypeFullName, pyOptional, nameLookup);
             }
-            var optional = prop.IsNullable;
+            var optional = pyOptional;
 
             if (py.Style == PythonStyle.Pydantic)
             {

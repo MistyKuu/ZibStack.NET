@@ -69,10 +69,11 @@ public class ComputedPropertiesTests
         var model = BuildModel();
         var ts = TypeScriptEmitter.Emit(model, new GlobalSettings()).Single(f => f.FileName == "Order.ts").Content;
 
-        // Read-only accessors → `readonly` modifier; narrows the TS contract so
-        // clients can't reassign without a compile error.
-        Assert.Contains("readonly total: string;", ts);
-        Assert.Contains("readonly createdAt: string;", ts);
+        // Read-only accessors → `readonly` modifier AND optional (`?`): blocks
+        // client reassignment, but doesn't force the field at construction time
+        // when a client is building a request payload.
+        Assert.Contains("readonly total?: string;", ts);
+        Assert.Contains("readonly createdAt?: string;", ts);
 
         // Init-only stays mutable in TS (no equivalent modifier; Dto pipeline
         // enforces the create-time-only shape server-side).
@@ -91,16 +92,28 @@ public class ComputedPropertiesTests
         var yaml = OpenApiEmitter.Emit(model, new GlobalSettings()).Single().Content;
 
         // Exactly two `readOnly: true` lines — one for Total, one for CreatedAt.
-        // Regex spans on lazy quantifiers across properties would false-match, so
-        // count lines directly: each occurrence lives on its own indented line.
         var roLines = System.Text.RegularExpressions.Regex.Matches(yaml, @"\n\s+readOnly: true\b").Count;
         Assert.Equal(2, roLines);
 
-        // And they sit *after* the Total / CreatedAt property names — stricter
-        // per-property check with a single-property window (next sibling starts
-        // at the same indent, which is 10 spaces given the yaml structure).
+        // Per-property check (10-space indent is the properties-block depth).
         Assert.Matches(@"Total:\r?\n(?:          [^\n]*\r?\n)*?          readOnly: true", yaml);
         Assert.Matches(@"CreatedAt:\r?\n(?:          [^\n]*\r?\n)*?          readOnly: true", yaml);
+
+        // Read-only props must NOT appear in the schema's `required` list:
+        // conventional codegen uses `readOnly + required` to mean "required in
+        // response, omitted in request", but we emit one schema for both paths,
+        // so keeping them required would break client-side request construction.
+        // Match the `required:` block that directly follows `Order:` anywhere
+        // in the doc — non-greedy so it doesn't spill into the next schema.
+        var reqMatch = System.Text.RegularExpressions.Regex.Match(
+            yaml,
+            @"Order:\r?\n[\s\S]*?required:\r?\n((?:\s+- [^\r\n]+\r?\n)+)");
+        Assert.True(reqMatch.Success, "Order schema has no required block in yaml.");
+        var reqList = reqMatch.Groups[1].Value;
+        Assert.DoesNotContain("- Total", reqList);
+        Assert.DoesNotContain("- CreatedAt", reqList);
+        // Plain scalar props still required.
+        Assert.Contains("- Id", reqList);
     }
 
     [Fact]
@@ -109,10 +122,12 @@ public class ComputedPropertiesTests
         var model = BuildModel();
         var py = PythonEmitter.Emit(model, new GlobalSettings()).Single(f => f.FileName == "order.py").Content;
 
-        // Default Pydantic settings snake_case property names and preserve the
-        // original wire key via `alias="…"`. Both flags merged into one Field() call.
-        Assert.Contains("total: str = Field(alias=\"Total\", frozen=True)", py);
-        Assert.Contains("created_at: datetime = Field(alias=\"CreatedAt\", frozen=True)", py);
+        // Read-only props become Optional (`T | None`) with `default=None` + frozen:
+        // the single-model shape serves both read and write, so client-side
+        // construction doesn't need to provide a value. `frozen=True` still
+        // blocks reassignment on values parsed from server responses.
+        Assert.Contains("total: str | None = Field(default=None, alias=\"Total\", frozen=True)", py);
+        Assert.Contains("created_at: datetime | None = Field(default=None, alias=\"CreatedAt\", frozen=True)", py);
 
         // Init-only maps to a normal Pydantic field — the "write-once" semantic
         // doesn't carry over to Python, and faking it with frozen=True would

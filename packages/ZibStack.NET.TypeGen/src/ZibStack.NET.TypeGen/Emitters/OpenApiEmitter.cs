@@ -444,7 +444,15 @@ internal static class OpenApiEmitter
     private static void EmitClassBodyYaml(StringBuilder sb, SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
     {
         var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
-        var required = emittedProps.Where(p => !IsEffectivelyNullable(p)).ToList();
+        // Drop read-only properties from the `required` list: conventional OpenAPI
+        // codegen treats `readOnly: true + required` as "present in response,
+        // omitted from request". Since TypeGen emits a single schema per type,
+        // leaving them required would force clients to include server-computed
+        // fields when constructing request payloads — the exact footgun the
+        // readOnly flag exists to prevent. Still required in spirit on the
+        // response side; any codegen that generates split response/request types
+        // will carry them over to the response schema.
+        var required = emittedProps.Where(p => !IsEffectivelyNullable(p) && !p.IsReadOnly).ToList();
         // Polymorphic variant: discriminator is always present + required.
         var hasDiscProp = cls.PolymorphicDiscriminatorValue is not null
             && cls.PolymorphicDiscriminatorPropertyOnVariant is not null;
@@ -655,7 +663,10 @@ internal static class OpenApiEmitter
         // in the model. Otherwise fall back to a single {type: object, ...} block.
         var baseRef = cls.BaseClassFullName is { } bfn && nameByCSharp.TryGetValue(bfn, out var bn) ? bn : null;
         var emittedProps = cls.Properties.Where(p => !p.OpenApiIgnore).ToList();
-        var required = emittedProps.Where(p => !IsEffectivelyNullable(p)).ToList();
+        // See EmitClassBodyYaml for why IsReadOnly is excluded from required —
+        // single-schema emission + readOnly convention means forcing them would
+        // break client-side payload construction.
+        var required = emittedProps.Where(p => !IsEffectivelyNullable(p) && !p.IsReadOnly).ToList();
 
         sb.AppendLine($"{indent}{JsonString(cls.EmittedName)}: {{");
         if (baseRef is not null)

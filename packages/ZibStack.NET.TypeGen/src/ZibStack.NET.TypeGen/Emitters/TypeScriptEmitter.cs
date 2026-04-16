@@ -277,14 +277,16 @@ internal static class TypeScriptEmitter
             if (prop.TsIgnore) continue;
             var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, ts.PropertyNameStyle);
             var typeExpr = prop.TsTypeOverride ?? MapCSharpToTs(prop.CSharpTypeFullName, prop.IsNullable, nameLookup, cls.TypeParameters);
-            var optionalMarker = prop.IsNullable ? "?" : "";
             // Server-computed getters (`public int X => …;` / `{ get; private set; }`)
-            // surface as `readonly` so the TS compiler blocks reassignment on the
-            // client — mirrors the C# contract. `init` accessors stay mutable:
-            // TS has no equivalent "set once at construction" modifier, and the
-            // Dto pipeline already blocks the client-visible Update variant from
-            // exposing them.
+            // are `readonly` (blocks client reassignment) AND optional: a single
+            // interface serves both read and write paths, so forcing the field at
+            // construction time would break client-side object building for
+            // create/update payloads. On the response side the server always
+            // returns the value — consumers read it as usual. `init` accessors
+            // stay plain-required: the Dto pipeline already excludes them from
+            // the Update request, and at construction time they ARE required.
             var readOnlyMod = prop.IsReadOnly ? "readonly " : "";
+            var optionalMarker = (prop.IsNullable || prop.IsReadOnly) ? "?" : "";
             sb.AppendLine($"    {readOnlyMod}{name}{optionalMarker}: {typeExpr};");
         }
 
