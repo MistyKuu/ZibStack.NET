@@ -15,6 +15,7 @@
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
     <PackageTags>typegen;openapi;typescript;source-generator;codegen;roslyn</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <IncludeBuildOutput>false</IncludeBuildOutput>
   </PropertyGroup>
@@ -47,6 +48,7 @@
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="build\ZibStack.NET.TypeGen.props" Pack="true" PackagePath="build\" Condition="Exists('build\ZibStack.NET.TypeGen.props')" />
     <None Include="build\ZibStack.NET.TypeGen.targets" Pack="true" PackagePath="build\" Condition="Exists('build\ZibStack.NET.TypeGen.targets')" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

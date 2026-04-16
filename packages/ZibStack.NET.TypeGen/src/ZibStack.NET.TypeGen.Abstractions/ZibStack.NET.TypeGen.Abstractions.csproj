@@ -12,6 +12,11 @@
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MistyKuu/ZibStack.NET</RepositoryUrl>
     <PackageTags>typegen;openapi;typescript;source-generator;codegen</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>

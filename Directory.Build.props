@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    Repo-wide MSBuild defaults. Lives at the solution root so every csproj
+    imports it implicitly; individual projects can still override anything
+    defined here. Scope is deliberately tight — only metadata common to
+    every produced NuGet package, nothing that touches compile/test behaviour.
+  -->
+
+  <PropertyGroup>
+    <Authors>MistyKuu</Authors>
+    <Company>ZibStack.NET</Company>
+    <Copyright>Copyright © MistyKuu / ZibStack.NET contributors</Copyright>
+    <!-- Every packed project has the same icon file name inside the nupkg. The
+         actual image comes from assets/icon.png at the repo root — see the
+         ItemGroup below. Skippable at the project level by blanking PackageIcon. -->
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(PackageId)' != '' AND Exists('$(MSBuildThisFileDirectory)assets/icon.png')">
+    <None Include="$(MSBuildThisFileDirectory)assets/icon.png"
+          Pack="true"
+          PackagePath="icon.png"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>
