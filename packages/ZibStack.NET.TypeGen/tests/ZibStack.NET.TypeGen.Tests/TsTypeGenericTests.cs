@@ -186,6 +186,77 @@ public class TsTypeGenericTests
     }
 
     [Fact]
+    public void GenericTsType_SeededTarget_GoesThroughNestedDiscoveryToo()
+    {
+        // The T in [TsType<T>] enters the model via SeedGenericTsTypeTargets
+        // *before* DiscoverTransitive runs. That means anything T references
+        // (nested classes, enums, collections) rides the same transitive walk
+        // as if T had been a normal property type — no special case needed.
+        var model = ParseAll("""
+            using System.Collections.Generic;
+            using System.Text.Json.Nodes;
+            using ZibStack.NET.TypeGen;
+            namespace Gen;
+
+            [GenerateTypes(Targets = TypeTarget.TypeScript, OutputDir = ".")]
+            public class Rule
+            {
+                // `Element` has no C# type link to Payload — TypeGen would leave
+                // it at `unknown` without the generic hint. With [TsType<Payload>]
+                // the whole Payload-reachable graph lands in the output.
+                [TsType<Payload>]
+                public JsonObject? Element { get; set; }
+            }
+
+            // Payload has no [GenerateTypes] — pulled in solely by [TsType<Payload>].
+            public class Payload
+            {
+                public string Title { get; set; } = "";
+                public Detail Info { get; set; } = new();          // nested class
+                public List<Tag> Tags { get; set; } = new();       // collection-wrapped nested
+                public Severity Level { get; set; }                // nested enum
+            }
+
+            public class Detail { public int Score { get; set; } }
+            public class Tag { public string Name { get; set; } = ""; }
+            public enum Severity { Low, High }
+            """);
+
+        // Seeded via [TsType<Payload>], then DiscoverTransitive walked Payload
+        // and pulled in Detail, Tag, Severity by property graph.
+        Assert.Contains(model.Classes, c => c.SourceName == "Payload");
+        Assert.Contains(model.Classes, c => c.SourceName == "Detail");
+        Assert.Contains(model.Classes, c => c.SourceName == "Tag");
+        Assert.Contains(model.Enums, e => e.SourceName == "Severity");
+
+        // Everything inherits Rule's Targets + OutputDir (the root that reached it).
+        var payload = model.Classes.Single(c => c.SourceName == "Payload");
+        Assert.Equal(TypeTarget.TypeScript, payload.Targets);
+        Assert.Equal(".", payload.OutputDir);
+
+        // Generated TS: Rule imports Payload, Payload.ts imports its nested types,
+        // every file compiles without loose `unknown` references.
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings()).ToList();
+        var ruleTs = files.First(f => f.FileName == "Rule.ts").Content;
+        Assert.Contains("import { Payload } from './Payload';", ruleTs);
+        Assert.Contains("element?: Payload;", ruleTs);
+
+        var payloadTs = files.First(f => f.FileName == "Payload.ts").Content;
+        Assert.Contains("import { Detail } from './Detail';", payloadTs);
+        Assert.Contains("import { Tag } from './Tag';", payloadTs);
+        Assert.Contains("import { Severity } from './Severity';", payloadTs);
+        Assert.Contains("title: string;", payloadTs);
+        Assert.Contains("info: Detail;", payloadTs);
+        Assert.Contains("tags: Tag[];", payloadTs);
+        Assert.Contains("level: Severity;", payloadTs);
+
+        // Nested siblings also exist as standalone files.
+        Assert.Contains(files, f => f.FileName == "Detail.ts");
+        Assert.Contains(files, f => f.FileName == "Tag.ts");
+        Assert.Contains(files, f => f.FileName == "Severity.ts");
+    }
+
+    [Fact]
     public void GenericTsType_OnEnum_Works()
     {
         var model = ParseAll("""
@@ -303,6 +374,7 @@ public class TsTypeGenericTests
                 }
             }
         }
+        SchemaParser.DiscoverBaseClasses(model, compilation);
         SchemaParser.SeedGenericTsTypeTargets(model, compilation);
         SchemaParser.DiscoverTransitive(model, compilation);
         SchemaParser.ResolveGenericTsTypeReferences(model);

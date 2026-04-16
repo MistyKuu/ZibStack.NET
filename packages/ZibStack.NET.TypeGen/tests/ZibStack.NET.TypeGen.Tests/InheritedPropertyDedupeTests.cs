@@ -50,19 +50,33 @@ public class InheritedPropertyDedupeTests
     [Fact]
     public void InheritedAbstractProperty_NotDuplicatedWhenBaseOverrides()
     {
-        var symbol = ParseClass("InheritFix.D");
-        var cls = SchemaParser.ParseClass(symbol);
-        Assert.NotNull(cls);
+        // New semantics: inheritance structure is preserved, not flattened.
+        //   D : B : C<int>
+        //   C<int> is generic → can't stand alone → flattens into B
+        //   B is emittable → stays as its own schema, D extends B
+        // `Type` appears exactly ONCE across the whole emitted hierarchy
+        // (on B — B's concrete override shadows C's abstract declaration).
+        var model = BuildModelWithBaseDiscovery();
 
-        // The `Type` property must appear EXACTLY ONCE — base override wins,
-        // grandparent abstract is skipped by the dedupe walk.
-        var typeOccurrences = cls!.Properties.Count(p => p.SourceName == "Type");
-        Assert.Equal(1, typeOccurrences);
+        var d = model.Classes.Single(c => c.SourceName == "D");
+        Assert.Equal(new[] { "Extra" }, d.Properties.Select(p => p.SourceName));
+        Assert.EndsWith(".B", d.BaseClassFullName);
 
-        // Sanity: other properties from each level still flow through.
-        Assert.Contains(cls.Properties, p => p.SourceName == "Extra");   // declared on D
-        Assert.Contains(cls.Properties, p => p.SourceName == "Name");    // inherited from B
-        Assert.Contains(cls.Properties, p => p.SourceName == "Type");    // inherited from B (overrides C's abstract)
+        var b = model.Classes.Single(c => c.SourceName == "B");
+        // B's declared override wins over C<int>'s abstract declaration —
+        // Type is on B exactly once.
+        Assert.Equal(1, b.Properties.Count(p => p.SourceName == "Type"));
+        Assert.Contains(b.Properties, p => p.SourceName == "Name");
+    }
+
+    private static SchemaModel BuildModelWithBaseDiscovery()
+    {
+        var compilation = GetCompilation();
+        var d = SchemaParser.ParseClass(compilation.GetTypeByMetadataName("InheritFix.D")!)!;
+        var model = new SchemaModel();
+        model.Classes.Add(d);
+        SchemaParser.DiscoverBaseClasses(model, compilation);
+        return model;
     }
 
     [Fact]
@@ -89,10 +103,11 @@ public class InheritedPropertyDedupeTests
     }
 
     [Fact]
-    public void MultiLevelInheritance_AllProperties_Flatten()
+    public void MultiLevelInheritance_EachLevelEmittedSeparately_StructurePreserved()
     {
-        // A → B → C → D chain, none of the intermediates annotated. D's emitted
-        // schema must include every property up the chain, inlined once each.
+        // A → B → C → D chain, only D annotated. The generator mirrors the C#
+        // structure: each level gets its own schema owning its own declared
+        // properties, connected via `extends` / `$ref`. Nothing gets flattened.
         const string src = """
             using ZibStack.NET.TypeGen;
             namespace Multi;
@@ -105,23 +120,37 @@ public class InheritedPropertyDedupeTests
             public class D : Lvl2 { public int Extra { get; set; } }
             """;
         var compilation = MakeCompilation(src);
-        var cls = SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.D")!);
-        Assert.NotNull(cls);
-        var names = cls!.Properties.Select(p => p.SourceName).ToList();
-        Assert.Contains("Id", names);
-        Assert.Contains("Name", names);
-        Assert.Contains("Email", names);
-        Assert.Contains("Extra", names);
-        // No duplicates — each name appears exactly once.
-        Assert.Equal(names.Count, names.Distinct().Count());
+        var d = SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.D")!)!;
+        var model = new SchemaModel();
+        model.Classes.Add(d);
+        SchemaParser.DiscoverBaseClasses(model, compilation);
+
+        // Every level pulled into the model as its own schema.
+        Assert.Contains(model.Classes, c => c.SourceName == "Lvl0");
+        Assert.Contains(model.Classes, c => c.SourceName == "Lvl1");
+        Assert.Contains(model.Classes, c => c.SourceName == "Lvl2");
+        Assert.Contains(model.Classes, c => c.SourceName == "D");
+
+        // Each schema owns only its declared properties.
+        Assert.Equal(new[] { "Id" }, model.Classes.Single(c => c.SourceName == "Lvl0").Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "Name" }, model.Classes.Single(c => c.SourceName == "Lvl1").Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "Email" }, model.Classes.Single(c => c.SourceName == "Lvl2").Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "Extra" }, model.Classes.Single(c => c.SourceName == "D").Properties.Select(p => p.SourceName));
+
+        // extends chain follows C# inheritance.
+        Assert.EndsWith(".Lvl2", model.Classes.Single(c => c.SourceName == "D").BaseClassFullName);
+        Assert.EndsWith(".Lvl1", model.Classes.Single(c => c.SourceName == "Lvl2").BaseClassFullName);
+        Assert.EndsWith(".Lvl0", model.Classes.Single(c => c.SourceName == "Lvl1").BaseClassFullName);
+        Assert.Null(model.Classes.Single(c => c.SourceName == "Lvl0").BaseClassFullName);
     }
 
     [Fact]
     public void MultiLevelInheritance_WithGenerateTypesOnAncestor_NoDuplication()
     {
-        // A[GenerateTypes] → B → C → D[GenerateTypes]. A's props must appear on
-        // A's own emitted schema but NOT be inlined into D — D should point at A
-        // via the inheritance chain rather than duplicating A's members.
+        // A[GenerateTypes] → B → C → D[GenerateTypes]. A and D are initial roots.
+        // DiscoverBaseClasses pulls B, C as aux (same Targets/OutputDir as D).
+        // Each class owns only its declared members; the full inheritance chain is
+        // preserved in emitted extends/$ref.
         const string src = """
             using ZibStack.NET.TypeGen;
             namespace Multi;
@@ -136,16 +165,21 @@ public class InheritedPropertyDedupeTests
             public class D : C { public int Leaf { get; set; } }
             """;
         var compilation = MakeCompilation(src);
-        var d = SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.D")!);
-        Assert.NotNull(d);
-        var names = d!.Properties.Select(p => p.SourceName).ToList();
-        // D owns Leaf, inherits Middle + Inner from non-annotated bases (flattened).
-        // A's Id must NOT appear — A is a separately-emitted [GenerateTypes] class
-        // and D should express the relationship via extends / $ref.
-        Assert.Contains("Leaf", names);
-        Assert.Contains("Middle", names);
-        Assert.Contains("Inner", names);
-        Assert.DoesNotContain("Id", names);
+        var model = new SchemaModel();
+        model.Classes.Add(SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.A")!)!);
+        model.Classes.Add(SchemaParser.ParseClass(compilation.GetTypeByMetadataName("Multi.D")!)!);
+        SchemaParser.DiscoverBaseClasses(model, compilation);
+
+        Assert.Equal(new[] { "Id" }, model.Classes.Single(c => c.SourceName == "A").Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "Middle" }, model.Classes.Single(c => c.SourceName == "B").Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "Inner" }, model.Classes.Single(c => c.SourceName == "C").Properties.Select(p => p.SourceName));
+        Assert.Equal(new[] { "Leaf" }, model.Classes.Single(c => c.SourceName == "D").Properties.Select(p => p.SourceName));
+
+        // D → C → B → A — each level points at its immediate C# base.
+        Assert.EndsWith(".C", model.Classes.Single(c => c.SourceName == "D").BaseClassFullName);
+        Assert.EndsWith(".B", model.Classes.Single(c => c.SourceName == "C").BaseClassFullName);
+        Assert.EndsWith(".A", model.Classes.Single(c => c.SourceName == "B").BaseClassFullName);
+        Assert.Null(model.Classes.Single(c => c.SourceName == "A").BaseClassFullName);
     }
 
     private static CSharpCompilation MakeCompilation(string src)
@@ -176,26 +210,24 @@ public class InheritedPropertyDedupeTests
     [Fact]
     public void InheritedAbstractProperty_TypeScriptEmitsTypeOnce()
     {
-        var symbol = ParseClass("InheritFix.D");
-        var cls = SchemaParser.ParseClass(symbol);
-        Assert.NotNull(cls);
-
-        var model = new SchemaModel();
-        model.Classes.Add(cls!);
-        var ts = TypeScriptEmitter.Emit(model, new GlobalSettings()).First(f => f.FileName == "D.ts").Content;
-
-        // The property name appears exactly once on the body of the interface,
-        // regardless of property-name style applied. Match by case-insensitive
-        // "type" prefix + colon to cover camelCase / PascalCase / snake_case.
-        var typeLines = ts.Split('\n').Count(l =>
+        // `Type` lives on B (its concrete override). D extends B, so D.ts itself
+        // has no `Type` line. Across the full emitted output set (D.ts + B.ts)
+        // the member appears exactly once — on B.
+        var model = BuildModelWithBaseDiscovery();
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings()).ToList();
+        var combined = string.Join("\n", files.Select(f => f.Content));
+        var typeLines = combined.Split('\n').Count(l =>
         {
             var t = l.TrimStart();
-            return (t.StartsWith("type:", System.StringComparison.OrdinalIgnoreCase)
-                 || t.StartsWith("type ", System.StringComparison.OrdinalIgnoreCase)
-                 || t.StartsWith("Type:", System.StringComparison.Ordinal));
+            return t.StartsWith("type:", System.StringComparison.OrdinalIgnoreCase)
+                || t.StartsWith("Type:", System.StringComparison.Ordinal);
         });
         Assert.True(typeLines == 1,
-            $"Expected exactly 1 'type' property line, got {typeLines}.\nFull TS output:\n{ts}");
+            $"Expected exactly 1 'type' property line across emitted files, got {typeLines}.\nCombined:\n{combined}");
+
+        // Structural check — D extends B in TS.
+        var dTs = files.First(f => f.FileName == "D.ts").Content;
+        Assert.Contains("export interface D extends B", dTs);
     }
 
     private static INamedTypeSymbol ParseClass(string fullyQualifiedName)

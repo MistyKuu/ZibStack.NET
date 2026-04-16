@@ -235,6 +235,12 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 }
             }
 
+            // Preserve C# inheritance in the emitted schema: for every class in
+            // the model, pull in any un-annotated ancestor that can stand alone
+            // as its own schema. Runs BEFORE DiscoverTransitive so discovered
+            // bases get their own property graphs walked too.
+            SchemaParser.DiscoverBaseClasses(model, compilation);
+
             // Seed any `[TsType<T>]` targets that aren't already in the model —
             // a generic override is an explicit request to emit T, even if nothing
             // else references T by its C# type. Runs before DiscoverTransitive so

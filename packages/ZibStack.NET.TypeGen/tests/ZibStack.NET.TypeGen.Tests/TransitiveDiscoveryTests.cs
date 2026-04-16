@@ -325,6 +325,7 @@ public class TransitiveDiscoveryTests
             if (cls is not null) model.Classes.Add(cls);
         }
         // Run the transitive closure pass on the seeded model.
+        SchemaParser.DiscoverBaseClasses(model, compilation);
         SchemaParser.DiscoverTransitive(model, compilation);
         return model;
     }

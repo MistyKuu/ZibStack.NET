@@ -255,6 +255,63 @@ internal static class SchemaParser
     }
 
     /// <summary>
+    /// True when <paramref name="t"/> can stand alone as an emitted schema —
+    /// concrete user-defined type in the compilation, not generic (TG0003), not BCL.
+    /// Drives the "preserve inheritance structure vs flatten" decision in the
+    /// parser: emittable bases become their own schemas with
+    /// <c>extends</c>/<c>$ref</c>; un-emittable ones get their declared properties
+    /// folded into the derived class so nothing is lost.
+    /// </summary>
+    private static bool IsEmittableAsBaseClass(INamedTypeSymbol t)
+    {
+        if (t.SpecialType != SpecialType.None) return false;
+        if (t.TypeKind != TypeKind.Class) return false;
+        if (t.IsGenericType) return false;
+        var ns = t.ContainingNamespace?.ToDisplayString() ?? "";
+        if (ns == "System" || ns.StartsWith("System.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Microsoft.", System.StringComparison.Ordinal)) return false;
+        if (ns.StartsWith("Newtonsoft.", System.StringComparison.Ordinal)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// After the initial root-parse, walks the inheritance chain of every class
+    /// in the model and auto-seeds any un-annotated ancestor that's
+    /// <see cref="IsEmittableAsBaseClass"/>-emittable. This guarantees every
+    /// <c>BaseClassFullName</c> reference resolves to a schema the emitters can
+    /// point at — so multi-level C# inheritance like <c>D : C : B : A</c>
+    /// surfaces in TS as <c>D extends C, C extends B, B extends A</c>, with each
+    /// class owning its declared properties. Inherits <c>Targets</c> and
+    /// <c>OutputDir</c> from the descendant that reached the ancestor.
+    /// </summary>
+    public static void DiscoverBaseClasses(SchemaModel model, Compilation compilation)
+    {
+        var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+        foreach (var c in model.Classes)
+        {
+            var s = compilation.GetTypeByMetadataName(StripGlobal(c.CSharpFullName));
+            if (s is not null) seen.Add(s);
+        }
+
+        var queue = new Queue<SchemaClass>(model.Classes);
+        while (queue.Count > 0)
+        {
+            var cls = queue.Dequeue();
+            if (cls.BaseClassFullName is null) continue;
+
+            var baseSym = compilation.GetTypeByMetadataName(StripGlobal(cls.BaseClassFullName));
+            if (baseSym is null) continue;
+            if (!seen.Add(baseSym)) continue;      // already in model
+            if (!IsEmittableAsBaseClass(baseSym)) continue;
+
+            var baseCls = ParseAuxiliaryClass(baseSym, cls.Targets, cls.OutputDir);
+            if (baseCls is null) continue;
+            model.Classes.Add(baseCls);
+            queue.Enqueue(baseCls);
+        }
+    }
+
+    /// <summary>
     /// Yields every user-defined <see cref="INamedTypeSymbol"/> reachable from
     /// <paramref name="type"/>, unwrapping nullable, array, and common collection
     /// wrappers along the way. A "user-defined" type is one declared in the
@@ -392,30 +449,31 @@ internal static class SchemaParser
         }
 
         var baseSymbol = symbol.BaseType;
-        // Walk up the chain looking for the nearest ancestor that's independently
-        // emitted (has its own [GenerateTypes]). If one exists, we express the
-        // relationship against THAT ancestor via extends/allOf — regardless of
-        // whether there are un-annotated intermediates between us and it. The
-        // intermediates' properties still get inlined into this class below,
-        // stopping the walk at the emitted ancestor so its members don't
-        // duplicate across both schemas.
-        INamedTypeSymbol? emittedAncestor = null;
+
+        // Walk the inheritance chain and find the nearest ancestor that can be
+        // emitted as a standalone schema. "Emittable" here means a concrete
+        // user-defined type — NOT `object` / `ValueType`, NOT generic (generics
+        // are out of the MVP scope — TG0003), NOT a BCL type (System.*,
+        // Microsoft.*). Intermediate ancestors that FAIL that check can't sit
+        // in the model as standalone classes, so their declared properties get
+        // inlined into THIS class — otherwise they'd be lost. Intermediate
+        // ancestors that PASS that check get preserved as separate schemas and
+        // `extends`/`allOf` points at the nearest one — the full C# hierarchy
+        // is mirrored in the emitted TS / OpenAPI instead of being squashed
+        // into a single flat class.
+        INamedTypeSymbol? nearestEmittableBase = null;
+        var flatten = new List<INamedTypeSymbol>();
         for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
         {
-            if (HasGenerateTypes(b)) { emittedAncestor = b; break; }
+            if (IsEmittableAsBaseClass(b))
+            {
+                nearestEmittableBase = b;
+                break;
+            }
+            flatten.Add(b);
         }
 
-        // Pick the base to render against:
-        //   - nearest [GenerateTypes] ancestor if present (hoists over intermediates),
-        //   - else the immediate base (flattened via inlineInherited below),
-        //   - else null for `object` / `ValueType` terminations.
-        string? baseFullName =
-            emittedAncestor?.ToDisplayString()
-            ?? (baseSymbol is not null
-                && baseSymbol.SpecialType != SpecialType.System_Object
-                && baseSymbol.SpecialType != SpecialType.System_ValueType
-                ? baseSymbol.ToDisplayString()
-                : null);
+        string? baseFullName = nearestEmittableBase?.ToDisplayString();
 
         var cls = new SchemaClass
         {
@@ -432,20 +490,15 @@ internal static class SchemaParser
             BaseClassFullName = baseFullName,
         };
 
-        // Inline inherited properties from un-annotated ancestors only — those
-        // classes don't get their own schema, so their members have to land on us
-        // or they're lost. Stop the walk at the first [GenerateTypes] ancestor
-        // (exclusive): its properties ARE emitted separately, and the extends/allOf
-        // we wrote above covers them. This is always safe to run — when there are
-        // no un-annotated ancestors the loop terminates before doing anything.
+        // Dedupe by name across (this class + flattened ancestors) so an abstract
+        // property on a generic base that a middle class overrides doesn't land
+        // twice. Most-derived wins — pre-seed with this class's declared names.
         var seen = new HashSet<string>(System.StringComparer.Ordinal);
         foreach (var m in symbol.GetMembers().OfType<IPropertySymbol>())
             if (!m.IsStatic && !m.IsIndexer && m.DeclaredAccessibility == Accessibility.Public)
                 seen.Add(m.Name);
 
-        for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
-        {
-            if (HasGenerateTypes(b)) break;   // emitted separately; extends/$ref covers it.
+        foreach (var b in flatten)
             foreach (var member in b.GetMembers().OfType<IPropertySymbol>())
             {
                 if (member.IsStatic || member.IsIndexer) continue;
@@ -453,7 +506,6 @@ internal static class SchemaParser
                 if (!seen.Add(member.Name)) continue;
                 cls.Properties.Add(ParseProperty(member));
             }
-        }
 
         foreach (var member in symbol.GetMembers().OfType<IPropertySymbol>())
         {

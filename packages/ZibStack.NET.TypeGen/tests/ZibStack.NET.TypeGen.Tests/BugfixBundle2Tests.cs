@@ -40,12 +40,12 @@ public class BugfixBundle2Tests
     }
 
     [Fact]
-    public void InheritedProperties_FromNonAnnotatedBase_StillEmitted()
+    public void InheritedProperties_FromNonAnnotatedBase_BaseAutoSeededAsOwnSchema()
     {
-        // Base has no [GenerateTypes]. Derived has one. Base's properties must
-        // still appear on Derived's emitted schema — either inlined (today's
-        // behavior) or as `extends` if transitive discovery later hoists the
-        // base into the model. Either way the properties can't just disappear.
+        // Base has no [GenerateTypes]. Derived has one. Preserve-structure semantics:
+        // Base gets auto-seeded as its own schema (via DiscoverBaseClasses) and
+        // Derived extends it. Each class owns only its declared members — the
+        // inheritance shape mirrors the C# hierarchy 1:1.
         var model = Parse("""
             using ZibStack.NET.TypeGen;
             namespace Ns;
@@ -64,10 +64,13 @@ public class BugfixBundle2Tests
             """);
 
         var derived = model.Classes.Single(c => c.SourceName == "Derived");
-        var propNames = derived.Properties.Select(p => p.SourceName).ToList();
-        Assert.Contains("Id", propNames);      // inlined from Base
-        Assert.Contains("Name", propNames);    // inlined from Base
-        Assert.Contains("Email", propNames);   // declared on Derived
+        Assert.Equal(new[] { "Email" }, derived.Properties.Select(p => p.SourceName));
+        Assert.EndsWith(".Base", derived.BaseClassFullName);
+
+        var baseCls = model.Classes.Single(c => c.SourceName == "Base");
+        var baseProps = baseCls.Properties.Select(p => p.SourceName).ToList();
+        Assert.Contains("Id", baseProps);
+        Assert.Contains("Name", baseProps);
     }
 
     [Fact]
@@ -202,6 +205,70 @@ public class BugfixBundle2Tests
         Assert.Contains("el?: Payload;", rootTs);
     }
 
+    [Fact]
+    public void AllFluent_WithGeneratedTypes_PropertyTsTypeGeneric_ChainsNested()
+    {
+        // 100% fluent: no [GenerateTypes] anywhere, no [TsType] attribute. Everything
+        // flows through the configurator — Root registered via WithGeneratedTypes,
+        // property El typed via fluent .TsType<Dupa>(), and Dupa's own nested graph
+        // (Detail, Tag) rides transitive discovery the same way a regular property
+        // type would.
+        var userCode = """
+            using ZibStack.NET.TypeGen;
+            using System.Collections.Generic;
+            namespace Ns;
+
+            public class Root
+            {
+                public object? El { get; set; }
+            }
+
+            public class Dupa
+            {
+                public string Title { get; set; } = "";
+                public Detail Info { get; set; } = new();
+                public List<Tag> Tags { get; set; } = new();
+            }
+
+            public class Detail { public int Score { get; set; } }
+            public class Tag { public string Name { get; set; } = ""; }
+
+            public sealed class Cfg : ITypeGenConfigurator
+            {
+                public void Configure(ITypeGenBuilder b)
+                {
+                    b.ForType<Root>()
+                        .WithGeneratedTypes(TypeTarget.TypeScript)
+                        .OutputDir(".")
+                        .Property(r => r.El).TsType<Dupa>();
+                }
+            }
+            """;
+        var (model, compilation) = RunFullPipeline(userCode);
+
+        // Full chain pulled in, end to end, via fluent only.
+        Assert.Contains(model.Classes, c => c.SourceName == "Root");
+        Assert.Contains(model.Classes, c => c.SourceName == "Dupa");
+        Assert.Contains(model.Classes, c => c.SourceName == "Detail");
+        Assert.Contains(model.Classes, c => c.SourceName == "Tag");
+
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings());
+        var rootTs = files.First(f => f.FileName == "Root.ts").Content;
+        Assert.Contains("import { Dupa } from './Dupa';", rootTs);
+        Assert.Contains("el?: Dupa;", rootTs);
+
+        var dupaTs = files.First(f => f.FileName == "Dupa.ts").Content;
+        Assert.Contains("import { Detail } from './Detail';", dupaTs);
+        Assert.Contains("import { Tag } from './Tag';", dupaTs);
+        Assert.Contains("title: string;", dupaTs);
+        Assert.Contains("info: Detail;", dupaTs);
+        Assert.Contains("tags: Tag[];", dupaTs);
+
+        // Nested siblings standalone too.
+        Assert.Contains(files, f => f.FileName == "Detail.ts");
+        Assert.Contains(files, f => f.FileName == "Tag.ts");
+    }
+
     private static (SchemaModel model, CSharpCompilation compilation) RunFullPipeline(string userCode)
     {
         const string stubs = """
@@ -300,6 +367,7 @@ public class BugfixBundle2Tests
             }
         }
 
+        SchemaParser.DiscoverBaseClasses(model, compilation);
         SchemaParser.SeedGenericTsTypeTargets(model, compilation);
         SchemaParser.DiscoverTransitive(model, compilation);
         SchemaParser.ResolveGenericTsTypeReferences(model);
@@ -403,6 +471,7 @@ public class BugfixBundle2Tests
                 }
             }
         }
+        SchemaParser.DiscoverBaseClasses(model, compilation);
         SchemaParser.SeedGenericTsTypeTargets(model, compilation);
         SchemaParser.DiscoverTransitive(model, compilation);
         SchemaParser.ResolveGenericTsTypeReferences(model);
