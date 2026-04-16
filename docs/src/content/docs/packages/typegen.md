@@ -286,6 +286,7 @@ unchanged (stable mtimes, no file-watcher thrash in frontend dev servers).
 | `TG0012` | Warning | Unrecognized fluent call in `ITypeGenConfigurator.Configure` |
 | `TG0013` | Warning | Non-literal argument passed to a configurator DSL method |
 | `TG0014` | Warning | `[CrudApi]` on class without `[GenerateTypes]` — `paths:` won't include it |
+| `TG0020` | Info | Live regen on save was sandboxed by the IDE analyzer host — output will be written at the next `dotnet build` (use `dotnet watch build` for save-time refresh) |
 
 ## File layout & cross-file imports
 

@@ -81,4 +81,13 @@ internal static class TypeGenDiagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public const string LiveRegenSandboxedId = "TG0020";
+    public static readonly DiagnosticDescriptor LiveRegenSandboxed = new(
+        LiveRegenSandboxedId,
+        title: "Live regeneration to disk failed — analyzer host sandboxed I/O",
+        messageFormat: "TypeGen tried to write '{0}' from inside the source generator (live regen on save) but the analyzer host blocked the I/O: {1}. The MSBuild post-build target will write the same file at the next `dotnet build` — your output files are not lost. To get save-time refresh, run `dotnet watch build` in a side terminal.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true);
 }

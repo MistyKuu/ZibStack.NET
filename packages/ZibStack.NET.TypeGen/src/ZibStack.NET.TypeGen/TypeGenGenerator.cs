@@ -260,33 +260,36 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // they refresh on save in the IDE (not just at `dotnet build` time). This
             // technically violates the "generators are pure" guideline — wrap in
             // try/catch since some IDE / language-server contexts sandbox analyzer I/O.
-            // Failure here just falls back to the MSBuild-task path at build time.
+            // Failure surfaces as TG0020 (Info severity) and falls back to the MSBuild-
+            // task path at build time so output isn't lost.
             if (!string.IsNullOrEmpty(projectDir))
-                TryWriteFilesDirectly(allFiles, projectDir);
+                TryWriteFilesDirectly(allFiles, projectDir, spc);
         });
     }
 
     /// <summary>
     /// Writes emitted files directly to disk from inside the generator. Same shape as
     /// the MSBuild task in build/ZibStack.NET.TypeGen.targets (content-equality skip,
-    /// banner-based stale sweep) so both paths agree on what's on disk. Catches all
-    /// exceptions — sandboxed I/O in some IDE hosts must not poison the generator.
+    /// banner-based stale sweep) so both paths agree on what's on disk. On I/O failure
+    /// (sandboxed analyzer host like VS Code C# Dev Kit / Rider) reports TG0020 and
+    /// returns — the MSBuild task path will write the same files at build time.
     /// </summary>
 #pragma warning disable RS1035 // File I/O is intentional here — see method summary.
-    private static void TryWriteFilesDirectly(IReadOnlyList<EmittedFile> files, string projectDir)
+    private static void TryWriteFilesDirectly(IReadOnlyList<EmittedFile> files, string projectDir, SourceProductionContext spc)
     {
-        try
-        {
-            var written = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-            var touchedDirs = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var written = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var touchedDirs = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
-            foreach (var f in files)
+        foreach (var f in files)
+        {
+            string fullPath;
+            try
             {
                 var fullDir = System.IO.Path.IsPathRooted(f.OutputDir)
                     ? f.OutputDir
                     : System.IO.Path.Combine(projectDir, f.OutputDir);
                 System.IO.Directory.CreateDirectory(fullDir);
-                var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(fullDir, f.FileName));
+                fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(fullDir, f.FileName));
                 written.Add(fullPath);
                 touchedDirs.Add(System.IO.Path.GetFullPath(fullDir));
 
@@ -297,9 +300,26 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     continue;
                 System.IO.File.WriteAllText(fullPath, f.Content);
             }
+            catch (System.Exception ex)
+            {
+                // Surface ONCE per file — sandboxed hosts will hit this for every file
+                // in the run. We still report once-per-file because the build output
+                // panel collapses identical messages and IDE Errors/Problems list
+                // dedupes by location, so the noise stays bounded.
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    TypeGenDiagnostics.LiveRegenSandboxed,
+                    Location.None,
+                    f.FileName, ex.GetType().Name + ": " + ex.Message));
+                // Stop trying — if one write blew up, the rest will too. Exit early
+                // so the user sees a single representative error per regen.
+                return;
+            }
+        }
 
-            // Sweep stale: only files carrying our @generated banner that aren't in
-            // the current run. Same heuristic as the MSBuild task.
+        // Sweep stale: only files carrying our @generated banner that aren't in
+        // the current run. Same heuristic as the MSBuild task.
+        try
+        {
             foreach (var dir in touchedDirs)
             {
                 if (!System.IO.Directory.Exists(dir)) continue;
@@ -324,7 +344,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         }
         catch
         {
-            // Sandboxed I/O — silently fall back to MSBuild-task path at build time.
+            // Sweep is best-effort — the MSBuild task does the same sweep at build time.
         }
     }
 #pragma warning restore RS1035
