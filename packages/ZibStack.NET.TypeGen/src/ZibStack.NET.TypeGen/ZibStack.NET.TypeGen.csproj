@@ -30,9 +30,18 @@
     <Compile Include="$(MSBuildProjectDirectory)\..\..\..\..\shared\DtoSemantics.cs" Link="Shared\DtoSemantics.cs" />
   </ItemGroup>
 
-  <!-- Generator deliberately does NOT reference Abstractions — it has internal mirror
-       types in Model/SchemaModel.cs so the analyzer DLL has no runtime dependencies
-       beyond Microsoft.CodeAnalysis. Consumers reference Abstractions separately. -->
+  <ItemGroup>
+    <!-- Abstractions is a real transitive dependency: consumers of the analyzer package
+         need the runtime types ([GenerateTypes], [TsName], [OpenApiProperty],
+         ITypeGenConfigurator, etc.). The generator itself doesn't reference these — it
+         re-mirrors the schema in Model/SchemaModel.cs to keep the analyzer DLL free of
+         runtime dependencies — but the consumer project absolutely needs them on the
+         compile path. Without this ProjectReference NuGet would not pull Abstractions
+         in automatically, and `[GenerateTypes]` / `ITypeGenConfigurator` would fail to
+         resolve at the call site. Mirrors the same pattern used by ZibStack.NET.Aop
+         and ZibStack.NET.Log. -->
+    <ProjectReference Include="..\ZibStack.NET.TypeGen.Abstractions\ZibStack.NET.TypeGen.Abstractions.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
