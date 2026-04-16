@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Emit source-generated files to disk so IDE "Jump to Source" works on
+    types like {Entity}CreateRequest, {Entity}Response, {Entity}Endpoints.
+    Without this the symbols only live in the in-memory compilation, and
+    Rider/VS navigation either silently no-ops or surfaces a "Malformed URL:
+    psi_element://cref://T:..." when the user clicks a cref in the QuickInfo
+    popup. Files land under obj/<config>/<tfm>/generated/ZibStack.NET.Dto/.
+    Opt out by setting <EmitCompilerGeneratedFiles>false</EmitCompilerGeneratedFiles>.
+  -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles Condition="'$(EmitCompilerGeneratedFiles)' == ''">true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
+</Project>

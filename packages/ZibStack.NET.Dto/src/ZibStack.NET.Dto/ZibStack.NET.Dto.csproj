@@ -35,6 +35,10 @@
 
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <!-- Auto-enable EmitCompilerGeneratedFiles in consumer projects so IDE
+         navigation (Jump to Source / cref clicks) resolves to a real file. -->
+    <None Include="build\ZibStack.NET.Dto.props" Pack="true" PackagePath="build\" />
+    <None Include="buildTransitive\ZibStack.NET.Dto.props" Pack="true" PackagePath="buildTransitive\" />
     <None Include="$(MSBuildProjectDirectory)\..\..\README.md" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildProjectDirectory)\..\..\README.md')" />
   </ItemGroup>
 
