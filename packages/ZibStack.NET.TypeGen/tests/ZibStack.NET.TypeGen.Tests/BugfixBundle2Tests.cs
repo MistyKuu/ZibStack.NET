@@ -119,7 +119,7 @@ public class BugfixBundle2Tests
         model.Classes.Add(item);
 
         var diags = RunValidatorOnly(model);
-        Assert.Empty(diags.Where(d => d.Id == "TG0002"));
+        Assert.DoesNotContain(diags, d => d.Id == "TG0002");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class BugfixBundle2Tests
         model.Classes.Add(cls);
 
         var diags = RunValidatorOnly(model);
-        Assert.Empty(diags.Where(d => d.Id == "TG0002"));
+        Assert.DoesNotContain(diags, d => d.Id == "TG0002");
     }
 
     private static System.Collections.Generic.List<Diagnostic> RunValidatorOnly(SchemaModel model)
@@ -150,6 +150,160 @@ public class BugfixBundle2Tests
         var diags = new System.Collections.Generic.List<Diagnostic>();
         TypeGenGenerator.ValidateTranslatableProperties(model, diags.Add);
         return diags;
+    }
+
+    [Fact]
+    public void FluentWithGeneratedTypes_PlusPropertyTsTypeGeneric_Works()
+    {
+        // End-to-end: the parent class is discovered *only* via the fluent
+        // `.WithGeneratedTypes(...)` path (no [GenerateTypes] attribute). Its
+        // property carries a fluent `.TsType<Payload>()` — Payload also has no
+        // attribute. The pipeline must:
+        //   1. discover the parent via WithGeneratedTypes,
+        //   2. merge the per-property TsTypeTargetCSharpFqn via fluent,
+        //   3. seed Payload via SeedGenericTsTypeTargets,
+        //   4. rewrite the property to point at Payload + auto-path import.
+        var userCode = """
+            using ZibStack.NET.TypeGen;
+            namespace Ns;
+
+            public class Root
+            {
+                public object? El { get; set; }
+            }
+
+            public class Payload
+            {
+                public string Body { get; set; } = "";
+            }
+
+            public sealed class Cfg : ITypeGenConfigurator
+            {
+                public void Configure(ITypeGenBuilder b)
+                {
+                    b.ForType<Root>()
+                        .WithGeneratedTypes(TypeTarget.TypeScript)
+                        .OutputDir(".")
+                        .Property(r => r.El).TsType<Payload>();
+                }
+            }
+            """;
+        var (model, compilation) = RunFullPipeline(userCode);
+
+        // Root got emitted by fluent-only discovery
+        Assert.Contains(model.Classes, c => c.SourceName == "Root");
+        // Payload got seeded by SeedGenericTsTypeTargets from the .TsType<Payload>()
+        Assert.Contains(model.Classes, c => c.SourceName == "Payload");
+
+        // Emitted TS has both the import AND the property type pointing at Payload
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings());
+        var rootTs = files.First(f => f.FileName == "Root.ts").Content;
+        Assert.Contains("import { Payload } from './Payload';", rootTs);
+        Assert.Contains("el?: Payload;", rootTs);
+    }
+
+    private static (SchemaModel model, CSharpCompilation compilation) RunFullPipeline(string userCode)
+    {
+        const string stubs = """
+            using System;
+            namespace ZibStack.NET.TypeGen {
+                [System.Flags] public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
+                public enum NameStyle { AsIs, CamelCase, SnakeCase, KebabCase, PascalCase }
+                public enum TypeScriptFileLayout { FilePerClass, SingleFile }
+                public sealed class TypeScriptSettings {
+                    public string? OutputDir { get; set; } public string SingleFileName { get; set; } = "m.ts";
+                    public TypeScriptFileLayout FileLayout { get; set; } public bool UseInterfaces { get; set; } = true;
+                    public NameStyle PropertyNameStyle { get; set; } public NameStyle TypeNameStyle { get; set; }
+                    public bool EmitGeneratedBanner { get; set; } = true;
+                }
+                public sealed class OpenApiSettings {
+                    public string OutputPath { get; set; } = "o.yaml"; public string Title { get; set; } = "API";
+                    public string Version { get; set; } = "1.0.0"; public string? Description { get; set; }
+                    public string OpenApiVersion { get; set; } = "3.0.3";
+                }
+                public interface ITypeGenBuilder {
+                    ITypeGenBuilder TypeScript(Action<TypeScriptSettings> c);
+                    ITypeGenBuilder OpenApi(Action<OpenApiSettings> c);
+                    ITypeBuilder<T> ForType<T>();
+                }
+                public interface ITypeBuilder<T> {
+                    ITypeBuilder<T> WithGeneratedTypes(TypeTarget targets);
+                    ITypeBuilder<T> TsName(string n); ITypeBuilder<T> OpenApiName(string n);
+                    ITypeBuilder<T> OutputDir(string d); ITypeBuilder<T> Ignore();
+                    ITypeBuilder<T> TsIgnore(); ITypeBuilder<T> OpenApiIgnore();
+                    IPropertyBuilder<T, TProp> Property<TProp>(System.Linq.Expressions.Expression<System.Func<T, TProp>> sel);
+                }
+                public interface IPropertyBuilder<TClass, TProp> {
+                    IPropertyBuilder<TClass, TProp> TsName(string n);
+                    IPropertyBuilder<TClass, TProp> TsType(string t);
+                    IPropertyBuilder<TClass, TProp> TsType(string t, string? importFrom);
+                    IPropertyBuilder<TClass, TProp> TsType<TTarget>();
+                    IPropertyBuilder<TClass, TProp> OpenApiName(string n);
+                    IPropertyBuilder<TClass, TProp> OpenApiType(string t); IPropertyBuilder<TClass, TProp> OpenApiRef(string s);
+                    IPropertyBuilder<TClass, TProp> OpenApiFormat(string f); IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);
+                    IPropertyBuilder<TClass, TProp> OpenApiNullable(bool n);
+                    IPropertyBuilder<TClass, TProp> Ignore(); IPropertyBuilder<TClass, TProp> TsIgnore();
+                    IPropertyBuilder<TClass, TProp> OpenApiIgnore();
+                    IPropertyBuilder<TClass, TNext> Property<TNext>(System.Linq.Expressions.Expression<System.Func<TClass, TNext>> sel);
+                }
+                public interface ITypeGenConfigurator { void Configure(ITypeGenBuilder b); }
+                [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Enum)]
+                public sealed class GenerateTypesAttribute : Attribute {
+                    public TypeTarget Targets { get; set; }
+                    public string? OutputDir { get; set; }
+                }
+                [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+                public sealed class TsTypeAttribute<T> : Attribute { public string? ImportFrom { get; set; } }
+            }
+            """;
+        var refs = new[]
+        {
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(Action).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Linq.Expressions.Expression).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(System.Func<>).Assembly.Location),
+        };
+        var compilation = CSharpCompilation.Create(
+            "FluentPipelineTest",
+            new[] { CSharpSyntaxTree.ParseText(stubs), CSharpSyntaxTree.ParseText(userCode) },
+            refs,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+        // Replicate the generator's pipeline step by step.
+        var model = new SchemaModel();
+        var config = ConfiguratorParser.Parse(compilation, _ => { });
+
+        // Fluent-only discovery (no [GenerateTypes] attributes in user src).
+        if (config is not null)
+        {
+            foreach (var kvp in config.PerType)
+            {
+                if (kvp.Value.FluentTargets is not int fluentTargets) continue;
+                var sym = compilation.GetTypeByMetadataName(kvp.Key);
+                if (sym is null) continue;
+                var dir = !string.IsNullOrEmpty(kvp.Value.OutputDir) ? kvp.Value.OutputDir!
+                        : !string.IsNullOrEmpty(config.Settings.TypeScript.OutputDir) ? config.Settings.TypeScript.OutputDir!
+                        : ".";
+                var aux = SchemaParser.ParseAuxiliaryClass(sym, (TypeTarget)fluentTargets, dir);
+                if (aux is null) continue;
+                // Merge fluent-per-property overrides (including TsTypeTargetCSharpFqn).
+                if (config.PerType.TryGetValue(aux.CSharpFullName, out var pto))
+                    foreach (var prop in aux.Properties)
+                        if (pto.Properties.TryGetValue(prop.SourceName, out var po))
+                        {
+                            prop.TsNameOverride ??= po.TsName;
+                            prop.TsTypeOverride ??= po.TsType;
+                            prop.TsImportFrom ??= po.TsImportFrom;
+                            prop.TsTypeTargetCSharpFqn ??= po.TsTypeTargetCSharpFqn;
+                        }
+                model.Classes.Add(aux);
+            }
+        }
+
+        SchemaParser.SeedGenericTsTypeTargets(model, compilation);
+        SchemaParser.DiscoverTransitive(model, compilation);
+        SchemaParser.ResolveGenericTsTypeReferences(model);
+        return (model, compilation);
     }
 
     [Fact]
