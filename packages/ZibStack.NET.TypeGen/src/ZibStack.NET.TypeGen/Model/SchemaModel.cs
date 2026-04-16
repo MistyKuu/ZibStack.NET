@@ -21,6 +21,7 @@ internal enum TypeTarget
     TypeScript = 1 << 0,
     OpenApi = 1 << 1,
     Python = 1 << 2,
+    Zod = 1 << 3,
 }
 
 /// <summary>
@@ -66,6 +67,19 @@ internal enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
 internal enum TypeScriptFileLayout { FilePerClass, SingleFile }
 internal enum PythonFileLayout { FilePerClass, SingleFile }
 internal enum PythonStyle { Pydantic, Dataclass }
+internal enum ZodFileLayout { FilePerClass, SingleFile }
+
+internal sealed class ZodSettings
+{
+    public string? OutputDir { get; set; }
+    public ZodFileLayout FileLayout { get; set; } = ZodFileLayout.FilePerClass;
+    public string SingleFileName { get; set; } = "schemas.ts";
+    public string FileSuffix { get; set; } = ".schema";
+    public string SchemaConstSuffix { get; set; } = "Schema";
+    public bool EmitInferredTypes { get; set; } = true;
+    public NameStyle PropertyNameStyle { get; set; } = NameStyle.CamelCase;
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
 
 internal sealed class PythonSettings
 {
@@ -97,6 +111,7 @@ internal sealed class OpenApiSettings
     public string Version { get; set; } = "1.0.0";
     public string? Description { get; set; }
     public string OpenApiVersion { get; set; } = "3.0.3";
+    public bool EmitPaths { get; set; } = true;
 }
 
 /// <summary>
@@ -115,6 +130,119 @@ internal sealed class SchemaModel
 {
     public List<SchemaClass> Classes { get; } = new();
     public List<SchemaEnum> Enums { get; } = new();
+
+    /// <summary>
+    /// Unified endpoint list emitted under OpenAPI <c>paths:</c>. Populated by
+    /// three sources:
+    /// <list type="bullet">
+    ///   <item><c>[CrudApi]</c> synthesis (each class produces one entry per op)</item>
+    ///   <item>Hand-written <c>[ApiController]</c> classes with <c>[HttpX]</c> methods</item>
+    ///   <item>(future) Minimal API <c>app.MapGet("/literal", lambda)</c> calls</item>
+    /// </list>
+    /// The OpenAPI emitter is agnostic — it just walks this list and emits YAML/JSON,
+    /// grouping by path pattern. Collisions (same verb + pattern) prefer native
+    /// sources over CrudApi synthesis and surface a warning.
+    /// </summary>
+    public List<EndpointInfo> Endpoints { get; } = new();
+}
+
+/// <summary>Marker indicating which pipeline stage populated an <see cref="EndpointInfo"/>.</summary>
+internal enum EndpointSource
+{
+    /// <summary>Synthesized from a <c>[CrudApi]</c>-annotated class.</summary>
+    CrudApi,
+    /// <summary>Scanned from a hand-written <c>[ApiController]</c> class + <c>[HttpX]</c> method.</summary>
+    Controller,
+    /// <summary>Scanned from a <c>app.MapGet(...)</c> call in Program.cs-style code.</summary>
+    MinimalApi,
+}
+
+/// <summary>Where a handler parameter shows up on the wire.</summary>
+internal enum ParamLocation
+{
+    /// <summary>Templated segment in the URL path (<c>/items/{id}</c>).</summary>
+    Route,
+    /// <summary>Query-string key (<c>?filter=foo</c>).</summary>
+    Query,
+    /// <summary>Request body (JSON). One per endpoint.</summary>
+    Body,
+    /// <summary>HTTP header.</summary>
+    Header,
+}
+
+/// <summary>
+/// Language-agnostic description of a single HTTP endpoint. Fields mirror what
+/// OpenAPI needs under one <c>paths[verb]</c> block: operation id, parameters,
+/// request body, response.
+/// </summary>
+internal sealed class EndpointInfo
+{
+    /// <summary>Lowercase verb — <c>"get"</c>, <c>"post"</c>, <c>"patch"</c>, etc.</summary>
+    public string Verb { get; set; } = "";
+
+    /// <summary>Full path pattern with a leading slash — <c>/api/orders/{id}</c>.</summary>
+    public string Pattern { get; set; } = "";
+
+    /// <summary>
+    /// OpenAPI <c>operationId</c>. Must be unique across the doc. Synthesized
+    /// for CrudApi (<c>getOrderById</c>, <c>listOrders</c>), taken from
+    /// <c>nameof(method)</c> for controllers.
+    /// </summary>
+    public string OperationId { get; set; } = "";
+
+    /// <summary>Logical grouping tag (typically the resource name). OpenAPI Swagger UI groups by this.</summary>
+    public string? Tag { get; set; }
+
+    /// <summary>Route / query / header parameters in declaration order.</summary>
+    public List<EndpointParameter> Parameters { get; } = new();
+
+    /// <summary>C# FQN of the request body DTO, or <c>null</c> when no body (GET / DELETE).</summary>
+    public string? RequestBodyCSharpType { get; set; }
+
+    /// <summary>
+    /// When the request body is a JSON array (e.g. bulk create), this is the
+    /// element type's C# FQN; <see cref="RequestBodyCSharpType"/> stays null.
+    /// </summary>
+    public string? RequestBodyArrayItemCSharpType { get; set; }
+
+    /// <summary>
+    /// C# FQN of the response DTO. <c>"PaginatedResponse&lt;X&gt;"</c> form is
+    /// recognized by the emitter which materializes a <c>PaginatedResponseOf{X}</c>
+    /// schema once per unique X. <c>null</c> when the success response has no body.
+    /// </summary>
+    public string? ResponseCSharpType { get; set; }
+
+    /// <summary>
+    /// When the response is a JSON array, this is the element type's C# FQN;
+    /// <see cref="ResponseCSharpType"/> stays null.
+    /// </summary>
+    public string? ResponseArrayItemCSharpType { get; set; }
+
+    /// <summary>Success HTTP status. Defaults to 200. 201 for Create, 204 for Delete.</summary>
+    public int SuccessStatusCode { get; set; } = 200;
+
+    /// <summary>When <c>true</c>, emit a <c>404 Not Found</c> alongside the success response.</summary>
+    public bool HasNotFoundResponse { get; set; }
+
+    /// <summary>
+    /// List endpoints drive pagination params (<c>page</c>, <c>pageSize</c>, plus
+    /// <c>filter</c>/<c>sort</c>/<c>select</c>/<c>count</c> when ZibStack.NET.Query
+    /// is referenced). The emitter appends them automatically when this flag is on.
+    /// </summary>
+    public bool IsListEndpoint { get; set; }
+
+    /// <summary>Discovery origin — diagnostic + dedup rules branch on this.</summary>
+    public EndpointSource Source { get; set; }
+}
+
+/// <summary>One parameter on an <see cref="EndpointInfo"/>.</summary>
+internal sealed class EndpointParameter
+{
+    public string Name { get; set; } = "";
+    public ParamLocation Location { get; set; }
+    public string CSharpType { get; set; } = "";
+    public bool Required { get; set; }
+    public string? Description { get; set; }
 }
 
 internal sealed class SchemaClass
@@ -415,6 +543,7 @@ internal sealed class GlobalSettings
     public TypeScriptSettings TypeScript { get; set; } = new();
     public OpenApiSettings OpenApi { get; set; } = new();
     public PythonSettings Python { get; set; } = new();
+    public ZodSettings Zod { get; set; } = new();
 
     /// <summary>
     /// Set by the generator when <c>ZibStack.NET.Query</c> is referenced by the

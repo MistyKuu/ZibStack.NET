@@ -157,6 +157,65 @@ public enum PythonStyle
 }
 
 /// <summary>
+/// Layout strategy for Zod output files.
+/// </summary>
+public enum ZodFileLayout
+{
+    /// <summary>One <c>{Name}.schema.ts</c> file per source class — cross-file imports wire schemas together.</summary>
+    FilePerClass,
+
+    /// <summary>All schemas concatenated into a single file (default <c>schemas.ts</c>).</summary>
+    SingleFile,
+}
+
+/// <summary>
+/// Zod emitter settings. Emits TypeScript source files importing <c>zod</c> —
+/// the consuming project must have a <c>zod</c> dependency installed. Independent
+/// from <see cref="TypeScriptSettings"/>: Zod can run standalone (schemas + derived
+/// types) or alongside TS (both emit their own files, no coupling).
+/// </summary>
+public sealed class ZodSettings
+{
+    /// <summary>Output directory, relative to the project or absolute.</summary>
+    public string? OutputDir { get; set; }
+
+    /// <summary>Default <see cref="ZodFileLayout.FilePerClass"/>.</summary>
+    public ZodFileLayout FileLayout { get; set; } = ZodFileLayout.FilePerClass;
+
+    /// <summary>File name for <see cref="ZodFileLayout.SingleFile"/> mode. Default <c>"schemas.ts"</c>.</summary>
+    public string SingleFileName { get; set; } = "schemas.ts";
+
+    /// <summary>
+    /// Per-class file name suffix in <see cref="ZodFileLayout.FilePerClass"/> mode.
+    /// Default <c>".schema"</c> — a class named <c>Order</c> emits to
+    /// <c>Order.schema.ts</c>, avoiding collision with a sibling TypeScript
+    /// <c>Order.ts</c> interface file. Set to empty string to drop the suffix
+    /// (only safe when TypeScript target isn't also emitting to the same dir).
+    /// </summary>
+    public string FileSuffix { get; set; } = ".schema";
+
+    /// <summary>
+    /// Suffix appended to the exported schema constant name. Default <c>"Schema"</c> —
+    /// class <c>Order</c> → <c>export const OrderSchema = z.object({…})</c>.
+    /// </summary>
+    public string SchemaConstSuffix { get; set; } = "Schema";
+
+    /// <summary>
+    /// When <c>true</c>, also emits <c>export type {Name} = z.infer&lt;typeof {Name}Schema&gt;;</c>
+    /// alongside the schema — so Zod-only consumers get both runtime validator and
+    /// structural type. Default <c>true</c>. Turn off when you're already emitting
+    /// TypeScript interfaces in parallel and want to avoid name shadowing.
+    /// </summary>
+    public bool EmitInferredTypes { get; set; } = true;
+
+    /// <summary>Default <see cref="NameStyle.CamelCase"/> — JS/TS convention.</summary>
+    public NameStyle PropertyNameStyle { get; set; } = NameStyle.CamelCase;
+
+    /// <summary>Emit the <c>// @generated</c> banner at the top of each file.</summary>
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
+
+/// <summary>
 /// OpenAPI emitter settings. Default target is OpenAPI 3.0.3 — see
 /// <see cref="OpenApiVersion"/>.
 /// </summary>
@@ -186,4 +245,14 @@ public sealed class OpenApiSettings
     /// target readers that do.
     /// </summary>
     public string OpenApiVersion { get; set; } = "3.0.3";
+
+    /// <summary>
+    /// When <c>true</c> (default), TypeGen emits a <c>paths:</c> block — synthesized
+    /// from <c>[CrudApi]</c> classes and scanned from hand-written
+    /// <c>[ApiController]</c> / Minimal API endpoints. Flip to <c>false</c> to emit
+    /// schema-only documents (<c>components/schemas</c> populated, <c>paths</c>
+    /// empty). Useful when you want the type contract for client generation but
+    /// handle paths via Swashbuckle / a hand-written overlay / some other tool.
+    /// </summary>
+    public bool EmitPaths { get; set; } = true;
 }

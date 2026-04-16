@@ -16,6 +16,12 @@ Roslyn source generator that turns C# DTOs into **TypeScript interfaces** and an
 > running app, `dotnet build` produces the artifacts directly. Cheap in
 > CI/CD, Hot-Reload-friendly in IDE, statically verifiable in analyzers.
 
+> **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.TypeGen/sample/SampleApi) —
+> ASP.NET Core app exercising all three endpoint-discovery paths side by side
+> (`[CrudApi]` synthesis + hand-written Minimal API with `MapGroup` + hand-written
+> `[ApiController]`). `dotnet build` emits `generated/openapi.yaml` showing how
+> all three sources contribute to one unified `paths:` block.
+
 ## Install
 
 ```
@@ -359,6 +365,13 @@ constant.
 b.ForType<Order>().Property(nameof(Order.Email)).TsName("emailAddress");
 ```
 
+> **Prefer a closed form for typed selectors.** When you want refactor-safe
+> `c => c.Property` lambdas on a generic, use `b.ForType<Base<SomeT>>()` with
+> **any** valid closed instantiation — the parser normalizes to the open
+> `Base<T>` key anyway, so one override covers every construction. Reach for
+> `ForType(typeof(Base<>))` only when no closed form satisfies `Base<T>`'s
+> type constraints (rare).
+
 ### Targeting Dto-generated companion DTOs
 
 When the parent type carries `[CrudApi]` (or `[CreateDto]`/`[UpdateDto]`/
@@ -465,11 +478,140 @@ validation, TypeGen picks it up.
 Attribute detection is by metadata name — no runtime dependency on either
 package. Explicit `[OpenApiProperty]` fields win (don't get overwritten).
 
-## `[CrudApi]` → OpenAPI `paths:`
+## Hand-written Minimal API → OpenAPI `paths:`
 
-If a class carries `[CrudApi]` (from `ZibStack.NET.Dto`), TypeGen contributes
-matching REST endpoints to the emitted OpenAPI document. No extra configuration —
-the same attribute that drives endpoint generation drives the contract.
+`app.MapGet("/path", lambda)` and its relatives (`MapPost`/`MapPut`/`MapPatch`/
+`MapDelete`) get picked up by a syntactic scan of your source:
+
+```csharp
+var app = builder.Build();
+
+app.MapGet("/orders/{id}", (int id, OrderService svc, CancellationToken ct)
+    => svc.GetByIdAsync(id, ct));
+
+app.MapPost("/orders", ([FromBody] CreateOrderRequest req, OrderService svc)
+    => svc.CreateAsync(req));
+
+app.MapGroup("/api/v1")
+    .MapGet("/health", () => Results.Ok());
+```
+
+→ three entries in `paths:`, tags from the first path segment, parameters bound
+via the same `[FromX]` rules as controllers, return types inferred from the
+lambda body.
+
+**What's picked up:**
+- **Literal route patterns** (string literals or `const string`-referenced
+  constants). Interpolated strings, `string.Concat`, and field reads stay
+  unresolvable at compile time and the endpoint is silently skipped.
+- **Inline lambdas** (`(x, y) => body`, parenthesized or simple). Method
+  references (`app.MapGet("/x", HandlerMethod)`) aren't resolved in MVP.
+- **`MapGroup` prefix chains**, including via local variables:
+  ```csharp
+  var g = app.MapGroup("/api/widgets");
+  g.MapGet("/{id}", (int id) => ...);   // emits /api/widgets/{id}
+  ```
+- **Parameter binding**: explicit `[FromRoute]` / `[FromBody]` / `[FromQuery]` /
+  `[FromHeader]` first; fallback to ASP.NET convention. `CancellationToken` /
+  `HttpContext` / `[FromServices]` params are filtered out.
+- **Return type** unwrapped from `Task<T>` / `ValueTask<T>`. `IResult` yields
+  no response schema (untyped success — ASP.NET Core doesn't expose T in that
+  path).
+
+**Collisions** follow the same rule as controllers: if Minimal API and
+`[CrudApi]` synthesis both claim the same (verb, pattern), the hand-written
+`MapX` wins.
+
+**MVP limitations** (track these before relying heavily on the scan):
+- Handler delegates passed as field / method references aren't resolved
+- `TypedResults.Ok<T>(...)` pattern: response type from the generic arg isn't
+  extracted yet (uses the raw `Ok<T>` return type which reads as `IResult`)
+- Endpoint filters chained via `.AddEndpointFilter(...)` are ignored (they
+  don't change the contract, only runtime behaviour)
+- Per-endpoint metadata extension methods (`.WithName("X").Produces<T>()`) aren't
+  read — use the handler's actual return type or add `[CrudApi]` on the DTO
+  if you need fine control over the emitted shape
+
+## Hand-written controllers → OpenAPI `paths:`
+
+TypeGen scans every `[ApiController]` class (or class inheriting `ControllerBase`)
+in your source and contributes its `[HttpGet]` / `[HttpPost]` / `[HttpPut]` /
+`[HttpPatch]` / `[HttpDelete]` methods to the emitted OpenAPI document — no
+`[CrudApi]` annotation needed, no runtime reflection, just native ASP.NET Core
+attributes:
+
+```csharp
+[ApiController]
+[Route("api/widgets")]
+public class WidgetsController : ControllerBase
+{
+    [HttpGet("{id}")]
+    public ActionResult<WidgetResponse> Get(int id) => throw null!;
+
+    [HttpPost]
+    public ActionResult<WidgetResponse> Create([FromBody] CreateWidgetRequest req) => throw null!;
+}
+```
+
+→ emits the matching `paths:` block:
+
+```yaml
+paths:
+  /api/widgets/{id}:
+    get:
+      tags: [Widgets]
+      operationId: get
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int32 }
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/WidgetResponse' } } }
+  /api/widgets:
+    post:
+      tags: [Widgets]
+      operationId: create
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateWidgetRequest' } } } }
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/WidgetResponse' } } }
+```
+
+**What's picked up:**
+- Route template from class-level `[Route("api/[controller]")]` + method-level
+  `[HttpX("template")]`, merged segment-wise
+- `[controller]` token substitution (strips the `Controller` suffix)
+- Parameter binding: explicit `[FromRoute]` / `[FromBody]` / `[FromQuery]` /
+  `[FromHeader]` first; fallback to ASP.NET convention (simple types → query or
+  route when the name appears in the template, complex types → body)
+- Return type unwrapping: `Task<T>` / `ValueTask<T>` / `ActionResult<T>` all
+  strip down to `T` for the response schema
+- `CancellationToken`, `HttpContext`, `[FromServices]`-annotated params — filtered
+  out (infrastructure, not contract)
+
+**Collisions with `[CrudApi]` synthesis:** when a native controller method
+claims the same (verb, pattern) that a `[CrudApi]` class would also emit, the
+native handler wins. Hand-written controllers are ground truth for what the
+API actually exposes — synthesis steps aside.
+
+## `[CrudApi]` → OpenAPI `paths:` (synthesis fallback)
+
+When a class carries `[CrudApi]` (from `ZibStack.NET.Dto`), Dto generates the
+endpoints themselves (Minimal API or `[ApiController]` depending on `ApiStyle`).
+TypeGen **cannot see** that generated code during the same compilation pass —
+Roslyn's cross-generator visibility wall keeps them invisible. So instead of
+scanning the generated output, TypeGen **synthesizes** the matching paths
+directly from the `[CrudApi]` metadata: it knows what Dto will emit, so it
+reconstructs the same paths from the attribute + class shape.
+
+Practically you don't need to care about this split. If you use `[CrudApi]`,
+endpoints appear in OpenAPI. If you hand-write an `[ApiController]`, endpoints
+appear in OpenAPI. Same `paths:` block, unified code path (see
+<a href="#hand-written-controllers--openapi-paths">Hand-written controllers</a>
+for the native scan). When both sources describe the same (verb, path), the
+native controller wins — hand-written code is the ground truth.
 
 ```csharp
 [CrudApi]
@@ -482,7 +624,7 @@ public partial class Order
 }
 ```
 
-Emits:
+Emits (via synthesis):
 
 ```yaml
 paths:
@@ -528,6 +670,7 @@ drift on what a given `[DtoIgnore(flags)]` means.
 - `[DtoName]` per-variant custom DTO names aren't read yet — naming is the Dto default convention.
 - `[ResponseDto(ListName=...)]` list-item variants aren't synthesized (use the main response schema).
 - Authorization policies don't map to `security`/`securitySchemes` yet.
+- Hand-written Minimal API endpoints (`app.MapGet("/path", lambda)`) ARE scanned — see the [Minimal API section above](#hand-written-minimal-api--openapi-paths) for what works and what's out of MVP.
 
 ## `[JsonExtensionData]` → schema-level `additionalProperties`
 
@@ -908,6 +1051,135 @@ Switch to plain stdlib dataclasses (no Pydantic dependency) via the configurator
 `b.Python(py => py.Style = PythonStyle.Dataclass);`. Single-file bundle vs
 file-per-class via `py.FileLayout`. Disable snake_case conversion with
 `py.SnakeCaseProperties = false`.
+
+## Zod schemas (runtime validation)
+
+`TypeTarget.Zod` emits [Zod](https://zod.dev/) schemas — TypeScript source that
+ships a runtime validator alongside an inferred type. Pairs with the TypeScript
+target (both can emit in parallel, independent files, zero coupling) or runs
+standalone when you want only Zod without a separate interface file.
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod,
+               OutputDir = "../client/src/api")]
+public class Order
+{
+    public int Id { get; set; }
+    [ZEmail] public string Email { get; set; } = "";
+    [ZRange(1, 100)] public int Qty { get; set; }
+    public OrderStatus Status { get; set; }
+}
+```
+
+→ **`Order.ts`** (TypeScript emitter, unchanged):
+```typescript
+export interface Order {
+    id: number;
+    email: string;
+    qty: number;
+    status: OrderStatus;
+}
+```
+
+→ **`Order.schema.ts`** (Zod emitter, new):
+```typescript
+import { z } from 'zod';
+import { OrderStatusSchema } from './OrderStatus.schema';
+
+export const OrderSchema = z.object({
+    id: z.number().int(),
+    email: z.string().email(),
+    qty: z.number().int().gte(1).lte(100),
+    status: OrderStatusSchema,
+});
+export type Order = z.infer<typeof OrderSchema>;
+```
+
+**Independent from TypeScript emitter.** Both files are generated from the same
+`SchemaModel`, so drift is structurally impossible — change the C# class and
+both regen identically on the next build. The TS interface stays as the
+ergonomic type-only view (cheap to import, no runtime dep); the Zod schema
+carries the runtime validator and its own `z.infer` alias for Zod-only consumers.
+
+### Validation constraint mapping
+
+Same attributes that drive OpenAPI constraints map to Zod chained calls:
+
+| C# | Zod |
+|---|---|
+| `[MinLength(n)]`, `[ZMinLength(n)]` | `.min(n)` |
+| `[MaxLength(n)]`, `[ZMaxLength(n)]` | `.max(n)` |
+| `[Range(min, max)]`, `[ZRange(min, max)]` | `.gte(min).lte(max)` |
+| `[RegularExpression("pat")]`, `[ZMatch("pat")]` | `.regex(/pat/)` |
+| `[EmailAddress]`, `[ZEmail]` | `.email()` |
+| `[Url]`, `[ZUrl]` | `.url()` |
+| `System.Guid` | `z.string().uuid()` |
+| `System.DateTime` | `z.string().datetime()` |
+| `System.DateOnly` | `z.string().date()` *(Zod 3.23+)* |
+
+### Type mapping
+
+| C# | Zod |
+|---|---|
+| `int`, `long`, `short`, `byte` | `z.number().int()` |
+| `float`, `double` | `z.number()` |
+| `decimal` | `z.string()` *(precision-preserving, matches TS)* |
+| `string` | `z.string()` |
+| `bool` | `z.boolean()` |
+| `T?` (nullable) | `.nullish()` *(null ∪ undefined ∪ absent)* |
+| `List<T>`, `T[]` | `z.array(T)` |
+| `Dictionary<string, V>` | `z.record(z.string(), V)` |
+| user DTO | direct ref `{Name}Schema` (cross-file import) |
+| numeric `enum` | `z.union([z.literal(0), z.literal(1), …])` |
+| `enum` + `[JsonStringEnumConverter]` | `z.enum(['A', 'B', …])` |
+
+### Polymorphic unions
+
+`[JsonPolymorphic]` + `[JsonDerivedType]` on the C# side produces a
+`z.discriminatedUnion` — matching the TypeScript discriminated-union semantics
+exactly, with exhaustive narrowing from the discriminator literal:
+
+```typescript
+export const ShapeSchema = z.discriminatedUnion('kind', [
+    CircleSchema,
+    SquareSchema,
+]);
+export type Shape = z.infer<typeof ShapeSchema>;
+
+// In CircleSchema:
+export const CircleSchema = z.object({
+    kind: z.literal('circle'),
+    radius: z.number(),
+});
+```
+
+### Inheritance
+
+When the base class is in the emit set, derived schemas compose via `.extend()`:
+
+```typescript
+// Derived class Order : Entity
+export const OrderSchema = EntitySchema.extend({
+    customer: z.string(),
+});
+```
+
+### Configuration
+
+```csharp
+b.Zod(z =>
+{
+    z.OutputDir = "../client/src/validation";
+    z.FileLayout = ZodFileLayout.SingleFile;
+    z.SingleFileName = "schemas.ts";
+    z.SchemaConstSuffix = "Schema";   // default; "XxxSchema"
+    z.EmitInferredTypes = true;       // default; adds `export type X = z.infer<…>`
+    z.FileSuffix = ".schema";         // `Order.schema.ts` avoids collision with TS's `Order.ts`
+});
+```
+
+**Consumer install:** the emitted code imports `zod` — add it to the frontend
+project: `npm install zod`. TypeGen doesn't bundle or generate the dep.
 
 ## Why OpenAPI 3.0 (not 3.1)
 

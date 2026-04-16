@@ -181,6 +181,12 @@ internal static class ConfiguratorParser
                 if (calls.Count > 1) ReportUnknown(report, calls[1]);
                 return;
 
+            case "Zod":
+                ApplyLambdaBlock(first, semantic, parsed.Settings.Zod, report,
+                    (settings, prop, val) => AssignZod(settings, prop, val));
+                if (calls.Count > 1) ReportUnknown(report, calls[1]);
+                return;
+
             case "ForType":
                 var (typeName, typeSym) = ResolveForTypeArgWithSymbol(first, semantic);
                 // If symbol resolution fails (Dto-generated companion types like
@@ -361,6 +367,7 @@ internal static class ConfiguratorParser
             case "Version": if (val is string v) s.Version = v; break;
             case "Description": s.Description = val as string; break;
             case "OpenApiVersion": if (val is string ov) s.OpenApiVersion = ov; break;
+            case "EmitPaths": if (val is bool ep) s.EmitPaths = ep; break;
         }
     }
 
@@ -373,6 +380,21 @@ internal static class ConfiguratorParser
             case "FileLayout": if (val is int fl) s.FileLayout = (PythonFileLayout)fl; break;
             case "Style": if (val is int ps) s.Style = (PythonStyle)ps; break;
             case "SnakeCaseProperties": if (val is bool sc) s.SnakeCaseProperties = sc; break;
+            case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
+        }
+    }
+
+    private static void AssignZod(ZodSettings s, string prop, object? val)
+    {
+        switch (prop)
+        {
+            case "OutputDir": s.OutputDir = val as string; break;
+            case "FileLayout": if (val is int fl) s.FileLayout = (ZodFileLayout)fl; break;
+            case "SingleFileName": if (val is string sf) s.SingleFileName = sf; break;
+            case "FileSuffix": if (val is string fs) s.FileSuffix = fs; break;
+            case "SchemaConstSuffix": if (val is string scs) s.SchemaConstSuffix = scs; break;
+            case "EmitInferredTypes": if (val is bool eit) s.EmitInferredTypes = eit; break;
+            case "PropertyNameStyle": if (val is int pn) s.PropertyNameStyle = (NameStyle)pn; break;
             case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
         }
     }

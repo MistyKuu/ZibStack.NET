@@ -20,7 +20,11 @@
          through this so we catch anything that merely LOOKS like valid output but
          isn't a legal OpenAPI document. -->
     <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.22" />
-    
+    <!-- Needed so native-controller-scan tests can compile fragments containing
+         [ApiController] / [HttpX] / ControllerBase. Without the framework ref
+         the in-test Compilation sees those as unresolved and the scan returns
+         empty, silently passing the tests. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,10 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <OutputType>Exe</OutputType>
     <!-- Sample project doesn't ship anywhere — squelch packaging warnings. -->
     <IsPackable>false</IsPackable>
     <!-- Force the manifest .g.cs to land on disk so the targets file can read it. -->

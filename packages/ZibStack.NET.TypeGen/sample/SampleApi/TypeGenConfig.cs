@@ -25,6 +25,16 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             oa.Title = "Sample Order API";
             oa.Version = "1.2.3";
             oa.Description = "Demo service exercising the TypeGen fluent configurator.";
+            // Set to false to emit schemas-only (no paths block). Useful when
+            // Swashbuckle / another tool owns the paths and TypeGen just
+            // provides the `components/schemas` part of the contract.
+            // oa.EmitPaths = false;
+        });
+
+        b.Zod(z =>
+        {
+            z.OutputDir = "generated";
+            z.EmitInferredTypes = true;
         });
         
         b.ForType<Root>()

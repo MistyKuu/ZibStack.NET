@@ -37,6 +37,21 @@ public class CrudApiPathsTests
     }
 
     [Fact]
+    public void EmitPathsFalse_SkipsPathsBlock()
+    {
+        var settings = new GlobalSettings();
+        settings.OpenApi.EmitPaths = false;
+        var yaml = OpenApiEmitter.Emit(ModelWith(CrudClass("Order")), settings).Single().Content;
+
+        // paths section present but empty — schemas still emit.
+        Assert.Contains("paths: {}", yaml);
+        Assert.DoesNotContain("/api/orders:", yaml);
+        Assert.DoesNotContain("operationId:", yaml);
+        Assert.Contains("components:", yaml);
+        Assert.Contains("Order:", yaml);
+    }
+
+    [Fact]
     public void CrudApiAllOps_EmitsFullPathSet()
     {
         var yaml = OpenApiEmitter.Emit(ModelWith(CrudClass("Order")), new GlobalSettings()).Single().Content;

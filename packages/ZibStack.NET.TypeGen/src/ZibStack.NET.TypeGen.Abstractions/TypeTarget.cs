@@ -24,4 +24,15 @@ public enum TypeTarget
     /// C# DTOs — type hints + optional validation on parse.
     /// </summary>
     Python = 1 << 2,
+
+    /// <summary>
+    /// Zod schemas (<c>.schema.ts</c> files). Each class becomes
+    /// <c>export const {Name}Schema = z.object({…});</c> plus
+    /// <c>export type {Name} = z.infer&lt;typeof {Name}Schema&gt;;</c> — the schema
+    /// is the runtime validator, the derived type is the structural TS view.
+    /// Independent from <see cref="TypeScript"/>: both can coexist (recommended)
+    /// or run standalone — Zod alone gives you schemas + inferred types without
+    /// a separate interface file.
+    /// </summary>
+    Zod = 1 << 3,
 }

@@ -123,7 +123,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     // recreate the schemas ourselves. Output targets the SAME emitters the
                     // parent does — TypeScript companions when parent is TS, OpenAPI when
                     // parent is OpenAPI, etc. $refs / cross-file imports resolve cleanly.
-                    if ((cls.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python)) != 0
+                    if ((cls.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python | TypeTarget.Zod)) != 0
                         && !cls.OpenApiIgnore)
                     {
                         SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Create);
@@ -208,7 +208,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     //   b.ForType<CreateArticleRequest>().WithGeneratedTypes(TS)
                     // — that goes through the second pass below which detects the naming
                     // pattern and synthesizes that one variant from the parent's properties.
-                    if ((aux.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python)) != 0
+                    if ((aux.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python | TypeTarget.Zod)) != 0
                         && !aux.OpenApiIgnore)
                     {
                         SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Create);
@@ -295,6 +295,11 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // (filter/sort/select/count) — the OpenAPI paths must match that shape.
             settings.HasQueryDsl = compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null;
 
+            // Populate model.Endpoints: scan hand-written [ApiController] classes +
+            // synthesize from [CrudApi]. Native scans win on (verb, pattern) collisions
+            // so a hand-written controller overrides CrudApi synthesis for the same slot.
+            EndpointDiscovery.Populate(model, compilation);
+
             // Run each requested emitter.
             var allFiles = new List<EmittedFile>();
             if (RequestsTarget(model, TypeTarget.TypeScript))
@@ -303,6 +308,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 allFiles.AddRange(OpenApiEmitter.Emit(model, settings));
             if (RequestsTarget(model, TypeTarget.Python))
                 allFiles.AddRange(PythonEmitter.Emit(model, settings));
+            if (RequestsTarget(model, TypeTarget.Zod))
+                allFiles.AddRange(ZodEmitter.Emit(model, settings));
 
             if (allFiles.Count == 0) return;
 
