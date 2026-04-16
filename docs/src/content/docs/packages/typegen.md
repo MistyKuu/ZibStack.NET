@@ -380,6 +380,60 @@ drift on what a given `[DtoIgnore(flags)]` means.
 - `[ResponseDto(ListName=...)]` list-item variants aren't synthesized (use the main response schema).
 - Authorization policies don't map to `security`/`securitySchemes` yet.
 
+## `[JsonExtensionData]` → schema-level `additionalProperties`
+
+When a property carries `[JsonExtensionData]` (System.Text.Json or Newtonsoft.Json),
+that property is **not** emitted as a regular field. Instead it bumps the parent
+schema with `additionalProperties` (OpenAPI) / an index signature (TypeScript) —
+matching what the runtime serializer actually does (catch every unmapped JSON key).
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi)]
+public class Order
+{
+    public int Id { get; set; }
+    public string Customer { get; set; } = "";
+
+    [JsonExtensionData]
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}
+```
+
+→ TypeScript:
+```typescript
+export interface Order {
+    id: number;
+    customer: string;
+    [key: string]: unknown;   // catches unmapped JSON keys
+}
+```
+
+→ OpenAPI:
+```yaml
+Order:
+  type: object
+  required: [Id, Customer]
+  properties:
+    Id: { type: integer, format: int32 }
+    Customer: { type: string }
+  additionalProperties: true
+```
+
+**Typed value variant.** When the dictionary's value type is concrete (e.g.
+`Dictionary<string, int>`, `Dictionary<string, Tag>`), the emitters carry the
+type through:
+
+- TypeScript: `[key: string]: number | unknown;` — union with `unknown` keeps
+  named properties (which may not satisfy `number`) compatible with the index
+  signature in strict mode.
+- OpenAPI: `additionalProperties: { type: integer, format: int32 }` (or
+  `{ $ref: ... }` for user-DTO values).
+
+**Inheritance.** When the parent class is in the model, a derived class with
+`[JsonExtensionData]` emits its index signature inside the body of the
+`extends`/`allOf` shape — base properties + derived-only props + the additional
+properties marker, all in the right place.
+
 ## Dictionaries, inheritance
 
 - `Dictionary<string, V>` (and `IDictionary` / `IReadOnlyDictionary`) emits as

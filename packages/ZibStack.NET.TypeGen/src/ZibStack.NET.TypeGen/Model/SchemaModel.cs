@@ -155,6 +155,21 @@ internal sealed class SchemaClass
     public bool QueryDsl { get; set; }
 
     /// <summary>
+    /// True when one of this class's properties carries <c>[JsonExtensionData]</c>
+    /// (System.Text.Json or Newtonsoft). The property itself is filtered out of
+    /// emission and the schema gains <c>additionalProperties</c> (OpenAPI) /
+    /// index signature (TypeScript) / <c>extra='allow'</c> (Pydantic).
+    /// </summary>
+    public bool AllowsAdditionalProperties { get; set; }
+
+    /// <summary>
+    /// Mapped value type for <see cref="AllowsAdditionalProperties"/>. <c>null</c>
+    /// when the dictionary value type is <c>object</c> / <c>JsonElement</c> — emitters
+    /// fall back to a permissive marker (<c>true</c> in OpenAPI, <c>unknown</c> in TS).
+    /// </summary>
+    public string? AdditionalPropertiesValueCSharpType { get; set; }
+
+    /// <summary>
     /// Fully-qualified C# name of the immediate base type, or <c>null</c> for <c>object</c>
     /// (or <c>System.ValueType</c> for structs). Used by the emitters to decide whether
     /// to wire inheritance — if the base is present in the model as another

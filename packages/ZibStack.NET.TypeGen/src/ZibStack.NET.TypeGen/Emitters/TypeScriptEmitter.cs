@@ -156,6 +156,18 @@ internal static class TypeScriptEmitter
             sb.AppendLine($"    {name}{optionalMarker}: {typeExpr};");
         }
 
+        // [JsonExtensionData] property → TS index signature catching unmapped keys.
+        // Always emit as `unknown` (or `unknown | V` when value type is constrained)
+        // to stay compatible with the named properties above — strict mode rejects
+        // an index signature whose value isn't a supertype of every named field.
+        if (cls.AllowsAdditionalProperties)
+        {
+            var valueType = "unknown";
+            if (cls.AdditionalPropertiesValueCSharpType is not null)
+                valueType = MapCSharpToTs(cls.AdditionalPropertiesValueCSharpType, isNullable: false, nameLookup) + " | unknown";
+            sb.AppendLine($"    [key: string]: {valueType};");
+        }
+
         sb.AppendLine(ts.UseInterfaces ? "}" : "};");
         sb.AppendLine();
     }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using ZibStack.NET.Validation;
 
 namespace ZibStack.NET.Dto.Sample.Models;
@@ -17,4 +19,11 @@ public partial class Article
     public string? Body { get; set; }
 
     public DateTime PublishedAt { get; set; }
+
+    // Catches unmapped JSON keys at deserialization time. TypeGen detects this
+    // and bumps the schema with `additionalProperties: true` (OpenAPI) /
+    // `[key: string]: unknown;` index signature (TypeScript). The Extra property
+    // itself isn't emitted as a regular field.
+    [JsonExtensionData]
+    public Dictionary<string, object?>? Extra { get; set; }
 }

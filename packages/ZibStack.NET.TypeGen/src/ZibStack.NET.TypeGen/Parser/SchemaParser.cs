@@ -110,10 +110,52 @@ internal static class SchemaParser
             // Skip indexer-style properties — no clean translation to TS / OpenAPI.
             if (member.IsIndexer) continue;
 
+            // [JsonExtensionData] — catch-all for unmapped JSON keys. Doesn't appear
+            // as a regular property in the emitted schema; instead the schema gains
+            // additionalProperties (OpenAPI) / index signature (TypeScript). Value type
+            // is the dictionary's V argument when typed, else null = permissive.
+            if (HasJsonExtensionDataAttr(member))
+            {
+                cls.AllowsAdditionalProperties = true;
+                cls.AdditionalPropertiesValueCSharpType = ExtractDictionaryValueType(member.Type);
+                continue;
+            }
+
             cls.Properties.Add(ParseProperty(member));
         }
 
         return cls;
+    }
+
+    private static bool HasJsonExtensionDataAttr(IPropertySymbol prop) =>
+        prop.GetAttributes().Any(a =>
+        {
+            var name = a.AttributeClass?.ToDisplayString();
+            return name == "System.Text.Json.Serialization.JsonExtensionDataAttribute"
+                || name == "Newtonsoft.Json.JsonExtensionDataAttribute";
+        });
+
+    /// <summary>
+    /// For a <c>Dictionary&lt;string, V&gt;</c> / <c>IDictionary&lt;string, V&gt;</c> /
+    /// <c>IReadOnlyDictionary&lt;string, V&gt;</c> property type, returns V's display
+    /// string. Returns <c>null</c> for plain <c>object</c>, <c>JsonElement</c>, or
+    /// anything not matching the dictionary shape — emitters fall back to permissive.
+    /// </summary>
+    private static string? ExtractDictionaryValueType(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol nts || !nts.IsGenericType || nts.TypeArguments.Length != 2) return null;
+        var def = nts.ConstructedFrom.ToDisplayString();
+        if (def != "System.Collections.Generic.Dictionary<TKey, TValue>"
+            && def != "System.Collections.Generic.IDictionary<TKey, TValue>"
+            && def != "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>")
+            return null;
+        var v = nts.TypeArguments[1].ToDisplayString();
+        // Treat object / JsonElement as "no constraint" — emitters render permissive.
+        if (v is "object" or "object?" or "System.Text.Json.JsonElement"
+            or "System.Text.Json.JsonElement?" or "Newtonsoft.Json.Linq.JToken"
+            or "Newtonsoft.Json.Linq.JToken?")
+            return null;
+        return v;
     }
 
     public static SchemaEnum? ParseEnum(INamedTypeSymbol symbol)

@@ -479,8 +479,16 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             aux.Properties.Add(original);
         }
 
-        // Empty aux (all properties filtered out) — don't bother adding.
-        if (aux.Properties.Count == 0) return;
+        // [JsonExtensionData] propagates to companions — if the parent has a
+        // catch-all property, the Create/Update/Response shapes inherit it
+        // (the JSON wire still accepts unmapped keys for these DTOs).
+        aux.AllowsAdditionalProperties = parent.AllowsAdditionalProperties;
+        aux.AdditionalPropertiesValueCSharpType = parent.AdditionalPropertiesValueCSharpType;
+
+        // Empty aux (all properties filtered out) — don't bother adding,
+        // unless the schema is purely additionalProperties (still useful as
+        // an open-shape contract).
+        if (aux.Properties.Count == 0 && !aux.AllowsAdditionalProperties) return;
         model.Classes.Add(aux);
     }
 

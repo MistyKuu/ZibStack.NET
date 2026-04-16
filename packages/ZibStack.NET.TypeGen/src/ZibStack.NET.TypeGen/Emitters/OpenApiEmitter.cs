@@ -428,6 +428,29 @@ internal static class OpenApiEmitter
             foreach (var p in emittedProps)
                 EmitPropertyYaml(sb, p, nameByCSharp, indent + "  ");
         }
+
+        // [JsonExtensionData] property → additionalProperties on the parent schema
+        // itself. Permissive (`true`) when the dictionary value is object / JsonElement,
+        // typed schema otherwise.
+        if (cls.AllowsAdditionalProperties)
+        {
+            if (cls.AdditionalPropertiesValueCSharpType is null)
+            {
+                sb.AppendLine($"{indent}additionalProperties: true");
+            }
+            else
+            {
+                var inner = MapCSharpToOpenApi(cls.AdditionalPropertiesValueCSharpType, nameByCSharp);
+                sb.AppendLine($"{indent}additionalProperties:");
+                if (inner.RefTarget is not null)
+                    sb.AppendLine($"{indent}  $ref: '#/components/schemas/{inner.RefTarget}'");
+                else
+                {
+                    sb.AppendLine($"{indent}  type: {inner.TypeKey}");
+                    if (inner.FmtKey is not null) sb.AppendLine($"{indent}  format: {inner.FmtKey}");
+                }
+            }
+        }
     }
 
     private static void EmitPropertyYaml(StringBuilder sb, SchemaProperty prop, IReadOnlyDictionary<string, string> nameByCSharp, string indent)
