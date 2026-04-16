@@ -94,11 +94,24 @@ internal static class SchemaParser
 
         if (inlineInherited)
         {
+            // Track names already accounted for so inheritance walks don't duplicate.
+            // Pre-seed with this class's declared properties so an `override` / `new`
+            // here shadows whatever the base declares (most-derived wins).
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var m in symbol.GetMembers().OfType<IPropertySymbol>())
+                if (!m.IsStatic && !m.IsIndexer && m.DeclaredAccessibility == Accessibility.Public)
+                    seen.Add(m.Name);
+
+            // Walk bases from nearest to furthest. First occurrence (closest base) wins —
+            // an abstract `T Type {get;}` on a grandparent gets skipped if the parent
+            // already provides a concrete `override`. Without this dedupe, `class D : B,
+            // B : C<T>` where C declares abstract Type would emit `type:` twice in TS.
             for (var b = baseSymbol; b is not null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
                 foreach (var member in b.GetMembers().OfType<IPropertySymbol>())
                 {
                     if (member.IsStatic || member.IsIndexer) continue;
                     if (member.DeclaredAccessibility != Accessibility.Public) continue;
+                    if (!seen.Add(member.Name)) continue;
                     cls.Properties.Add(ParseProperty(member));
                 }
         }
