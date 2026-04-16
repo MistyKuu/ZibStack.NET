@@ -17,6 +17,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         {
             ts.PropertyNameStyle = NameStyle.CamelCase;
             ts.UseInterfaces = true;
+            ts.OutputDir = "generated";
         });
 
         b.OpenApi(oa =>
@@ -25,6 +26,10 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             oa.Version = "1.2.3";
             oa.Description = "Demo service exercising the TypeGen fluent configurator.";
         });
+        
+        b.ForType<Root>()
+            .WithGeneratedTypes(TypeTarget.TypeScript)
+            .Property(r => r.El).TsType<Dupa>();
 
         b.ForType<OrderItem>().TsName("hoho");
         b.ForType<OrderItem>().Property(x => x.UnitPrice).TsName("ASD");
@@ -43,3 +48,11 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
                 .OpenApiDescription("Display name shown in receipts.");
     }
 }
+public class Root { public object? El { get; set; } }
+public class Dupa {
+    public string Title;
+    public Detail Info;
+    public List<Tag> Tags;
+}
+public class Detail { public int Score; }
+public class Tag { public string Name; }
