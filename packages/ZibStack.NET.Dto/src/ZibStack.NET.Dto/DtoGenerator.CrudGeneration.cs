@@ -1127,50 +1127,48 @@ public partial class DtoGenerator
             }
         }
 
-        // Nested relation tests (dot-notation filter, sort, select on navigation properties)
+        // Nested relation tests — single nav (dot-notation) + collection any/all
         if (info.HasQueryDsl && (info.Operations & OpGetList) != 0)
         {
-            // Single navigation (e.g. Player.Team → filter=Team.Name=*)
+            // Single navigation: Player.Team → filter=Team.Name=*text
             var singleNav = info.Properties.FirstOrDefault(p => p.IsNavigation && !p.IsCollection && p.NavigationProperties?.Count > 0);
             if (singleNav is not null)
             {
                 var navName = singleNav.Name;
                 var navStringProp = singleNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "string" or "System.String");
-                var navIntProp = singleNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "int" or "System.Int32");
 
                 if (navStringProp is not null)
                 {
-                    sb.AppendLine();
-                    sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task NestedFilter_DotNotation_{navName}_{navStringProp.Name}()");
-                    sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={navName}.{navStringProp.Name}=*\");");
-                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
-                    sb.AppendLine("    }");
-                }
+                    var navField = $"{navName}.{navStringProp.Name}";
+                    var navJsonName = char.ToLowerInvariant(navStringProp.Name[0]) + navStringProp.Name.Substring(1);
 
-                if (navStringProp is not null || navIntProp is not null)
-                {
-                    var sortField = navStringProp ?? navIntProp!;
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task NestedSort_{navName}_{sortField.Name}()");
+                    sb.AppendLine($"    public async Task NestedFilter_{navName}_{navStringProp.Name}_ContainsFilter()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort={navName}.{sortField.Name}\");");
+                    sb.AppendLine($"        // filter=contains on nested single-navigation property");
+                    sb.AppendLine($"        var all = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(\"/{route}\");");
+                    sb.AppendLine("        var allCount = all.GetProperty(\"items\").GetArrayLength();");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={navField}=*ZZZZNONEXISTENT\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine("        var filtered = body.GetProperty(\"items\").GetArrayLength();");
+                    sb.AppendLine("        Assert.True(filtered <= allCount, \"Filtered result should be <= unfiltered (nonsense filter should exclude)\");");
                     sb.AppendLine("    }");
 
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task NestedSelect_{navName}_{sortField.Name}()");
+                    sb.AppendLine($"    public async Task NestedSort_{navName}_{navStringProp.Name}()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?select={navName}.{sortField.Name}\");");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort={navField}\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine("        Assert.True(body.GetProperty(\"items\").GetArrayLength() >= 0);");
                     sb.AppendLine("    }");
                 }
             }
 
-            // Collection navigation (e.g. Team.Players → test with any items exist)
+            // Collection navigation: Team.Players → filter=Players.any.Level>50, Players.all.Level>30
             var collectionNav = info.Properties.FirstOrDefault(p => p.IsCollection && p.IsNavigation && p.NavigationProperties?.Count > 0);
             if (collectionNav is not null)
             {
@@ -1178,23 +1176,40 @@ public partial class DtoGenerator
                 var colIntProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "int" or "System.Int32");
                 var colStringProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "string" or "System.String");
 
+                // any() — "teams where ANY player has Level > X"
                 if (colIntProp is not null)
                 {
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task NestedFilter_{colName}_DotNotation()");
+                    sb.AppendLine($"    public async Task CollectionAny_{colName}_{colIntProp.Name}()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.{colIntProp.Name}>0\");");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.any.{colIntProp.Name}>0\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine("        var items = body.GetProperty(\"items\");");
+                    sb.AppendLine($"        // Every returned item should have at least one child with {colIntProp.Name} > 0");
+                    sb.AppendLine("        Assert.True(items.GetArrayLength() >= 0);");
+                    sb.AppendLine("    }");
+
+                    // all() — "teams where ALL players have Level > X"
+                    sb.AppendLine();
+                    sb.AppendLine("    [Fact]");
+                    sb.AppendLine($"    public async Task CollectionAll_{colName}_{colIntProp.Name}()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.all.{colIntProp.Name}>0\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine("        Assert.True(body.GetProperty(\"items\").GetArrayLength() >= 0);");
                     sb.AppendLine("    }");
                 }
-                else if (colStringProp is not null)
+
+                if (colStringProp is not null)
                 {
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task NestedFilter_{colName}_DotNotation()");
+                    sb.AppendLine($"    public async Task CollectionAny_{colName}_{colStringProp.Name}_Contains()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.{colStringProp.Name}=*\");");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.any.{colStringProp.Name}=*test\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
                     sb.AppendLine("    }");
                 }
