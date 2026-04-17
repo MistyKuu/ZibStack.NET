@@ -843,6 +843,40 @@ public partial class DtoGenerator
             sb.AppendLine("    }");
         }
 
+        // Bulk create
+        if ((info.Operations & OpBulkCreate) != 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task BulkCreate_ReturnsOk()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var items = Enumerable.Range(0, 3).Select(_ => {createBody}).ToList();");
+            sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}/bulk\", items);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+            sb.AppendLine("    }");
+        }
+
+        // Bulk delete
+        if ((info.Operations & OpBulkDelete) != 0 && (info.Operations & OpCreate) != 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task BulkDelete_ReturnsOk()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        // Create 3 items first");
+            sb.AppendLine($"        var ids = new List<{info.KeyType}>();");
+            sb.AppendLine("        for (var i = 0; i < 3; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var r = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("            Assert.Equal(HttpStatusCode.Created, r.StatusCode);");
+            sb.AppendLine("            var body = await r.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+            sb.AppendLine($"            ids.Add(body.GetProperty(\"{char.ToLowerInvariant(info.KeyPropertyName[0])}{info.KeyPropertyName.Substring(1)}\").Get{(info.KeyType is "int" or "System.Int32" ? "Int32" : "Int64")}());");
+            sb.AppendLine("        }");
+            sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}/bulk-delete\", ids);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
         return sb.ToString();
     }
