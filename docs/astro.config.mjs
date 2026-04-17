@@ -95,6 +95,7 @@ export default defineConfig({
 								{ label: 'CRUD API', slug: 'packages/dto/crud-api' },
 								{ label: 'Response & mapping', slug: 'packages/dto/response-mapping' },
 								{ label: 'JSON & validation', slug: 'packages/dto/json-and-validation' },
+								{ label: 'Generated tests', slug: 'packages/dto/testing' },
 								{ label: 'Alternatives', slug: 'packages/dto/comparison' },
 							],
 						},
