@@ -30,6 +30,7 @@ public partial class DtoGenerator
         var deletePolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "DeletePolicy").Value.Value as string;
         var softDeleteRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "SoftDelete").Value.Value;
         var softDelete = softDeleteRaw is true;
+        var signalR = symbol.GetAttributes().Any(a => a.AttributeClass?.Name == "SignalRHubAttribute");
 
         // Resolve key property type
         var keyProp = GetAllProperties(symbol).FirstOrDefault(p => p.Name == keyProperty);
@@ -169,7 +170,7 @@ public partial class DtoGenerator
             updatePolicy,
             deletePolicy,
             listResponseName,
-            columnPermissions) { SoftDelete = softDelete };
+            columnPermissions) { SoftDelete = softDelete, SignalR = signalR };
     } catch { return null; } }
 
     // ─── Auto-implied DTOs from [CrudApi] ──────────────────────────────

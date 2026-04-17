@@ -49,6 +49,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
             ctx.AddSource("IDtoConfigurator.g.cs", ConfiguratorSource);
             ctx.AddSource("GenerateCrudTestsAttribute.g.cs", GenerateCrudTestsAttributeSource);
+            ctx.AddSource("SignalRHubAttribute.g.cs", SignalRHubAttributeSource);
         });
 
         // Detect available serializers and emit PatchField + converters
@@ -594,6 +595,10 @@ public partial class DtoGenerator : IIncrementalGenerator
             // Soft delete: emit IsDeleted + DeletedAt properties on the entity partial
             if (info.SoftDelete)
                 spc.AddSource($"{info.FullyQualifiedName}.SoftDelete.g.cs", GenerateSoftDeleteProperties(info));
+
+            // SignalR hub: emit hub class + client interface when [SignalRHub] is on the entity
+            if (info.SignalR)
+                spc.AddSource($"{info.FullyQualifiedName}.Hub.g.cs", GenerateSignalRHub(info));
         });
 
         // [ImTiredOfCrud] (from ZibStack.NET.UI) → CRUD endpoints

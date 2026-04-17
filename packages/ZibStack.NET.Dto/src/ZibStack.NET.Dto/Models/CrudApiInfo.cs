@@ -32,6 +32,7 @@ internal sealed class CrudApiInfo
     public bool HasQueryDto { get; }
     public bool HasQueryDsl { get; set; }
     public bool SoftDelete { get; set; }
+    public bool SignalR { get; set; }
 
     public CrudApiInfo(
         string className,
