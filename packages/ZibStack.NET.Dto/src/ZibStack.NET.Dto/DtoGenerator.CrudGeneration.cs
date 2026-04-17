@@ -629,6 +629,10 @@ public partial class DtoGenerator
         public int? MaxLength { get; set; }
         public int? RangeMin { get; set; }
         public int? RangeMax { get; set; }
+        public bool IsNavigation { get; set; }
+        public bool IsCollection { get; set; }
+        public string? NavigationEntityName { get; set; }
+        public List<CrudTestPropertyInfo>? NavigationProperties { get; set; }
     }
 
     private static void ScanForCrudApi(INamespaceSymbol ns, List<CrudTestInfo> results)
@@ -683,6 +687,66 @@ public partial class DtoGenerator
                     var isNullable = member.Type.NullableAnnotation == NullableAnnotation.Annotated
                                  || typeName.EndsWith("?");
 
+                    // Detect navigation properties
+                    var rawType = member.Type;
+                    if (rawType is INamedTypeSymbol { NullableAnnotation: NullableAnnotation.Annotated } nts)
+                        rawType = nts.WithNullableAnnotation(NullableAnnotation.None);
+                    bool isCollection = rawType is INamedTypeSymbol colType &&
+                        colType.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString().StartsWith("System.Collections.Generic.IEnumerable"));
+                    bool isNavigation = false;
+                    string? navEntityName = null;
+                    List<CrudTestPropertyInfo>? navProps = null;
+
+                    var memberType = rawType as INamedTypeSymbol;
+                    if (memberType is not null && !isCollection)
+                    {
+                        // Single navigation: a user-defined class (not System.*, not primitive)
+                        var typeNs = memberType.ContainingNamespace?.ToDisplayString() ?? "";
+                        if (!typeNs.StartsWith("System") && memberType.TypeKind == TypeKind.Class
+                            && memberType.SpecialType == SpecialType.None)
+                        {
+                            isNavigation = true;
+                            navEntityName = memberType.Name;
+                            navProps = new List<CrudTestPropertyInfo>();
+                            foreach (var navMember in memberType.GetMembers().OfType<IPropertySymbol>())
+                            {
+                                if (navMember.IsStatic || navMember.DeclaredAccessibility != Accessibility.Public) continue;
+                                if (navMember.GetMethod is null) continue;
+                                var nTypeName = navMember.Type.ToDisplayString().TrimEnd('?');
+                                if (nTypeName is "string" or "System.String" or "int" or "System.Int32"
+                                    or "decimal" or "System.Decimal" or "bool" or "System.Boolean")
+                                {
+                                    navProps.Add(new CrudTestPropertyInfo { Name = navMember.Name, CSharpType = nTypeName });
+                                }
+                            }
+                        }
+                    }
+                    else if (isCollection && memberType is not null && memberType.IsGenericType && memberType.TypeArguments.Length == 1)
+                    {
+                        var elementType = memberType.TypeArguments[0] as INamedTypeSymbol;
+                        if (elementType is not null)
+                        {
+                            var elNs = elementType.ContainingNamespace?.ToDisplayString() ?? "";
+                            if (!elNs.StartsWith("System") && elementType.TypeKind == TypeKind.Class)
+                            {
+                                isNavigation = true;
+                                navEntityName = elementType.Name;
+                                navProps = new List<CrudTestPropertyInfo>();
+                                foreach (var navMember in elementType.GetMembers().OfType<IPropertySymbol>())
+                                {
+                                    if (navMember.IsStatic || navMember.DeclaredAccessibility != Accessibility.Public) continue;
+                                    if (navMember.GetMethod is null) continue;
+                                    var nTypeName = navMember.Type.ToDisplayString().TrimEnd('?');
+                                    if (nTypeName is "string" or "System.String" or "int" or "System.Int32"
+                                        or "decimal" or "System.Decimal" or "bool" or "System.Boolean")
+                                    {
+                                        navProps.Add(new CrudTestPropertyInfo { Name = navMember.Name, CSharpType = nTypeName });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     var propInfo = new CrudTestPropertyInfo
                     {
                         Name = member.Name,
@@ -690,6 +754,10 @@ public partial class DtoGenerator
                         IsNullable = isNullable,
                         IsKey = isKey,
                         IsComputed = isComputed,
+                        IsNavigation = isNavigation,
+                        IsCollection = isCollection && isNavigation,
+                        NavigationEntityName = navEntityName,
+                        NavigationProperties = navProps,
                     };
 
                     // Read validation attributes for smart Faker mapping
@@ -1056,6 +1124,80 @@ public partial class DtoGenerator
                 }
                 sb.AppendLine("        }");
                 sb.AppendLine("    }");
+            }
+        }
+
+        // Nested relation tests (dot-notation filter, sort, select on navigation properties)
+        if (info.HasQueryDsl && (info.Operations & OpGetList) != 0)
+        {
+            // Single navigation (e.g. Player.Team → filter=Team.Name=*)
+            var singleNav = info.Properties.FirstOrDefault(p => p.IsNavigation && !p.IsCollection && p.NavigationProperties?.Count > 0);
+            if (singleNav is not null)
+            {
+                var navName = singleNav.Name;
+                var navStringProp = singleNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "string" or "System.String");
+                var navIntProp = singleNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "int" or "System.Int32");
+
+                if (navStringProp is not null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("    [Fact]");
+                    sb.AppendLine($"    public async Task NestedFilter_DotNotation_{navName}_{navStringProp.Name}()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={navName}.{navStringProp.Name}=*\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("    }");
+                }
+
+                if (navStringProp is not null || navIntProp is not null)
+                {
+                    var sortField = navStringProp ?? navIntProp!;
+                    sb.AppendLine();
+                    sb.AppendLine("    [Fact]");
+                    sb.AppendLine($"    public async Task NestedSort_{navName}_{sortField.Name}()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort={navName}.{sortField.Name}\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("    }");
+
+                    sb.AppendLine();
+                    sb.AppendLine("    [Fact]");
+                    sb.AppendLine($"    public async Task NestedSelect_{navName}_{sortField.Name}()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?select={navName}.{sortField.Name}\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("    }");
+                }
+            }
+
+            // Collection navigation (e.g. Team.Players → test with any items exist)
+            var collectionNav = info.Properties.FirstOrDefault(p => p.IsCollection && p.IsNavigation && p.NavigationProperties?.Count > 0);
+            if (collectionNav is not null)
+            {
+                var colName = collectionNav.Name;
+                var colIntProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "int" or "System.Int32");
+                var colStringProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "string" or "System.String");
+
+                if (colIntProp is not null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("    [Fact]");
+                    sb.AppendLine($"    public async Task NestedFilter_{colName}_DotNotation()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.{colIntProp.Name}>0\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("    }");
+                }
+                else if (colStringProp is not null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("    [Fact]");
+                    sb.AppendLine($"    public async Task NestedFilter_{colName}_DotNotation()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.{colStringProp.Name}=*\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine("    }");
+                }
             }
         }
 
