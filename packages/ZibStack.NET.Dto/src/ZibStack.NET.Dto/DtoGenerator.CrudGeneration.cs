@@ -827,10 +827,29 @@ public partial class DtoGenerator
         var parts = new List<string>();
         foreach (var p in props)
         {
+            if (IsUnsupportedTestType(p.CSharpType)) continue;
             var (literal, _) = TestValue(p.CSharpType, p.Name, forUpdate);
             parts.Add($"{p.Name} = {literal}");
         }
-        return "new { " + string.Join(", ", parts) + " }";
+        return parts.Count > 0 ? "new { " + string.Join(", ", parts) + " }" : "new { }";
+    }
+
+    private static bool IsUnsupportedTestType(string type)
+    {
+        var t = type.TrimEnd('?');
+        // Skip collections, navigation properties, and types that can't be trivially defaulted
+        if (t.StartsWith("System.Collections") || t.StartsWith("List<") || t.StartsWith("IList<")
+            || t.StartsWith("ICollection<") || t.StartsWith("IEnumerable<") || t.EndsWith("[]")
+            || t.StartsWith("HashSet<") || t.StartsWith("Dictionary<"))
+            return true;
+        // Skip DateTime/DateOnly — typically server-set (CreatedAt, UpdatedAt)
+        if (t is "System.DateTime" or "System.DateTimeOffset" or "System.DateOnly")
+            return true;
+        // Skip Guid — typically server-generated keys
+        if (t is "System.Guid") return true;
+        // If TestValue would produce "default", skip
+        var (lit, _) = TestValue(t, "", false);
+        return lit == "default";
     }
 
     private static (string literal, string assertValue) TestValue(string csharpType, string propName, bool forUpdate)

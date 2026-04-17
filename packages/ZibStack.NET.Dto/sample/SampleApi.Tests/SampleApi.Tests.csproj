@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- Suppress CS0436: PostInit types (PatchField, PaginatedResponse, etc.) are emitted
+         by the Dto generator in both SampleApi and this test project. The duplicates
+         are identical — safe to suppress. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference the SampleApi so WebApplicationFactory<Program> + entity types resolve -->
+    <ProjectReference Include="..\SampleApi\SampleApi.csproj" />
+    <!-- Dto analyzer — the generator runs here and emits test classes for [CrudApi] entities -->
+    <ProjectReference Include="..\..\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>
