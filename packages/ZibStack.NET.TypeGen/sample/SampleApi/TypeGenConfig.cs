@@ -18,8 +18,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             ts.PropertyNameStyle = NameStyle.CamelCase;
             ts.UseInterfaces = true;
             ts.OutputDir = "generated";
-            ts.SingleFileName = "index.ts";
-            ts.FileLayout = TypeScriptFileLayout.SingleFile;
+            ts.TypeNameStyle = NameStyle.CamelCase;
         });
 
         b.OpenApi(oa =>
