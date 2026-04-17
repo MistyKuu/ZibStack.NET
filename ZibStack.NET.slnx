@@ -31,6 +31,7 @@
   <Folder Name="/packages/ZibStack.NET.Dto/" />
   <Folder Name="/packages/ZibStack.NET.Dto/sample/">
     <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />
+    <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi.Tests/SampleApi.Tests.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Dto/src/">
     <Project Path="packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj" />
