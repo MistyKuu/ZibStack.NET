@@ -360,4 +360,58 @@ public class ZodEmitterTests
         Assert.Single(files);
         Assert.Equal("Public.schema.ts", files[0].FileName);
     }
+
+    [Fact]
+    public void SingleFile_PropertyDependencies_EmittedInCorrectOrder()
+    {
+        var item = Cls("OrderItem", props: new[] { ("Sku", "string", false), ("Qty", "int", false) });
+        var order = Cls("Order", props: new[]
+        {
+            ("Id", "int", false),
+            ("Customer", "string", false),
+            ("Items", "List<OrderItem>", false),
+        });
+
+        var model = new SchemaModel();
+        model.Classes.Add(order);
+        model.Classes.Add(item);
+
+        var settings = new GlobalSettings
+        {
+            Zod = { FileLayout = ZodFileLayout.SingleFile, SingleFileName = "schemas.ts" },
+        };
+        var content = ZodEmitter.Emit(model, settings).Single().Content;
+
+        var itemPos = content.IndexOf("OrderItemSchema = z.object");
+        var orderPos = content.IndexOf("OrderSchema = z.object");
+        Assert.True(itemPos >= 0, "OrderItemSchema should be in output");
+        Assert.True(orderPos >= 0, "OrderSchema should be in output");
+        Assert.True(itemPos < orderPos,
+            $"OrderItemSchema (pos {itemPos}) must come before OrderSchema (pos {orderPos}).\n\n{content}");
+    }
+
+    [Fact]
+    public void SingleFile_DeepChain_CorrectOrder()
+    {
+        var c = Cls("C", props: new[] { ("Value", "int", false) });
+        var b = Cls("B", props: new[] { ("Child", "C", false) });
+        var a = Cls("A", props: new[] { ("Nested", "B", false) });
+
+        var model = new SchemaModel();
+        model.Classes.Add(a);
+        model.Classes.Add(b);
+        model.Classes.Add(c);
+
+        var settings = new GlobalSettings
+        {
+            Zod = { FileLayout = ZodFileLayout.SingleFile, SingleFileName = "schemas.ts" },
+        };
+        var content = ZodEmitter.Emit(model, settings).Single().Content;
+
+        var posC = content.IndexOf("CSchema = z.object");
+        var posB = content.IndexOf("BSchema = z.object");
+        var posA = content.IndexOf("ASchema = z.object");
+        Assert.True(posC < posB, $"C (pos {posC}) must come before B (pos {posB})");
+        Assert.True(posB < posA, $"B (pos {posB}) must come before A (pos {posA})");
+    }
 }

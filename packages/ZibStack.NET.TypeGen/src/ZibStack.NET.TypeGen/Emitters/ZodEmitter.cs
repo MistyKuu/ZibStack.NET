@@ -503,6 +503,7 @@ internal static class ZodEmitter
         {
             if (!visited.Add(c.CSharpFullName)) return;
 
+            // Base class must come first (.extend() references it)
             if (c.BaseClassFullName is { } b && byName.TryGetValue(b, out var baseCls) && emittedSet.Contains(b))
                 Visit(baseCls);
             foreach (var iface in c.ImplementedInterfaces)
@@ -511,6 +512,20 @@ internal static class ZodEmitter
             foreach (var variant in c.PolymorphicVariants)
                 if (byName.TryGetValue(variant.CSharpFullName, out var vCls) && emittedSet.Contains(variant.CSharpFullName))
                     Visit(vCls);
+
+            // Property type dependencies — a schema referencing another schema
+            // (e.g. items: z.array(OrderItemSchema)) must come after the referenced one.
+            foreach (var prop in c.Properties)
+            {
+                var propType = (prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName).TrimEnd('?');
+                // Unwrap collections: List<X>, X[], IEnumerable<X> etc.
+                var inner = ExtractGeneric(propType, "List", "IList", "ICollection", "IEnumerable",
+                    "IReadOnlyList", "IReadOnlyCollection", "HashSet");
+                var resolved = inner ?? (propType.EndsWith("[]") ? propType.Substring(0, propType.Length - 2) : propType);
+                if (byName.TryGetValue(resolved, out var depCls) && emittedSet.Contains(resolved))
+                    Visit(depCls);
+            }
+
             result.Add(c);
         }
 
