@@ -669,10 +669,9 @@ internal sealed class DtoConfig : IDtoConfigurator
     }
 }`,
 
-'crud-tests': \`// [GenerateCrudTests] — auto-generate xUnit integration tests
-// Add [assembly: GenerateCrudTests] and the generator creates a test class
-// per [CrudApi] entity with: GetList, GetById, Create, FullCrudCycle,
-// BulkCreate, BulkDelete tests using WebApplicationFactory + Bogus.
+'crud-tests': `// [GenerateCrudTests] — auto-generate xUnit integration tests
+// Define your entity with [CrudApi], then add [assembly: GenerateCrudTests]
+// in your test project. The generator creates a full test class per entity.
 
 using ZibStack.NET.Dto;
 using ZibStack.NET.UI;
@@ -717,55 +716,85 @@ public partial class Ticket
 
 public enum Priority { Low, Medium, High, Critical }
 
-// In your test project, add this single line:
+// ──────────────────────────────────────────────────────────
+// In your TEST PROJECT, just add:
 //
 //   [assembly: GenerateCrudTests]
 //
-// The generator produces TicketCrudTests with:
-//   - GetList_ReturnsItemsArray
-//   - GetById_NonExistent_ReturnsNotFound
-//   - Create_PersistsAndReturnsLocation
-//   - FullCrudCycle_CreateReadUpdateDelete
-//   - BulkCreate_ActuallyCreatesItems
-//   - BulkDelete_ActuallyDeletesItems
+// The generator produces this (actual generated output):
 //
-// Each test uses Bogus to generate random valid data
-// matching your validation rules.\`,
+//   public class TicketCrudTests
+//       : IClassFixture<WebApplicationFactory<Program>>
+//   {
+//       private readonly HttpClient _client;
+//       private readonly Faker _faker = new("en");
+//
+//       [Fact]
+//       public async Task GetList_ReturnsItemsArray()
+//       {
+//           var response = await _client.GetAsync("/api/tickets");
+//           Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+//           var body = await response.Content
+//               .ReadFromJsonAsync<JsonElement>();
+//           Assert.True(body.TryGetProperty("items", out var items));
+//       }
+//
+//       [Fact]
+//       public async Task Create_PersistsAndReturnsLocation()
+//       {
+//           var response = await _client.PostAsJsonAsync(
+//               "/api/tickets",
+//               new {
+//                   Title = _faker.Random.String2(2, 200),
+//                   Priority = 0
+//               });
+//           Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+//           var location = response.Headers.Location!.ToString();
+//           var get = await _client.GetAsync(location);
+//           Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+//       }
+//
+//       [Fact]
+//       public async Task FullCrudCycle_CreateReadUpdateDelete()
+//       { ... }
+//
+//       [Fact]
+//       public async Task BulkCreate_ActuallyCreatesItems()
+//       { ... }
+//
+//       [Fact]
+//       public async Task BulkDelete_ActuallyDeletesItems()
+//       { ... }
+//   }
+//
+// Bogus generates random data matching your [ZRequired],
+// [ZMaxLength], [ZRange] constraints automatically.`,
 
-'typegen': \`// TypeGen — generate TypeScript, Zod schemas, and GraphQL from C# DTOs.
-// Open the "TypeGen" tab to see the generated output files.
+'typegen': `// TypeGen — generate TypeScript, Zod, GraphQL from C# DTOs.
+// Two styles: [GenerateTypes] attribute OR fluent ITypeGenConfigurator.
+// Open the "TypeGen" tab to see generated output files.
 
 using ZibStack.NET.Dto;
 using ZibStack.NET.TypeGen;
 
 namespace Demo;
 
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)]
+// MODEL: no [GenerateTypes] attribute needed — fluent config opts it in.
 [CrudApi(Route = "api/products")]
 [CreateDto]
 [ResponseDto]
 public partial class Product
 {
     [DtoIgnore] public int Id { get; set; }
-
-    [TsName("productName")]    // override TS field name
     public required string Name { get; set; }
-
     public string? Description { get; set; }
-
-    [OpenApiProperty(Format = "decimal", Description = "Unit price in USD")]
     public decimal Price { get; set; }
-
     public int Stock { get; set; }
     public bool IsActive { get; set; }
     public ProductCategory Category { get; set; }
-
-    [TsIgnore]                // exclude from TypeScript output
-    [OpenApiIgnore]           // exclude from OpenAPI output
     public string InternalSku { get; set; } = "";
 }
 
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)]
 public enum ProductCategory
 {
     Electronics,
@@ -775,10 +804,26 @@ public enum ProductCategory
     Other
 }
 
-// Generated output (see TypeGen tab):
-//   - TypeScript interfaces (Product, ProductCategory)
-//   - Zod runtime validation schemas
-//   - GraphQL SDL types\`,
+// FLUENT CONFIG: zero attributes on the model — central file drives output.
+internal sealed class TypeGenConfig : ITypeGenConfigurator
+{
+    public void Configure(ITypeGenBuilder b)
+    {
+        // Global settings per target
+        b.TypeScript(ts => ts.OutputDir = "generated/ts");
+        b.Zod(zod => zod.OutputDir = "generated/zod");
+
+        // Opt-in Product for TypeScript + Zod + GraphQL
+        b.ForType<Product>()
+            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)
+            .Property(p => p.Name).TsName("productName")      // rename in TS
+            .Property(p => p.InternalSku).TsIgnore();          // exclude from TS
+
+        // Opt-in enum too
+        b.ForType<ProductCategory>()
+            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL);
+    }
+}`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
