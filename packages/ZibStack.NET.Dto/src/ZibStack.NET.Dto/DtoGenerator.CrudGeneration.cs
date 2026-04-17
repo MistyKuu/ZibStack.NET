@@ -855,9 +855,22 @@ public partial class DtoGenerator
     private static (string literal, string assertValue) TestValue(string csharpType, string propName, bool forUpdate)
     {
         var suffix = forUpdate ? "_Updated" : "";
+        // Smart string defaults: pattern-match common property names for valid test data
+        if (csharpType is "string" or "System.String")
+        {
+            var lower = propName.ToLowerInvariant();
+            if (lower.Contains("email"))
+                return (forUpdate ? "\"updated@example.com\"" : "\"test@example.com\"",
+                        forUpdate ? "\"updated@example.com\"" : "\"test@example.com\"");
+            if (lower.Contains("url") || lower.Contains("website") || lower.Contains("link"))
+                return ($"\"https://example.com/{propName.ToLowerInvariant()}{suffix}\"",
+                        $"\"https://example.com/{propName.ToLowerInvariant()}{suffix}\"");
+            if (lower.Contains("phone"))
+                return ("\"555-0100\"", "\"555-0100\"");
+            return ($"\"{propName}{suffix}_Test\"", $"\"{propName}{suffix}_Test\"");
+        }
         return csharpType switch
         {
-            "string" or "System.String" => ($"\"{propName}{suffix}_Test\"", $"\"{propName}{suffix}_Test\""),
             "int" or "System.Int32" => (forUpdate ? "2" : "1", forUpdate ? "2" : "1"),
             "long" or "System.Int64" => (forUpdate ? "2L" : "1L", forUpdate ? "2L" : "1L"),
             "decimal" or "System.Decimal" => (forUpdate ? "199.99m" : "99.99m", forUpdate ? "199.99m" : "99.99m"),
