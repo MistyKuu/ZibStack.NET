@@ -319,4 +319,97 @@ public class TypeScriptEmitterTests
         Assert.Contains("Pending = 0,", ts);
         Assert.Contains("Done = 1,", ts);
     }
+
+    // ── diamond-shape deduplication ──
+
+    [Fact]
+    public void SingleFile_DiamondTypeGraph_NoDuplicateTypes()
+    {
+        // Reproduces: MigrationDownDto emitted 15+ times when referenced from
+        // both PhasesDto.Expand[].Down and PhasesDto.Contract[].Down in SingleFile mode.
+        var migUp = Cls("MigrationUpDto", props: new[] { ("Action", "string", false) });
+        var migDown = Cls("MigrationDownDto", props: new[] { ("Action", "string", false) });
+        var migration = Cls("MigrationDto", props: new[]
+        {
+            ("Name", "string", false),
+            ("Up", "MigrationUpDto", false),
+            ("Down", "MigrationDownDto", true),
+        });
+        var phases = Cls("PhasesDto", props: new[]
+        {
+            ("Expand", "List<MigrationDto>", false),
+            ("Contract", "List<MigrationDto>", false),
+        });
+        var version = Cls("SolutionVersionDto", props: new[]
+        {
+            ("Version", "string", false),
+            ("Phases", "PhasesDto", false),
+        });
+        var request = Cls("RegisterSolutionRequestDto", props: new[]
+        {
+            ("Name", "string", false),
+            ("Versions", "List<SolutionVersionDto>", false),
+        });
+
+        var model = new SchemaModel();
+        model.Classes.AddRange(new[] { request, version, phases, migration, migUp, migDown });
+
+        var settings = new GlobalSettings
+        {
+            TypeScript = { FileLayout = TypeScriptFileLayout.SingleFile, SingleFileName = "index.ts", OutputDir = "out" },
+        };
+        var files = TypeScriptEmitter.Emit(model, settings);
+        var content = Assert.Single(files).Content;
+
+        // MigrationDownDto should appear EXACTLY ONCE as an interface declaration
+        var count = System.Text.RegularExpressions.Regex.Matches(content, "export interface MigrationDownDto").Count;
+        Assert.Equal(1, count);
+
+        // MigrationUpDto same — exactly once
+        var upCount = System.Text.RegularExpressions.Regex.Matches(content, "export interface MigrationUpDto").Count;
+        Assert.Equal(1, upCount);
+
+        // MigrationDto same
+        var migCount = System.Text.RegularExpressions.Regex.Matches(content, "export interface MigrationDto").Count;
+        Assert.Equal(1, migCount);
+    }
+
+    [Fact]
+    public void FilePerClass_DiamondTypeGraph_NoDuplicateFiles()
+    {
+        // Same diamond graph, FilePerClass — should produce exactly 6 files, not more
+        var migUp = Cls("MigrationUpDto", props: new[] { ("Action", "string", false) });
+        var migDown = Cls("MigrationDownDto", props: new[] { ("Action", "string", false) });
+        var migration = Cls("MigrationDto", props: new[]
+        {
+            ("Name", "string", false),
+            ("Up", "MigrationUpDto", false),
+            ("Down", "MigrationDownDto", true),
+        });
+        var phases = Cls("PhasesDto", props: new[]
+        {
+            ("Expand", "List<MigrationDto>", false),
+            ("Contract", "List<MigrationDto>", false),
+        });
+        var version = Cls("SolutionVersionDto", props: new[]
+        {
+            ("Version", "string", false),
+            ("Phases", "PhasesDto", false),
+        });
+        var request = Cls("RegisterSolutionRequestDto", props: new[]
+        {
+            ("Name", "string", false),
+            ("Versions", "List<SolutionVersionDto>", false),
+        });
+
+        var model = new SchemaModel();
+        model.Classes.AddRange(new[] { request, version, phases, migration, migUp, migDown });
+
+        var files = TypeScriptEmitter.Emit(model, new GlobalSettings());
+
+        // Exactly 6 files — one per type
+        Assert.Equal(6, files.Count);
+        Assert.Single(files.Where(f => f.FileName == "MigrationDownDto.ts"));
+        Assert.Single(files.Where(f => f.FileName == "MigrationUpDto.ts"));
+    }
 }
