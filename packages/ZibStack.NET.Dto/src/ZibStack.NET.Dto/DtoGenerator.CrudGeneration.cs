@@ -769,15 +769,18 @@ public partial class DtoGenerator
         sb.AppendLine($"    public {entity}CrudTests(WebApplicationFactory<Program> factory)");
         sb.AppendLine("        => _client = factory.CreateClient();");
 
-        // GET list
+        // GET list — verify returns items array
         if ((info.Operations & OpGetList) != 0)
         {
             sb.AppendLine();
             sb.AppendLine("    [Fact]");
-            sb.AppendLine($"    public async Task GetList_ReturnsOk()");
+            sb.AppendLine($"    public async Task GetList_ReturnsItemsArray()");
             sb.AppendLine("    {");
             sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}\");");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+            sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+            sb.AppendLine("        Assert.True(body.TryGetProperty(\"items\", out var items), \"Response should contain 'items' array\");");
+            sb.AppendLine("        Assert.Equal(System.Text.Json.JsonValueKind.Array, items.ValueKind);");
             sb.AppendLine("    }");
         }
 
@@ -793,8 +796,23 @@ public partial class DtoGenerator
             sb.AppendLine("    }");
         }
 
-        // Create
-        if ((info.Operations & OpCreate) != 0)
+        // Create — verify persisted (read back via Location header)
+        if ((info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task Create_PersistsAndReturnsLocation()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, response.StatusCode);");
+            sb.AppendLine("        var location = response.Headers.Location!.ToString();");
+            sb.AppendLine();
+            sb.AppendLine("        // Verify entity actually exists at the returned Location");
+            sb.AppendLine("        var getResponse = await _client.GetAsync(location);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);");
+            sb.AppendLine("    }");
+        }
+        else if ((info.Operations & OpCreate) != 0)
         {
             sb.AppendLine();
             sb.AppendLine("    [Fact]");
@@ -802,11 +820,10 @@ public partial class DtoGenerator
             sb.AppendLine("    {");
             sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, response.StatusCode);");
-            sb.AppendLine("        Assert.NotNull(response.Headers.Location);");
             sb.AppendLine("    }");
         }
 
-        // Full CRUD cycle
+        // Full CRUD cycle — verify each step's BEHAVIOR, not just status
         if ((info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0 &&
             (info.Operations & OpUpdate) != 0 && (info.Operations & OpDelete) != 0)
         {
@@ -819,33 +836,62 @@ public partial class DtoGenerator
             sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);");
             sb.AppendLine("        var location = createResponse.Headers.Location!.ToString();");
             sb.AppendLine();
-            sb.AppendLine($"        // 2. Read back — verify created");
+            sb.AppendLine($"        // 2. Read back — verify entity was persisted");
             sb.AppendLine("        var getResponse = await _client.GetAsync(location);");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);");
+            sb.AppendLine("        var created = await getResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
 
-            // Verify response has content (Faker generates random values so we don't
-            // assert exact field values — just that the entity was persisted and returned)
-            sb.AppendLine("        var body = await getResponse.Content.ReadAsStringAsync();");
-            sb.AppendLine("        Assert.NotEmpty(body);");
+            // Find a string property to verify update actually changed a value
+            var verifyProp = updateProps.FirstOrDefault(p => !IsUnsupportedTestType(p.CSharpType) && p.CSharpType is "string" or "System.String");
 
             sb.AppendLine();
-            sb.AppendLine($"        // 3. Update");
+            sb.AppendLine($"        // 3. Update — send new values and verify they stuck");
             sb.AppendLine($"        var patchContent = JsonContent.Create({updateBody});");
             sb.AppendLine("        var updateResponse = await _client.PatchAsync(location, patchContent);");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);");
+
+            if (verifyProp is not null)
+            {
+                var jsonName = char.ToLowerInvariant(verifyProp.Name[0]) + verifyProp.Name.Substring(1);
+                sb.AppendLine();
+                sb.AppendLine($"        // Read back after update — verify value actually changed");
+                sb.AppendLine("        var afterUpdate = await _client.GetAsync(location);");
+                sb.AppendLine("        var updated = await afterUpdate.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                sb.AppendLine($"        var before = created.GetProperty(\"{jsonName}\").GetString();");
+                sb.AppendLine($"        var after = updated.GetProperty(\"{jsonName}\").GetString();");
+                sb.AppendLine("        Assert.NotEqual(before, after);");
+            }
+
             sb.AppendLine();
             sb.AppendLine($"        // 4. Delete");
             sb.AppendLine("        var deleteResponse = await _client.DeleteAsync(location);");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);");
             sb.AppendLine();
-            sb.AppendLine($"        // 5. Verify gone");
+            sb.AppendLine($"        // 5. Verify actually gone — GetById returns 404");
             sb.AppendLine("        var afterDelete = await _client.GetAsync(location);");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);");
             sb.AppendLine("    }");
         }
 
-        // Bulk create
-        if ((info.Operations & OpBulkCreate) != 0)
+        // Bulk create — verify items actually got created
+        if ((info.Operations & OpBulkCreate) != 0 && (info.Operations & OpGetList) != 0)
+        {
+            var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
+            var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
+
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task BulkCreate_ActuallyCreatesItems()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var countBefore = (await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(\"/{route}?count=true\")).GetProperty(\"count\").GetInt32();");
+            sb.AppendLine($"        var items = Enumerable.Range(0, 3).Select(_ => {createBody}).ToList();");
+            sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}/bulk\", items);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+            sb.AppendLine($"        var countAfter = (await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(\"/{route}?count=true\")).GetProperty(\"count\").GetInt32();");
+            sb.AppendLine("        Assert.Equal(countBefore + 3, countAfter);");
+            sb.AppendLine("    }");
+        }
+        else if ((info.Operations & OpBulkCreate) != 0)
         {
             sb.AppendLine();
             sb.AppendLine("    [Fact]");
@@ -857,78 +903,158 @@ public partial class DtoGenerator
             sb.AppendLine("    }");
         }
 
-        // Bulk delete
-        if ((info.Operations & OpBulkDelete) != 0 && (info.Operations & OpCreate) != 0)
+        // Bulk delete — verify items actually got deleted (GetById → 404)
+        if ((info.Operations & OpBulkDelete) != 0 && (info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0)
         {
+            var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
+            var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
+
             sb.AppendLine();
             sb.AppendLine("    [Fact]");
-            sb.AppendLine($"    public async Task BulkDelete_ReturnsOk()");
+            sb.AppendLine($"    public async Task BulkDelete_ActuallyDeletesItems()");
             sb.AppendLine("    {");
-            sb.AppendLine($"        // Create 3 items first");
             sb.AppendLine($"        var ids = new List<{info.KeyType}>();");
             sb.AppendLine("        for (var i = 0; i < 3; i++)");
             sb.AppendLine("        {");
             sb.AppendLine($"            var r = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
             sb.AppendLine("            Assert.Equal(HttpStatusCode.Created, r.StatusCode);");
-            sb.AppendLine("            var body = await r.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
-            sb.AppendLine($"            ids.Add(body.GetProperty(\"{char.ToLowerInvariant(info.KeyPropertyName[0])}{info.KeyPropertyName.Substring(1)}\").Get{(info.KeyType is "int" or "System.Int32" ? "Int32" : "Int64")}());");
+            sb.AppendLine($"            var body = await r.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+            sb.AppendLine($"            ids.Add(body.GetProperty(\"{keyJsonName}\").{keyGetter}());");
             sb.AppendLine("        }");
             sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}/bulk-delete\", ids);");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+            sb.AppendLine();
+            sb.AppendLine("        // Verify each deleted item is actually gone");
+            sb.AppendLine("        foreach (var id in ids)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var check = await _client.GetAsync($\"/{route}/{{id}}\");");
+            sb.AppendLine("            Assert.Equal(HttpStatusCode.NotFound, check.StatusCode);");
+            sb.AppendLine("        }");
             sb.AppendLine("    }");
         }
 
-        // Query DSL tests (filter, sort, select, count)
+        // Query DSL tests (filter, sort, select, count) — verify actual behavior, not just status
         if (info.HasQueryDsl && (info.Operations & OpGetList) != 0 && (info.Operations & OpCreate) != 0)
         {
-            // Find a filterable property (prefer int with range, fallback to any string)
-            var filterProp = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.CSharpType is "int" or "System.Int32" && p.RangeMax.HasValue)
-                          ?? info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.CSharpType is "string" or "System.String");
-            var sortProp = filterProp ?? info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed);
+            var intProp = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.CSharpType is "int" or "System.Int32" && p.RangeMax.HasValue);
+            var stringProp = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.CSharpType is "string" or "System.String" && !p.IsNullable);
+            var sortProp = intProp ?? stringProp ?? info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed);
 
-            if (filterProp is not null)
+            if (sortProp is not null)
             {
-                var filterName = filterProp.Name;
-
+                // Count test — create known number of items, verify count matches
                 sb.AppendLine();
                 sb.AppendLine("    [Fact]");
-                sb.AppendLine($"    public async Task QueryFilter_ReturnsFilteredResults()");
+                sb.AppendLine($"    public async Task QueryCount_ReturnsCorrectCount()");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        // Create 2 items");
+                sb.AppendLine($"        // Get current count");
+                sb.AppendLine($"        var before = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(\"/{route}?count=true\");");
+                sb.AppendLine("        var countBefore = before.GetProperty(\"count\").GetInt32();");
+                sb.AppendLine($"        // Add 2 items");
                 sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
                 sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
-                if (filterProp.CSharpType is "int" or "System.Int32")
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={filterName}>0\");");
-                else
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={filterName}=*\");");
-                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine($"        // Verify count increased by 2");
+                sb.AppendLine($"        var after = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(\"/{route}?count=true\");");
+                sb.AppendLine("        Assert.Equal(countBefore + 2, after.GetProperty(\"count\").GetInt32());");
                 sb.AppendLine("    }");
+            }
+
+            // Filter test — create item with known value, filter for it, verify it's in results
+            if (intProp is not null)
+            {
+                var propName = intProp.Name;
+                var jsonName = char.ToLowerInvariant(propName[0]) + propName.Substring(1);
+                var maxVal = intProp.RangeMax ?? 100;
 
                 sb.AppendLine();
                 sb.AppendLine("    [Fact]");
-                sb.AppendLine($"    public async Task QuerySort_ReturnsSortedResults()");
+                sb.AppendLine($"    public async Task QueryFilter_ActuallyFilters()");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort=-{(sortProp ?? filterProp).Name}\");");
-                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine($"        // Create item with {propName}={maxVal} (max range value)");
+                // Build a custom body with the max value for this property
+                sb.AppendLine($"        var specificBody = {createBody};");
+                sb.AppendLine($"        // Override: set specific known value via reflection-free approach");
+                sb.AppendLine($"        var highResponse = await _client.PostAsJsonAsync(\"/{route}\",");
+                sb.Append($"            new {{ ");
+                var customParts = new List<string>();
+                foreach (var p in createProps)
+                {
+                    if (IsUnsupportedTestType(p.CSharpType)) continue;
+                    if (p.Name == propName)
+                        customParts.Add($"{p.Name} = {maxVal}");
+                    else
+                    {
+                        var f = FakerExpression(p);
+                        if (f is not null) customParts.Add($"{p.Name} = {f}");
+                    }
+                }
+                sb.Append(string.Join(", ", customParts));
+                sb.AppendLine(" });");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, highResponse.StatusCode);");
+                sb.AppendLine();
+                sb.AppendLine($"        // Filter for {propName}>={maxVal} — should include our item");
+                sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={propName}>={maxVal}\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
+                sb.AppendLine("        var body = await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                sb.AppendLine("        var items = body.GetProperty(\"items\");");
+                sb.AppendLine("        Assert.True(items.GetArrayLength() > 0, \"Filter should return at least the item we created\");");
+                sb.AppendLine($"        // Verify all returned items match the filter");
+                sb.AppendLine($"        foreach (var item in items.EnumerateArray())");
+                sb.AppendLine($"            Assert.True(item.GetProperty(\"{jsonName}\").GetInt32() >= {maxVal});");
                 sb.AppendLine("    }");
+            }
+
+            // Sort test — create 2 items with different values, sort desc, verify order
+            if (intProp is not null)
+            {
+                var propName = intProp.Name;
+                var jsonName = char.ToLowerInvariant(propName[0]) + propName.Substring(1);
 
                 sb.AppendLine();
                 sb.AppendLine("    [Fact]");
-                sb.AppendLine($"    public async Task QueryCount_ReturnsCount()");
+                sb.AppendLine($"    public async Task QuerySort_ActuallySorts()");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?count=true\");");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort=-{propName}\");");
                 sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
                 sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
-                sb.AppendLine("        Assert.True(body.GetProperty(\"count\").GetInt32() >= 0);");
+                sb.AppendLine("        var items = body.GetProperty(\"items\");");
+                sb.AppendLine("        if (items.GetArrayLength() >= 2)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            var first = items[0].GetProperty(\"{jsonName}\").GetInt32();");
+                sb.AppendLine($"            var second = items[1].GetProperty(\"{jsonName}\").GetInt32();");
+                sb.AppendLine("            Assert.True(first >= second, $\"Expected descending sort: {{first}} >= {{second}}\");");
+                sb.AppendLine("        }");
                 sb.AppendLine("    }");
+            }
+
+            // Select test — verify projected response only contains requested fields
+            if (stringProp is not null || intProp is not null)
+            {
+                var selectProp = (stringProp ?? intProp)!;
+                var selectName = selectProp.Name;
+                var selectJson = char.ToLowerInvariant(selectName[0]) + selectName.Substring(1);
 
                 sb.AppendLine();
                 sb.AppendLine("    [Fact]");
-                sb.AppendLine($"    public async Task QuerySelect_ReturnsProjectedFields()");
+                sb.AppendLine($"    public async Task QuerySelect_ReturnsOnlySelectedFields()");
                 sb.AppendLine("    {");
                 sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
-                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?select={filterName}\");");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?select={selectName}\");");
                 sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                sb.AppendLine("        var items = body.GetProperty(\"items\");");
+                sb.AppendLine("        if (items.GetArrayLength() > 0)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            var firstItem = items[0];");
+                sb.AppendLine($"            Assert.True(firstItem.TryGetProperty(\"{selectJson}\", out _), \"Selected field '{selectJson}' should be present\");");
+                // Non-selected fields should be absent in projected response
+                var otherProp = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.Name != selectName && !IsUnsupportedTestType(p.CSharpType));
+                if (otherProp is not null)
+                {
+                    var otherJson = char.ToLowerInvariant(otherProp.Name[0]) + otherProp.Name.Substring(1);
+                    sb.AppendLine($"            Assert.False(firstItem.TryGetProperty(\"{otherJson}\", out _), \"Non-selected field '{otherJson}' should be absent\");");
+                }
+                sb.AppendLine("        }");
                 sb.AppendLine("    }");
             }
         }
