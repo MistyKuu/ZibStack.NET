@@ -310,6 +310,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 allFiles.AddRange(PythonEmitter.Emit(model, settings));
             if (RequestsTarget(model, TypeTarget.Zod))
                 allFiles.AddRange(ZodEmitter.Emit(model, settings));
+            if (RequestsTarget(model, TypeTarget.GraphQL))
+                allFiles.AddRange(GraphQLEmitter.Emit(model, settings));
 
             if (allFiles.Count == 0) return;
 

@@ -22,6 +22,7 @@ internal enum TypeTarget
     OpenApi = 1 << 1,
     Python = 1 << 2,
     Zod = 1 << 3,
+    GraphQL = 1 << 4,
 }
 
 /// <summary>
@@ -71,6 +72,14 @@ internal enum TsEnumStyle { Union, Enum }
 internal enum PythonFileLayout { FilePerClass, SingleFile }
 internal enum PythonStyle { Pydantic, Dataclass }
 internal enum ZodFileLayout { FilePerClass, SingleFile }
+
+internal sealed class GraphQLSettings
+{
+    public string? OutputDir { get; set; }
+    public string SingleFileName { get; set; } = "schema.graphql";
+    public bool SingleFile { get; set; } = true;
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
 
 internal sealed class ZodSettings
 {
@@ -559,6 +568,7 @@ internal sealed class GlobalSettings
     public OpenApiSettings OpenApi { get; set; } = new();
     public PythonSettings Python { get; set; } = new();
     public ZodSettings Zod { get; set; } = new();
+    public GraphQLSettings GraphQL { get; set; } = new();
 
     /// <summary>
     /// Set by the generator when <c>ZibStack.NET.Query</c> is referenced by the

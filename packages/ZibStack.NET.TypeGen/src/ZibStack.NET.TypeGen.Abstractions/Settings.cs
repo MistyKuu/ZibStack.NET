@@ -247,6 +247,25 @@ public sealed class ZodSettings
 }
 
 /// <summary>
+/// GraphQL SDL emitter settings. Emits <c>.graphql</c> files with
+/// <c>type</c> and <c>enum</c> definitions.
+/// </summary>
+public sealed class GraphQLSettings
+{
+    /// <summary>Output directory, relative to the project or absolute.</summary>
+    public string? OutputDir { get; set; }
+
+    /// <summary>File name when emitting all types into one file. Default <c>"schema.graphql"</c>.</summary>
+    public string SingleFileName { get; set; } = "schema.graphql";
+
+    /// <summary>Emit all types into one file (<c>true</c>, default) or one file per type (<c>false</c>).</summary>
+    public bool SingleFile { get; set; } = true;
+
+    /// <summary>Emit a <c># @generated</c> banner at the top.</summary>
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
+
+/// <summary>
 /// OpenAPI emitter settings. Default target is OpenAPI 3.0.3 — see
 /// <see cref="OpenApiVersion"/>.
 /// </summary>

@@ -35,4 +35,10 @@ public enum TypeTarget
     /// a separate interface file.
     /// </summary>
     Zod = 1 << 3,
+
+    /// <summary>
+    /// GraphQL SDL (<c>.graphql</c> files). Each class becomes a <c>type</c>,
+    /// each enum a GraphQL <c>enum</c> with UPPER_CASE members.
+    /// </summary>
+    GraphQL = 1 << 4,
 }
