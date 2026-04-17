@@ -18,6 +18,8 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             ts.PropertyNameStyle = NameStyle.CamelCase;
             ts.UseInterfaces = true;
             ts.OutputDir = "generated";
+            ts.SingleFileName = "index.ts";
+            ts.FileLayout = TypeScriptFileLayout.SingleFile;
         });
 
         b.OpenApi(oa =>
@@ -40,6 +42,8 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         b.ForType<Root>()
             .WithGeneratedTypes(TypeTarget.TypeScript)
             .Property(r => r.El).UseType<Dupa>();
+
+        b.ForType<PackageRequestDto>().WithGeneratedTypes(TypeTarget.TypeScript);
 
         b.ForType<OrderItem>().TsName("hoho");
         b.ForType<OrderItem>().Property(x => x.UnitPrice).TsName("ASD");

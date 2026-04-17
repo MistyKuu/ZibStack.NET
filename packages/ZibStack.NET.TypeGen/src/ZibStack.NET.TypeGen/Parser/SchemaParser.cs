@@ -116,6 +116,13 @@ internal static class SchemaParser
                     }
                     else
                     {
+                        // Guard: skip if a class with the same FQN is already in the model
+                        // (can happen when multiple discovery passes run — e.g. fluent
+                        // WithGeneratedTypes + attribute [GenerateTypes] on different roots
+                        // that share a transitive dependency).
+                        var fqn = nested.ToDisplayString();
+                        if (model.Classes.Any(c => c.CSharpFullName == fqn)) continue;
+
                         var sub = ParseAuxiliaryClass(nested, cls.Targets, cls.OutputDir);
                         if (sub is not null)
                         {

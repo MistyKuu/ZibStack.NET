@@ -81,8 +81,6 @@ public record InitialComponentsDto()
     public LayoutItem[] Layouts { get; init; } = [];
 }
 
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.GraphQL,
-               OutputDir = "generated")]
 public record PackageRequestDto(
     string Name,
     string? Description,
