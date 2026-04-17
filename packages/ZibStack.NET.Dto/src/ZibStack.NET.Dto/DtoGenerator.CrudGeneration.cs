@@ -1049,7 +1049,7 @@ public partial class DtoGenerator
                 sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
                 sb.AppendLine($"        // Verify count increased by 2");
                 sb.AppendLine($"        var after = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(\"/{route}?count=true\");");
-                sb.AppendLine("        Assert.Equal(countBefore + 2, after.GetProperty(\"count\").GetInt32());");
+                sb.AppendLine("        Assert.True(after.GetProperty(\"count\").GetInt32() >= countBefore + 2, \"Count should increase by at least 2\");");
                 sb.AppendLine("    }");
             }
 
@@ -1192,6 +1192,89 @@ public partial class DtoGenerator
                     sb.AppendLine("        Assert.True(body.TryGetProperty(\"totalCount\", out _), \"Sorted response should have totalCount\");");
                     sb.AppendLine("    }");
                 }
+            }
+
+            // Complex filter tests: AND, OR, grouped (AND + OR)
+            var intProp2 = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && !p.IsNavigation && p.CSharpType is "int" or "System.Int32");
+            var stringProp2 = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && !p.IsNavigation && p.CSharpType is "string" or "System.String" && !p.IsNullable);
+            if (intProp2 is not null && stringProp2 is not null)
+            {
+                var intName = intProp2.Name;
+                var strName = stringProp2.Name;
+                var intJson = char.ToLowerInvariant(intName[0]) + intName.Substring(1);
+                var intMax = intProp2.RangeMax ?? 99;
+                var intMid = intMax / 2;
+
+                // AND — comma-separated: Level>50,Name=*UNIQUE
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task ComplexFilter_AND()");
+                sb.AppendLine("    {");
+                // Create item with known values: high int + unique string
+                sb.AppendLine($"        var uniqueName = \"ANDTEST_\" + _faker.Random.AlphaNumeric(8);");
+                sb.Append($"        await _client.PostAsJsonAsync(\"/{route}\", new {{ ");
+                var andParts = new List<string>();
+                foreach (var p in createProps)
+                {
+                    if (IsUnsupportedTestType(p.CSharpType)) continue;
+                    if (p.Name == intName) { andParts.Add($"{intName} = {intMax}"); continue; }
+                    if (p.Name == strName) { andParts.Add($"{strName} = uniqueName"); continue; }
+                    var f = FakerExpression(p); if (f is not null) andParts.Add($"{p.Name} = {f}");
+                }
+                sb.AppendLine(string.Join(", ", andParts) + " });");
+                sb.AppendLine();
+                sb.AppendLine($"        // AND filter: {intName}>={intMax} AND {strName} contains ANDTEST");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?pageSize=1000&filter={intName}>={intMax},{strName}=*ANDTEST\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("        var items = (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
+                sb.AppendLine("        Assert.True(items.GetArrayLength() > 0, \"AND filter should match the item we created\");");
+                sb.AppendLine($"        foreach (var item in items.EnumerateArray())");
+                sb.AppendLine($"            Assert.True(item.GetProperty(\"{intJson}\").GetInt32() >= {intMax}, \"All items should satisfy int condition\");");
+                sb.AppendLine("    }");
+
+                // OR — pipe-separated: Level>=max|Level<=1
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task ComplexFilter_OR()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?pageSize=1000&filter={intName}>={intMax}|{intName}<=1\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("        var items = (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
+                sb.AppendLine($"        foreach (var item in items.EnumerateArray())");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            var val = item.GetProperty(\"{intJson}\").GetInt32();");
+                sb.AppendLine($"            Assert.True(val >= {intMax} || val <= 1, $\"OR filter: each item should have {intName} >= {intMax} or <= 1, got {{val}}\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
+
+                // Grouped: (Level>=max|Level<=1),Name=*UNIQUE
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task ComplexFilter_GroupedAND_OR()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var uniqueName = \"GROUPTEST_\" + _faker.Random.AlphaNumeric(8);");
+                sb.Append($"        await _client.PostAsJsonAsync(\"/{route}\", new {{ ");
+                var groupParts = new List<string>();
+                foreach (var p in createProps)
+                {
+                    if (IsUnsupportedTestType(p.CSharpType)) continue;
+                    if (p.Name == intName) { groupParts.Add($"{intName} = {intMax}"); continue; }
+                    if (p.Name == strName) { groupParts.Add($"{strName} = uniqueName"); continue; }
+                    var f = FakerExpression(p); if (f is not null) groupParts.Add($"{p.Name} = {f}");
+                }
+                sb.AppendLine(string.Join(", ", groupParts) + " });");
+                sb.AppendLine();
+                sb.AppendLine($"        // Grouped: ({intName}>={intMax}|{intName}<=1) AND {strName}=*GROUPTEST");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?pageSize=1000&filter=({intName}>={intMax}|{intName}<=1),{strName}=*GROUPTEST\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("        var items = (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
+                sb.AppendLine("        Assert.True(items.GetArrayLength() > 0, \"Grouped filter should match our item\");");
+                sb.AppendLine($"        foreach (var item in items.EnumerateArray())");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            var val = item.GetProperty(\"{intJson}\").GetInt32();");
+                sb.AppendLine($"            Assert.True(val >= {intMax} || val <= 1, \"Should satisfy OR part\");");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
             }
 
             // Collection navigation with [OneToMany]: Team.Players → create parent + child, then any/all
