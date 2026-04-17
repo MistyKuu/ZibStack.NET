@@ -771,7 +771,6 @@ public enum Priority { Low, Medium, High, Critical }
 // [ZMaxLength], [ZRange] constraints automatically.`,
 
 'typegen': `// TypeGen — generate TypeScript, Zod, GraphQL from C# DTOs.
-// Two styles: [GenerateTypes] attribute OR fluent ITypeGenConfigurator.
 // Open the "TypeGen" tab to see generated output files.
 
 using ZibStack.NET.Dto;
@@ -779,22 +778,29 @@ using ZibStack.NET.TypeGen;
 
 namespace Demo;
 
-// MODEL: no [GenerateTypes] attribute needed — fluent config opts it in.
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)]
 [CrudApi(Route = "api/products")]
 [CreateDto]
 [ResponseDto]
 public partial class Product
 {
     [DtoIgnore] public int Id { get; set; }
+
+    [TsName("productName")]    // override TS field name
     public required string Name { get; set; }
+
     public string? Description { get; set; }
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public bool IsActive { get; set; }
     public ProductCategory Category { get; set; }
+
+    [TsIgnore]                 // exclude from TypeScript + Zod
+    [OpenApiIgnore]            // exclude from OpenAPI
     public string InternalSku { get; set; } = "";
 }
 
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)]
 public enum ProductCategory
 {
     Electronics,
@@ -804,26 +810,21 @@ public enum ProductCategory
     Other
 }
 
-// FLUENT CONFIG: zero attributes on the model — central file drives output.
-internal sealed class TypeGenConfig : ITypeGenConfigurator
-{
-    public void Configure(ITypeGenBuilder b)
-    {
-        // Global settings per target
-        b.TypeScript(ts => ts.OutputDir = "generated/ts");
-        b.Zod(zod => zod.OutputDir = "generated/zod");
-
-        // Opt-in Product for TypeScript + Zod + GraphQL
-        b.ForType<Product>()
-            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)
-            .Property(p => p.Name).TsName("productName")      // rename in TS
-            .Property(p => p.InternalSku).TsIgnore();          // exclude from TS
-
-        // Opt-in enum too
-        b.ForType<ProductCategory>()
-            .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL);
-    }
-}`,
+// ──────────────────────────────────────────────────────────
+// Alternative: fluent ITypeGenConfigurator (zero attributes
+// on the model — central config file drives output).
+// Works in real projects, not in the playground.
+//
+//   internal sealed class TypeGenConfig : ITypeGenConfigurator
+//   {
+//       public void Configure(ITypeGenBuilder b)
+//       {
+//           b.ForType<Product>()
+//               .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.Zod)
+//               .Property(p => p.Name).TsName("productName")
+//               .Property(p => p.InternalSku).TsIgnore();
+//       }
+//   }`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
