@@ -10,7 +10,7 @@ namespace SampleApi.Models;
 // attribute and contributes the matching `paths:` block to openapi.yaml.
 // GetById / GetList / Create / Update / Delete are emitted by default.
 [CrudApi]
-[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod,
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL,
                OutputDir = "generated")]
 public partial class Order
 {

@@ -1,6 +1,6 @@
 ---
 title: Built-in aspects
-description: Reference for the aspects that ship in ZibStack.NET.Aop — Trace, Retry, Cache, Metrics, Timeout, Authorize, Validate, Transaction, plus the Polly + HybridCache add-ons.
+description: Reference for the aspects that ship in ZibStack.NET.Aop — Trace, Retry, Cache, Metrics, Timeout, Authorize, Validate, Transaction, Audit, plus the Polly + HybridCache add-ons.
 ---
 
 ## Built-in Aspects
@@ -17,6 +17,7 @@ description: Reference for the aspects that ship in ZibStack.NET.Aop — Trace, 
 | `[Authorize]` | `AuthorizeHandler` | Policy/role-based authorization via `IAuthorizationProvider` |
 | `[Validate]` | `ValidateHandler` | Auto-validate parameters via `DataAnnotations` before execution |
 | `[Transaction]` | `TransactionHandler` | Wrap method in `TransactionScope` (commit/rollback) |
+| `[Audit]` | `AuditHandler` | Before/after parameter snapshots → `IAuditStore`; respects `[Sensitive]`/`[NoLog]` |
 
 Optional (separate packages):
 
@@ -316,6 +317,90 @@ public async Task SendNotificationAsync(int userId) { ... }
 ```
 
 Fixed window rate limiter. Excess calls throw `RateLimiterRejectedException`. `QueueLimit` (default 0) controls how many excess calls queue instead of rejecting immediately.
+
+### `[Audit]` — audit trail
+
+`[Audit]` captures a before/after snapshot of method parameters and writes an audit record to `IAuditStore`. Useful for compliance, change tracking, and admin dashboards.
+
+```csharp
+[Audit]
+public async Task<Order> PlaceOrderAsync(OrderRequest request) { ... }
+
+// Custom action name (default: method name):
+[Audit(Action = "PlaceOrder")]
+public async Task<Order> PlaceOrderAsync(OrderRequest request) { ... }
+```
+
+What the handler does:
+
+- Snapshots all parameters **before** method execution (serialized to JSON).
+- Snapshots the return value and any `ref`/`out` parameters **after** execution.
+- Writes an `AuditEntry` to the registered `IAuditStore` with: action name, user identity, timestamp, before/after payloads, and success/failure status.
+- Respects `[Sensitive]` (value masked as `"***"`) and `[NoLog]` (parameter excluded entirely) — same attributes used by `[Trace]`.
+
+```csharp
+[Audit]
+public async Task TransferFundsAsync(
+    int fromAccount,
+    int toAccount,
+    decimal amount,
+    [Sensitive] string authToken)   // stored as "***"
+{ ... }
+```
+
+#### `IAuditStore`
+
+Register an implementation in DI to control where audit records are persisted:
+
+```csharp
+public interface IAuditStore
+{
+    ValueTask WriteAsync(AuditEntry entry, CancellationToken ct = default);
+}
+
+public record AuditEntry(
+    string Action,
+    string? UserId,
+    DateTimeOffset Timestamp,
+    string? BeforeJson,
+    string? AfterJson,
+    bool Success,
+    string? ErrorMessage);
+```
+
+Example EF Core implementation:
+
+```csharp
+public class DbAuditStore : IAuditStore
+{
+    private readonly AppDbContext _db;
+    public DbAuditStore(AppDbContext db) => _db = db;
+
+    public async ValueTask WriteAsync(AuditEntry entry, CancellationToken ct = default)
+    {
+        _db.AuditLog.Add(new AuditLogRow
+        {
+            Action    = entry.Action,
+            UserId    = entry.UserId,
+            Timestamp = entry.Timestamp,
+            Before    = entry.BeforeJson,
+            After     = entry.AfterJson,
+            Success   = entry.Success,
+            Error     = entry.ErrorMessage,
+        });
+        await _db.SaveChangesAsync(ct);
+    }
+}
+```
+
+Registration:
+
+```csharp
+builder.Services.AddAop();
+builder.Services.AddScoped<IAuditStore, DbAuditStore>();
+```
+
+Works on both sync and async methods. The user identity is resolved from `IHttpContextAccessor` when available, otherwise from `Thread.CurrentPrincipal`.
 
 ### When to use `[Trace]` vs manual `using var activity = ...`
 

@@ -14,7 +14,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 - **`[Log]`** — compile-time structured logging with zero boilerplate. Interpolated strings (`LogInformation($"...")`) just work.
 - **`[Trace]`** — OpenTelemetry spans on any method, with one attribute. Compatible with Jaeger / Zipkin / OTLP.
-- **ZibStack.NET.Aop** — built-in `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]` aspects. Write your own with `IAspectHandler` — a few lines each.
+- **ZibStack.NET.Aop** — built-in `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Audit]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]` aspects. Write your own with `IAspectHandler` — a few lines each.
 
 **Tier 2 — Ergonomics. Opt-in per file.** TypeScript-inspired utility types and helpers you reach for when you want them. No framework, no configuration.
 
@@ -56,7 +56,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 | [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable<TSource>` → shape-record + `Split(src)` factory + nested `Rest`). |
 | [**ZibStack.NET.Result**](packages/ZibStack.NET.Result/) | `dotnet add package ZibStack.NET.Result` | Functional Result monad (`Result<T>`) with Map/Bind/Match, error handling without exceptions. |
 | [**ZibStack.NET.Validation**](packages/ZibStack.NET.Validation/) | `dotnet add package ZibStack.NET.Validation` | Source generator for compile-time validation from attributes (`[ZRequired]`, `[ZEmail]`, `[ZRange]`, `[ZMatch]`). |
-| [**ZibStack.NET.TypeGen**](packages/ZibStack.NET.TypeGen/) | `dotnet add package ZibStack.NET.TypeGen` | Roslyn source generator that emits **TypeScript interfaces**, **OpenAPI 3.0** schemas, **Pydantic v2** models and **Zod schemas** from C# DTOs annotated with `[GenerateTypes]`. Compile-time, zero reflection, no running app required — `dotnet build` writes the `.ts` / `.yaml` / `.py` / `.schema.ts` files directly to your configured output directory. |
+| [**ZibStack.NET.TypeGen**](packages/ZibStack.NET.TypeGen/) | `dotnet add package ZibStack.NET.TypeGen` | Roslyn source generator that emits **TypeScript interfaces**, **OpenAPI 3.0** schemas, **Pydantic v2** models, **Zod schemas** and **GraphQL types** from C# DTOs annotated with `[GenerateTypes]`. Compile-time, zero reflection, no running app required — `dotnet build` writes the `.ts` / `.yaml` / `.py` / `.schema.ts` / `.graphql` files directly to your configured output directory. |
 | [**ZibStack.NET.Dto**](packages/ZibStack.NET.Dto/) | `dotnet add package ZibStack.NET.Dto` | Source generator for CRUD DTOs (Create/Update/Response/Query) with PatchField support and full CRUD API generation. |
 | [**ZibStack.NET.Query**](packages/ZibStack.NET.Query/) | `dotnet add package ZibStack.NET.Query` | Filter/sort DSL for REST APIs. Parses query strings (`filter=Level>25,Team.Name=*ski&sort=-Level`) into LINQ/SQL. Compile-time field allowlists via source generation. |
 | [**ZibStack.NET.EntityFramework**](packages/ZibStack.NET.EntityFramework/) | `dotnet add package ZibStack.NET.EntityFramework` | EF Core integration for Dto CRUD API. Auto-generates stores + DI registration from `DbContext`. |
@@ -238,7 +238,7 @@ if (!result.IsValid) return BadRequest(result.Errors);
 
 ```csharp
 // One attribute = full CRUD API with auto-generated DTOs + endpoints:
-[CrudApi]
+[CrudApi(SoftDelete = true)]   // SoftDelete = true → PATCH /archive + /restore instead of hard DELETE
 public class Player
 {
     [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
@@ -250,6 +250,9 @@ public class Player
     [DtoOnly(DtoTarget.Create)]     public required string Password { get; set; }
     [DtoIgnore(DtoTarget.Response)] public DateTime CreatedAt { get; set; }
 }
+
+// Test scaffolding — generates xUnit CRUD integration tests for every [CrudApi] entity:
+[assembly: GenerateCrudTests]
 
 // EF Core — auto-generated stores from DbContext:
 [GenerateCrudStores]

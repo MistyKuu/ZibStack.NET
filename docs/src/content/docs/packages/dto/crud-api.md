@@ -384,6 +384,79 @@ public class Player { ... }
 
 Bulk endpoints inherit the same per-operation auth policies (`CreatePolicy` for bulk create, `DeletePolicy` for bulk delete).
 
+## Soft delete
+
+Set `SoftDelete = true` on `[CrudApi]` to turn hard deletes into flag-based soft deletes. No manual store overrides needed — the generator handles everything:
+
+```csharp
+[CrudApi(SoftDelete = true)]
+public class Player
+{
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
+    public required string Name { get; set; }
+    public int Level { get; set; }
+}
+```
+
+What gets generated:
+
+- **`IsDeleted` and `DeletedAt` properties** are added to the entity (via a generated partial class) if not already present.
+- **DELETE endpoints** (`DELETE /api/players/{id}` and `POST /api/players/bulk-delete`) set `IsDeleted = true` and `DeletedAt = DateTime.UtcNow` instead of removing the row.
+- **GET list** (`GET /api/players`) filters out soft-deleted entities by default — a `WHERE IsDeleted = false` clause is appended to the query automatically.
+- **`?includeDeleted=true`** query parameter on the GET list endpoint bypasses the filter and returns all entities including deleted ones.
+- **GET by ID** still returns soft-deleted entities (no silent 404 — the consumer can inspect `IsDeleted` on the response).
+
+Works with all API styles — Minimal API, Controller, and bulk operations. The bulk-delete endpoint also applies the soft-delete logic per entity instead of issuing a hard delete.
+
+```csharp
+// Combine with per-operation policies:
+[CrudApi(SoftDelete = true, DeletePolicy = "admin")]
+public class Player { ... }
+```
+
+If you already have `IsDeleted` / `DeletedAt` properties on your entity, the generator reuses them and does not emit duplicates.
+
+## Test scaffolding
+
+Add the `[assembly: GenerateCrudTests]` attribute in your test project to auto-generate xUnit integration tests for every `[CrudApi]` entity:
+
+```csharp
+// In your test project (e.g., AssemblyInfo.cs or any file)
+[assembly: GenerateCrudTests]
+```
+
+What gets generated:
+
+- **xUnit test classes** — one per `[CrudApi]` entity, using `WebApplicationFactory<Program>` for in-process HTTP testing.
+- **Valid request bodies** — the generator inspects entity properties and builds syntactically valid JSON payloads (respects `required`, `[ZRange]`, `[ZMinLength]`, etc.).
+- **Full CRUD coverage** — tests for Create (POST), GetById (GET), GetList (GET), Update (PATCH), Delete (DELETE), and validation-error scenarios (400 responses).
+- **Bulk operation tests** — when `CrudOperations.BulkCreate` or `CrudOperations.BulkDelete` is enabled, matching tests are generated.
+- **Soft-delete tests** — when `SoftDelete = true`, additional tests verify that DELETE sets flags instead of removing, and that `?includeDeleted=true` returns deleted entities.
+
+The tests auto-regenerate on every build — change the entity and the tests update automatically. Generated test classes are `partial`, so you can add custom test methods alongside the generated ones:
+
+```csharp
+public partial class PlayerCrudTests
+{
+    [Fact]
+    public async Task GetList_FiltersByLevel()
+    {
+        // custom test using the same WebApplicationFactory
+        var client = _factory.CreateClient();
+        var response = await client.GetAsync("/api/players?level=5");
+        response.EnsureSuccessStatusCode();
+    }
+}
+```
+
+The test project needs references to `Microsoft.AspNetCore.Mvc.Testing` and `xunit`:
+
+```
+dotnet add package Microsoft.AspNetCore.Mvc.Testing
+dotnet add package xunit
+```
+
 ### Conditional emission
 
 CRUD endpoints are only generated when the consuming project references ASP.NET Core (detected at compile time). This means:

@@ -73,6 +73,7 @@ export default defineConfig({
 								{ label: 'Advanced type features', slug: 'packages/typegen/advanced-types' },
 								{ label: 'Python emitter', slug: 'packages/typegen/emitters/python' },
 								{ label: 'Zod emitter', slug: 'packages/typegen/emitters/zod' },
+								{ label: 'GraphQL emitter', slug: 'packages/typegen/emitters/graphql' },
 								{ label: 'Alternatives', slug: 'packages/typegen/comparison' },
 							],
 						},
