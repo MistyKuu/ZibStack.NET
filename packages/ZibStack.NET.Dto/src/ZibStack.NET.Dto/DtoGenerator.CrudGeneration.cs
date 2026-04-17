@@ -1189,7 +1189,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort={navField}\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
                     sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
-                    sb.AppendLine("        Assert.True(body.GetProperty(\"items\").GetArrayLength() >= 0);");
+                    sb.AppendLine("        Assert.True(body.TryGetProperty(\"totalCount\", out _), \"Sorted response should have totalCount\");");
                     sb.AppendLine("    }");
                 }
             }
@@ -1226,7 +1226,7 @@ public partial class DtoGenerator
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, childResponse.StatusCode);");
                     sb.AppendLine();
                     sb.AppendLine($"        // 3. Query: parents where any child has {childPropName} >= 99");
-                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={colName}.any.{childPropName}>=99\");");
+                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?pageSize=1000&filter={colName}.any.{childPropName}>=99\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
                     sb.AppendLine("        var items = (await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
                     sb.AppendLine("        Assert.True(items.GetArrayLength() > 0, \"Should return at least the parent we created\");");
@@ -1246,7 +1246,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"            new {{ {fkProp} = parentId, {childPropName} = 99, Name = _faker.Random.String2(2, 50), Password = _faker.Random.String2(8, 50) }});");
                     sb.AppendLine();
                     sb.AppendLine($"        // Query: parents where ALL children have {childPropName} >= 99");
-                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={colName}.all.{childPropName}>=99\");");
+                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?pageSize=1000&filter={colName}.all.{childPropName}>=99\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
                     sb.AppendLine("        var items = (await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
                     sb.AppendLine($"        Assert.Contains(items.EnumerateArray().ToArray(), i => i.GetProperty(\"{keyJsonName}\").{keyGetter}() == parentId);");
@@ -1267,7 +1267,7 @@ public partial class DtoGenerator
                     sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{childRoute}\",");
                     sb.AppendLine($"            new {{ {fkProp} = parentId, {childStrName} = \"UNIQUE_SEARCH_TERM\", Level = 1, Password = _faker.Random.String2(8, 50) }});");
                     sb.AppendLine();
-                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={colName}.any.{childStrName}=*UNIQUE_SEARCH\");");
+                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?pageSize=1000&filter={colName}.any.{childStrName}=*UNIQUE_SEARCH\");");
                     sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
                     sb.AppendLine("        var items = (await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
                     sb.AppendLine($"        Assert.Contains(items.EnumerateArray().ToArray(), i => i.GetProperty(\"{keyJsonName}\").{keyGetter}() == parentId);");
