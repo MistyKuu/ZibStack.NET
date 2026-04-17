@@ -622,6 +622,12 @@ public partial class DtoGenerator
         public bool IsNullable { get; set; }
         public bool IsKey { get; set; }
         public bool IsComputed { get; set; }
+        public bool HasEmailAttr { get; set; }
+        public bool HasUrlAttr { get; set; }
+        public int? MinLength { get; set; }
+        public int? MaxLength { get; set; }
+        public int? RangeMin { get; set; }
+        public int? RangeMax { get; set; }
     }
 
     private static void ScanForCrudApi(INamespaceSymbol ns, List<CrudTestInfo> results)
@@ -676,14 +682,44 @@ public partial class DtoGenerator
                     var isNullable = member.Type.NullableAnnotation == NullableAnnotation.Annotated
                                  || typeName.EndsWith("?");
 
-                    info.Properties.Add(new CrudTestPropertyInfo
+                    var propInfo = new CrudTestPropertyInfo
                     {
                         Name = member.Name,
                         CSharpType = typeName.TrimEnd('?'),
                         IsNullable = isNullable,
                         IsKey = isKey,
                         IsComputed = isComputed,
-                    });
+                    };
+
+                    // Read validation attributes for smart Faker mapping
+                    foreach (var pa in member.GetAttributes())
+                    {
+                        var valAttrName = pa.AttributeClass?.Name;
+                        if (valAttrName is "ZEmailAttribute" or "EmailAddressAttribute")
+                            propInfo.HasEmailAttr = true;
+                        else if (valAttrName is "ZUrlAttribute" or "UrlAttribute")
+                            propInfo.HasUrlAttr = true;
+                        else if (valAttrName is "ZRangeAttribute" or "RangeAttribute")
+                        {
+                            if (pa.ConstructorArguments.Length >= 2)
+                            {
+                                if (pa.ConstructorArguments[0].Value is int rmin) propInfo.RangeMin = rmin;
+                                if (pa.ConstructorArguments[1].Value is int rmax) propInfo.RangeMax = rmax;
+                            }
+                        }
+                        else if (valAttrName is "ZMinLengthAttribute" or "MinLengthAttribute")
+                        {
+                            if (pa.ConstructorArguments.Length >= 1 && pa.ConstructorArguments[0].Value is int ml)
+                                propInfo.MinLength = ml;
+                        }
+                        else if (valAttrName is "ZMaxLengthAttribute" or "MaxLengthAttribute" or "StringLengthAttribute")
+                        {
+                            if (pa.ConstructorArguments.Length >= 1 && pa.ConstructorArguments[0].Value is int xl)
+                                propInfo.MaxLength = xl;
+                        }
+                    }
+
+                    info.Properties.Add(propInfo);
                 }
 
                 results.Add(info);
@@ -818,7 +854,7 @@ public partial class DtoGenerator
         foreach (var p in props)
         {
             if (IsUnsupportedTestType(p.CSharpType)) continue;
-            var faker = FakerExpression(p.CSharpType, p.Name);
+            var faker = FakerExpression(p);
             if (faker is null) continue;
             parts.Add($"{p.Name} = {faker}");
         }
@@ -838,33 +874,42 @@ public partial class DtoGenerator
         return FakerExpression(t, "") is null;
     }
 
-    private static string? FakerExpression(string csharpType, string propName)
+    private static string? FakerExpression(CrudTestPropertyInfo prop)
     {
-        if (csharpType is "string" or "System.String")
+        if (prop.CSharpType is "string" or "System.String")
         {
-            var lower = propName.ToLowerInvariant();
-            if (lower.Contains("email")) return "_faker.Internet.Email()";
-            if (lower.Contains("url") || lower.Contains("website") || lower.Contains("link")) return "_faker.Internet.Url()";
-            if (lower.Contains("phone")) return "_faker.Phone.PhoneNumber()";
-            if (lower.Contains("name")) return "_faker.Name.FullName()";
-            if (lower.Contains("address")) return "_faker.Address.FullAddress()";
-            if (lower.Contains("city")) return "_faker.Address.City()";
-            if (lower.Contains("country")) return "_faker.Address.Country()";
-            if (lower.Contains("description") || lower.Contains("bio") || lower.Contains("summary")) return "_faker.Lorem.Sentence()";
-            if (lower.Contains("title")) return "_faker.Lorem.Sentence(3)";
-            if (lower.Contains("password")) return "_faker.Internet.Password()";
+            if (prop.HasEmailAttr) return "_faker.Internet.Email()";
+            if (prop.HasUrlAttr) return "_faker.Internet.Url()";
+            if (prop.MinLength.HasValue || prop.MaxLength.HasValue)
+            {
+                var min = prop.MinLength ?? 1;
+                var max = prop.MaxLength ?? System.Math.Max(min + 10, 50);
+                return $"_faker.Random.String2({min}, {max})";
+            }
             return "_faker.Lorem.Word()";
         }
-        return csharpType switch
+        if (prop.CSharpType is "int" or "System.Int32")
         {
-            "int" or "System.Int32" => "_faker.Random.Int(1, 100)",
-            "long" or "System.Int64" => "_faker.Random.Long(1, 10000)",
+            var min = prop.RangeMin ?? 1;
+            var max = prop.RangeMax ?? 100;
+            return $"_faker.Random.Int({min}, {max})";
+        }
+        return prop.CSharpType switch
+        {
+            "long" or "System.Int64" => $"_faker.Random.Long({prop.RangeMin ?? 1}, {prop.RangeMax ?? 10000})",
             "decimal" or "System.Decimal" => "_faker.Finance.Amount(1, 1000)",
             "double" or "System.Double" => "_faker.Random.Double(1, 1000)",
             "float" or "System.Single" => "(float)_faker.Random.Double(1, 1000)",
             "bool" or "System.Boolean" => "_faker.Random.Bool()",
             _ => null,
         };
+    }
+
+    // Overload for IsUnsupportedTestType which doesn't have full prop info
+    private static string? FakerExpression(string csharpType, string _propName)
+    {
+        var dummy = new CrudTestPropertyInfo { CSharpType = csharpType };
+        return FakerExpression(dummy);
     }
 
     private static string GenerateSoftDeleteProperties(CrudApiInfo info)
