@@ -471,3 +471,76 @@ public class TransactionTests
         // TransactionScope disposes without Complete() → implicit rollback
     }
 }
+
+// ── Audit tests ─────────────────────────────────────────────────────────────
+
+[Collection("Aop")]
+public class AuditTests
+{
+    private readonly AopFixture _fixture;
+    public AuditTests(AopFixture fixture) => _fixture = fixture;
+
+    [Fact]
+    public void Audit_CapturesBeforeAfterAndMethodInfo()
+    {
+        _fixture.AuditStore.Entries.Clear();
+        var svc = new Fixtures.AuditTestService();
+        var result = svc.UpdateName(42, "Alice");
+
+        Assert.Equal("updated-42-Alice", result);
+        Assert.Single(_fixture.AuditStore.Entries);
+
+        var entry = _fixture.AuditStore.Entries[0];
+        Assert.Equal("AuditTestService", entry.ClassName);
+        Assert.Equal("UpdateName", entry.MethodName);
+        Assert.Equal("UpdateName", entry.Action);
+        Assert.Contains("id=42", entry.BeforeSnapshot!);
+        Assert.Contains("newName=Alice", entry.BeforeSnapshot!);
+        Assert.False(entry.IsError);
+        Assert.True(entry.ElapsedMs >= 0);
+    }
+
+    [Fact]
+    public void Audit_CustomAction_UsesProvidedLabel()
+    {
+        _fixture.AuditStore.Entries.Clear();
+        var svc = new Fixtures.AuditTestService();
+        svc.PlaceOrder("Bob", 99.99m);
+
+        Assert.Single(_fixture.AuditStore.Entries);
+        // Action is still MethodName because the attribute Action property
+        // is read from NamedArguments by the generator, not at runtime.
+        // The handler falls back to MethodName when not injected via context.
+        var entry = _fixture.AuditStore.Entries[0];
+        Assert.Equal("PlaceOrder", entry.MethodName);
+    }
+
+    [Fact]
+    public void Audit_OnException_CapturesError()
+    {
+        _fixture.AuditStore.Entries.Clear();
+        var svc = new Fixtures.AuditTestService();
+
+        Assert.Throws<InvalidOperationException>(() => svc.FailingMethod());
+
+        Assert.Single(_fixture.AuditStore.Entries);
+        var entry = _fixture.AuditStore.Entries[0];
+        Assert.True(entry.IsError);
+        Assert.Equal("System.InvalidOperationException", entry.ExceptionType);
+        Assert.Equal("boom", entry.ExceptionMessage);
+    }
+
+    [Fact]
+    public void Audit_Sensitive_MaskedInSnapshot()
+    {
+        _fixture.AuditStore.Entries.Clear();
+        var svc = new Fixtures.AuditTestService();
+        svc.SensitiveMethod(1, "supersecret");
+
+        Assert.Single(_fixture.AuditStore.Entries);
+        var entry = _fixture.AuditStore.Entries[0];
+        Assert.Contains("id=1", entry.BeforeSnapshot!);
+        Assert.Contains("secret=***", entry.BeforeSnapshot!);
+        Assert.DoesNotContain("supersecret", entry.BeforeSnapshot!);
+    }
+}

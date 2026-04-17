@@ -15,6 +15,7 @@ public class AopFixture : IDisposable
     public RecordingHandler Handler { get; } = new();
     public AroundRecordingHandler AroundHandler { get; } = new();
     public TestAuthorizationProvider AuthProvider { get; } = new();
+    public Fixtures.InMemoryAuditStore AuditStore { get; } = new();
 
     public AopFixture()
     {
@@ -31,6 +32,8 @@ public class AopFixture : IDisposable
         services.AddSingleton<TransactionHandler>();
         services.AddSingleton<IAuthorizationProvider>(AuthProvider);
         services.AddSingleton<AuthorizeHandler>();
+        services.AddSingleton<IAuditStore>(AuditStore);
+        services.AddSingleton<AuditHandler>();
 
         var sp = services.BuildServiceProvider();
         AspectServiceProvider.ServiceProvider = sp;

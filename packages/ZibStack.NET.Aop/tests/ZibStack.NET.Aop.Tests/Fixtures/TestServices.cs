@@ -1,4 +1,5 @@
 using ZibStack.NET.Aop;
+using ZibStack.NET.Log;
 
 namespace ZibStack.NET.Aop.Tests.Fixtures;
 
@@ -498,4 +499,32 @@ public class TransactionTestService
 
     [Transaction]
     public int DoWorkFailing(int x) => throw new InvalidOperationException("rollback");
+}
+
+
+// ── [Audit] test service + in-memory store ─────────────────────────────────
+
+public class InMemoryAuditStore : IAuditStore
+{
+    public List<AuditEntry> Entries { get; } = new();
+    public System.Threading.Tasks.Task WriteAsync(AuditEntry entry, System.Threading.CancellationToken ct = default)
+    {
+        Entries.Add(entry);
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
+}
+
+public class AuditTestService
+{
+    [Audit]
+    public string UpdateName(int id, string newName) => $"updated-{id}-{newName}";
+
+    [Audit(Action = "PlaceOrder")]
+    public int PlaceOrder(string customer, decimal total) => 42;
+
+    [Audit]
+    public void FailingMethod() => throw new InvalidOperationException("boom");
+
+    [Audit]
+    public string SensitiveMethod(int id, [Sensitive] string secret) => "ok";
 }
