@@ -25,7 +25,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 **Tier 3 — Opinionated scaffolding. High buy-in, high payoff.** Full-stack CRUD generation, query DSL, UI metadata. Best for solo projects and small teams where the time savings justify the framework buy-in; be cautious on large enterprise codebases where "magic" can surprise teammates.
 
-- **`[CrudApi]` / `[ImTiredOfCrud]`** — one attribute generates DTOs, endpoints, EF/Dapper stores, validation, query DSL, form/table UI schemas.
+- **`[CrudApi]` / `[ImTiredOfCrud]`** — one attribute generates DTOs, endpoints, EF/Dapper stores, validation, query DSL, form/table UI schemas. Add `[SignalRHub]` for real-time push — generated endpoints notify connected clients via `OnCreated`/`OnUpdated`/`OnDeleted`.
 - **ZibStack.NET.Query** — filter/sort DSL (`filter=Level>25,Team.Name=*ski`) compiled to LINQ/SQL.
 - **ZibStack.NET.UI** — compile-time form/table metadata, consumed by any frontend.
 
