@@ -48,6 +48,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("CrudApiAttribute.g.cs", CrudApiAttributeSource);
             ctx.AddSource("ICrudStore.g.cs", CrudStoreInterfaceSource);
             ctx.AddSource("IDtoConfigurator.g.cs", ConfiguratorSource);
+            ctx.AddSource("GenerateCrudTestsAttribute.g.cs", GenerateCrudTestsAttributeSource);
         });
 
         // Detect available serializers and emit PatchField + converters
@@ -619,6 +620,33 @@ public partial class DtoGenerator : IIncrementalGenerator
             if (info.Style == StyleController || info.Style == StyleBoth)
                 spc.AddSource($"{info.FullyQualifiedName}.Controller.Model.g.cs", GenerateControllerSource(info));
             spc.AddSource($"{info.FullyQualifiedName}.CodeMap.Model.g.cs", GenerateCodeMap(info));
+        });
+
+        // ── [assembly: GenerateCrudTests] → xUnit integration test stubs ────
+        var generateTests = context.CompilationProvider.Select(static (compilation, _) =>
+        {
+            bool hasMarker = compilation.Assembly.GetAttributes()
+                .Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Dto.GenerateCrudTestsAttribute");
+            if (!hasMarker) return System.Array.Empty<CrudTestInfo>();
+
+            var results = new List<CrudTestInfo>();
+            // Scan own assembly + all referenced assemblies for [CrudApi] types
+            ScanForCrudApi(compilation.Assembly.GlobalNamespace, results);
+            foreach (var reference in compilation.References)
+            {
+                if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol asm)
+                    ScanForCrudApi(asm.GlobalNamespace, results);
+            }
+            return results.ToArray();
+        });
+
+        context.RegisterSourceOutput(generateTests, static (spc, entities) =>
+        {
+            foreach (var entity in entities)
+            {
+                var hintName = $"{entity.Namespace?.Replace(".", "_")}_{entity.ClassName}".TrimStart('_');
+                spc.AddSource($"{hintName}.CrudTests.g.cs", GenerateCrudTestSource(entity));
+            }
         });
     }
 
