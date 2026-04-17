@@ -633,6 +633,10 @@ public partial class DtoGenerator
         public bool IsCollection { get; set; }
         public string? NavigationEntityName { get; set; }
         public List<CrudTestPropertyInfo>? NavigationProperties { get; set; }
+        public string? FkPropertyName { get; set; }
+        public string? ChildRoute { get; set; }
+        public bool HasOneToMany { get; set; }
+        public bool HasOneToOne { get; set; }
     }
 
     private static void ScanForCrudApi(INamespaceSymbol ns, List<CrudTestInfo> results)
@@ -747,6 +751,24 @@ public partial class DtoGenerator
                         }
                     }
 
+                    // Detect [OneToOne] / [OneToMany] relationship attrs
+                    bool hasOneToOne = member.GetAttributes().Any(a => a.AttributeClass?.Name == "OneToOneAttribute");
+                    bool hasOneToMany = member.GetAttributes().Any(a => a.AttributeClass?.Name == "OneToManyAttribute");
+
+                    // FK convention: for [OneToMany] Team.Players → child FK is "{ParentType}Id"
+                    string? fkPropName = null;
+                    string? childRoute = null;
+                    if (hasOneToMany && navEntityName is not null)
+                    {
+                        fkPropName = type.Name + "Id";
+                        childRoute = "api/" + Pluralize(CamelCase(navEntityName));
+                    }
+                    if (hasOneToOne && navEntityName is not null)
+                    {
+                        fkPropName = navEntityName + "Id";
+                        childRoute = "api/" + Pluralize(CamelCase(navEntityName));
+                    }
+
                     var propInfo = new CrudTestPropertyInfo
                     {
                         Name = member.Name,
@@ -758,6 +780,10 @@ public partial class DtoGenerator
                         IsCollection = isCollection && isNavigation,
                         NavigationEntityName = navEntityName,
                         NavigationProperties = navProps,
+                        HasOneToMany = hasOneToMany,
+                        HasOneToOne = hasOneToOne,
+                        FkPropertyName = fkPropName,
+                        ChildRoute = childRoute,
                     };
 
                     // Read validation attributes for smart Faker mapping
@@ -1168,49 +1194,83 @@ public partial class DtoGenerator
                 }
             }
 
-            // Collection navigation: Team.Players → filter=Players.any.Level>50, Players.all.Level>30
-            var collectionNav = info.Properties.FirstOrDefault(p => p.IsCollection && p.IsNavigation && p.NavigationProperties?.Count > 0);
+            // Collection navigation with [OneToMany]: Team.Players → create parent + child, then any/all
+            var collectionNav = info.Properties.FirstOrDefault(p => p.IsCollection && p.HasOneToMany && p.NavigationProperties?.Count > 0 && p.ChildRoute is not null);
             if (collectionNav is not null)
             {
                 var colName = collectionNav.Name;
-                var colIntProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "int" or "System.Int32");
+                var childRoute = collectionNav.ChildRoute!;
+                var fkProp = collectionNav.FkPropertyName!; // e.g. "TeamId"
+                var colIntProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "int" or "System.Int32" && p.Name != "Id" && p.Name != fkProp);
                 var colStringProp = collectionNav.NavigationProperties!.FirstOrDefault(p => p.CSharpType is "string" or "System.String");
+                var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
+                var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
 
-                // any() — "teams where ANY player has Level > X"
+                // any() — create parent + child with known value, filter, verify parent in results
                 if (colIntProp is not null)
                 {
+                    var childPropName = colIntProp.Name;
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task CollectionAny_{colName}_{colIntProp.Name}()");
+                    sb.AppendLine($"    public async Task CollectionAny_{colName}_{childPropName}_VerifiesRelation()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.any.{colIntProp.Name}>0\");");
-                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
-                    sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
-                    sb.AppendLine("        var items = body.GetProperty(\"items\");");
-                    sb.AppendLine($"        // Every returned item should have at least one child with {colIntProp.Name} > 0");
-                    sb.AppendLine("        Assert.True(items.GetArrayLength() >= 0);");
+                    sb.AppendLine($"        // 1. Create parent");
+                    sb.AppendLine($"        var parentResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, parentResponse.StatusCode);");
+                    sb.AppendLine($"        var parentBody = await parentResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine($"        var parentId = parentBody.GetProperty(\"{keyJsonName}\").{keyGetter}();");
+                    sb.AppendLine();
+                    sb.AppendLine($"        // 2. Create child linked to parent with known {childPropName} = 99");
+                    sb.AppendLine($"        var childResponse = await _client.PostAsJsonAsync(\"/{childRoute}\",");
+                    sb.AppendLine($"            new {{ {fkProp} = parentId, {childPropName} = 99, Name = _faker.Random.String2(2, 50), Password = _faker.Random.String2(8, 50) }});");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, childResponse.StatusCode);");
+                    sb.AppendLine();
+                    sb.AppendLine($"        // 3. Query: parents where any child has {childPropName} >= 99");
+                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={colName}.any.{childPropName}>=99\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
+                    sb.AppendLine("        var items = (await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
+                    sb.AppendLine("        Assert.True(items.GetArrayLength() > 0, \"Should return at least the parent we created\");");
+                    sb.AppendLine($"        Assert.Contains(items.EnumerateArray().ToArray(), i => i.GetProperty(\"{keyJsonName}\").{keyGetter}() == parentId);");
                     sb.AppendLine("    }");
 
-                    // all() — "teams where ALL players have Level > X"
+                    // all() — same setup but verify ALL semantics
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task CollectionAll_{colName}_{colIntProp.Name}()");
+                    sb.AppendLine($"    public async Task CollectionAll_{colName}_{childPropName}_VerifiesRelation()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.all.{colIntProp.Name}>0\");");
-                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
-                    sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
-                    sb.AppendLine("        Assert.True(body.GetProperty(\"items\").GetArrayLength() >= 0);");
+                    sb.AppendLine($"        // Create parent + one child with {childPropName} = 99");
+                    sb.AppendLine($"        var parentResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+                    sb.AppendLine($"        var parentBody = await parentResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine($"        var parentId = parentBody.GetProperty(\"{keyJsonName}\").{keyGetter}();");
+                    sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{childRoute}\",");
+                    sb.AppendLine($"            new {{ {fkProp} = parentId, {childPropName} = 99, Name = _faker.Random.String2(2, 50), Password = _faker.Random.String2(8, 50) }});");
+                    sb.AppendLine();
+                    sb.AppendLine($"        // Query: parents where ALL children have {childPropName} >= 99");
+                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={colName}.all.{childPropName}>=99\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
+                    sb.AppendLine("        var items = (await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
+                    sb.AppendLine($"        Assert.Contains(items.EnumerateArray().ToArray(), i => i.GetProperty(\"{keyJsonName}\").{keyGetter}() == parentId);");
                     sb.AppendLine("    }");
                 }
 
+                // any() on string — contains
                 if (colStringProp is not null)
                 {
+                    var childStrName = colStringProp.Name;
                     sb.AppendLine();
                     sb.AppendLine("    [Fact]");
-                    sb.AppendLine($"    public async Task CollectionAny_{colName}_{colStringProp.Name}_Contains()");
+                    sb.AppendLine($"    public async Task CollectionAny_{colName}_{childStrName}_Contains()");
                     sb.AppendLine("    {");
-                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={colName}.any.{colStringProp.Name}=*test\");");
-                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                    sb.AppendLine($"        var parentResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+                    sb.AppendLine($"        var parentBody = await parentResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                    sb.AppendLine($"        var parentId = parentBody.GetProperty(\"{keyJsonName}\").{keyGetter}();");
+                    sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{childRoute}\",");
+                    sb.AppendLine($"            new {{ {fkProp} = parentId, {childStrName} = \"UNIQUE_SEARCH_TERM\", Level = 1, Password = _faker.Random.String2(8, 50) }});");
+                    sb.AppendLine();
+                    sb.AppendLine($"        var filtered = await _client.GetAsync(\"/{route}?filter={colName}.any.{childStrName}=*UNIQUE_SEARCH\");");
+                    sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);");
+                    sb.AppendLine("        var items = (await filtered.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty(\"items\");");
+                    sb.AppendLine($"        Assert.Contains(items.EnumerateArray().ToArray(), i => i.GetProperty(\"{keyJsonName}\").{keyGetter}() == parentId);");
                     sb.AppendLine("    }");
                 }
             }
