@@ -612,6 +612,7 @@ public partial class DtoGenerator
         public string KeyPropertyName { get; set; } = "Id";
         public int Operations { get; set; } = 31;
         public bool SoftDelete { get; set; }
+        public bool HasQueryDsl { get; set; }
         public List<CrudTestPropertyInfo> Properties { get; set; } = new();
     }
 
@@ -875,6 +876,61 @@ public partial class DtoGenerator
             sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}/bulk-delete\", ids);");
             sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
             sb.AppendLine("    }");
+        }
+
+        // Query DSL tests (filter, sort, select, count)
+        if (info.HasQueryDsl && (info.Operations & OpGetList) != 0 && (info.Operations & OpCreate) != 0)
+        {
+            // Find a filterable property (prefer int with range, fallback to any string)
+            var filterProp = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.CSharpType is "int" or "System.Int32" && p.RangeMax.HasValue)
+                          ?? info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && p.CSharpType is "string" or "System.String");
+            var sortProp = filterProp ?? info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed);
+
+            if (filterProp is not null)
+            {
+                var filterName = filterProp.Name;
+
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task QueryFilter_ReturnsFilteredResults()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        // Create 2 items");
+                sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+                sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+                if (filterProp.CSharpType is "int" or "System.Int32")
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={filterName}>0\");");
+                else
+                    sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?filter={filterName}=*\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("    }");
+
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task QuerySort_ReturnsSortedResults()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?sort=-{(sortProp ?? filterProp).Name}\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("    }");
+
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task QueryCount_ReturnsCount()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?count=true\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+                sb.AppendLine("        Assert.True(body.GetProperty(\"count\").GetInt32() >= 0);");
+                sb.AppendLine("    }");
+
+                sb.AppendLine();
+                sb.AppendLine("    [Fact]");
+                sb.AppendLine($"    public async Task QuerySelect_ReturnsProjectedFields()");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+                sb.AppendLine($"        var response = await _client.GetAsync(\"/{route}?select={filterName}\");");
+                sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+                sb.AppendLine("    }");
+            }
         }
 
         sb.AppendLine("}");

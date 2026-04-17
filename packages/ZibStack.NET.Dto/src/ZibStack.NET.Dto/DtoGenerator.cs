@@ -629,6 +629,15 @@ public partial class DtoGenerator : IIncrementalGenerator
                 .Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Dto.GenerateCrudTestsAttribute");
             if (!hasMarker) return System.Array.Empty<CrudTestInfo>();
 
+            // Detect ZibStack.NET.Query in the compilation (means endpoints have filter/sort/select)
+            bool hasQueryDsl = false;
+            foreach (var reference in compilation.References)
+            {
+                if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol refAsm
+                    && refAsm.Name == "ZibStack.NET.Query")
+                { hasQueryDsl = true; break; }
+            }
+
             var results = new List<CrudTestInfo>();
             // Scan own assembly + all referenced assemblies for [CrudApi] types
             ScanForCrudApi(compilation.Assembly.GlobalNamespace, results);
@@ -637,6 +646,10 @@ public partial class DtoGenerator : IIncrementalGenerator
                 if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol asm)
                     ScanForCrudApi(asm.GlobalNamespace, results);
             }
+
+            if (hasQueryDsl)
+                foreach (var r in results) r.HasQueryDsl = true;
+
             return results.ToArray();
         });
 
