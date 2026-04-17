@@ -78,6 +78,8 @@ public partial class DtoGenerator
             sb.AppendLine("        {");
             sb.AppendLine("            var entity = await store.GetByIdAsync(id, ct);");
             sb.AppendLine("            if (entity is null) return Results.Problem(statusCode: 404, title: \"Not Found\");");
+            if (info.SoftDelete)
+                sb.AppendLine("            if (entity.IsDeleted) return Results.Problem(statusCode: 404, title: \"Not Found\");");
             if (info.HasResponseDto && info.ResponseName is not null)
             {
                 var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
@@ -105,6 +107,7 @@ public partial class DtoGenerator
 
             // DSL filter/sort/select params (when ZibStack.NET.Query is referenced)
             var dslParams = info.HasQueryDsl ? ", string? filter = null, string? sort = null, string? select = null, bool count = false" : "";
+            var softDeleteParam = info.SoftDelete ? ", bool includeDeleted = false" : "";
             var fqQuery = info.HasQueryDto && info.QueryName is not null
                 ? (info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName)
                 : null;
@@ -113,18 +116,22 @@ public partial class DtoGenerator
             {
                 var asyncKeyword = info.HasQueryDsl ? "async " : "";
                 sb.AppendLine($"        group.MapGet(\"\", {asyncKeyword}([Microsoft.AspNetCore.Http.AsParameters] {fqQuery} query,");
-                sb.AppendLine($"            {storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
+                sb.AppendLine($"            {storeType} store, int page = 1, int pageSize = 20{dslParams}{softDeleteParam}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
+                if (info.SoftDelete)
+                    sb.AppendLine("            if (!includeDeleted) q = q.Where(e => !e.IsDeleted);");
                 sb.AppendLine(info.HasQueryDsl
                     ? "            q = query.Apply(q, filter, sort);"
                     : "            q = query.Apply(q);");
             }
             else
             {
-                sb.AppendLine($"        group.MapGet(\"\", ({storeType} store, int page = 1, int pageSize = 20{dslParams}, CancellationToken ct = default) =>");
+                sb.AppendLine($"        group.MapGet(\"\", ({storeType} store, int page = 1, int pageSize = 20{dslParams}{softDeleteParam}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
+                if (info.SoftDelete)
+                    sb.AppendLine("            if (!includeDeleted) q = q.Where(e => !e.IsDeleted);");
             }
 
             // count=true — return just the count without fetching data
@@ -229,7 +236,17 @@ public partial class DtoGenerator
             sb.AppendLine("        {");
             sb.AppendLine("            var entity = await store.GetByIdAsync(id, ct);");
             sb.AppendLine("            if (entity is null) return Results.Problem(statusCode: 404, title: \"Not Found\");");
-            sb.AppendLine("            await store.DeleteAsync(entity, ct);");
+            if (info.SoftDelete)
+            {
+                sb.AppendLine("            if (entity.IsDeleted) return Results.Problem(statusCode: 404, title: \"Not Found\");");
+                sb.AppendLine("            entity.IsDeleted = true;");
+                sb.AppendLine("            entity.DeletedAt = System.DateTime.UtcNow;");
+                sb.AppendLine("            await store.UpdateAsync(entity, ct);");
+            }
+            else
+            {
+                sb.AppendLine("            await store.DeleteAsync(entity, ct);");
+            }
             sb.AppendLine("            return Results.NoContent();");
             var deleteChain = "        })";
             if (info.DeletePolicy is not null)
@@ -284,11 +301,24 @@ public partial class DtoGenerator
             sb.AppendLine("            foreach (var id in ids)");
             sb.AppendLine("            {");
             sb.AppendLine("                var entity = await store.GetByIdAsync(id, ct);");
-            sb.AppendLine("                if (entity is not null)");
-            sb.AppendLine("                {");
-            sb.AppendLine("                    await store.DeleteAsync(entity, ct);");
-            sb.AppendLine("                    deleted++;");
-            sb.AppendLine("                }");
+            if (info.SoftDelete)
+            {
+                sb.AppendLine("                if (entity is not null && !entity.IsDeleted)");
+                sb.AppendLine("                {");
+                sb.AppendLine("                    entity.IsDeleted = true;");
+                sb.AppendLine("                    entity.DeletedAt = System.DateTime.UtcNow;");
+                sb.AppendLine("                    await store.UpdateAsync(entity, ct);");
+                sb.AppendLine("                    deleted++;");
+                sb.AppendLine("                }");
+            }
+            else
+            {
+                sb.AppendLine("                if (entity is not null)");
+                sb.AppendLine("                {");
+                sb.AppendLine("                    await store.DeleteAsync(entity, ct);");
+                sb.AppendLine("                    deleted++;");
+                sb.AppendLine("                }");
+            }
             sb.AppendLine("            }");
             sb.AppendLine("            return Results.Ok(new { deleted });");
             var bulkDeleteChain = "        })";
@@ -375,6 +405,8 @@ public partial class DtoGenerator
             sb.AppendLine("    {");
             sb.AppendLine("        var entity = await _store.GetByIdAsync(id, ct);");
             sb.AppendLine("        if (entity is null) return NotFound();");
+            if (info.SoftDelete)
+                sb.AppendLine("        if (entity.IsDeleted) return NotFound();");
             if (info.HasResponseDto && info.ResponseName is not null)
             {
                 var fqResponse = info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName;
@@ -397,16 +429,22 @@ public partial class DtoGenerator
             {
                 var fqQuery = info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName;
                 sb.AppendLine("    [HttpGet]");
-                sb.AppendLine($"    public async Task<IActionResult> GetList([FromQuery] {fqQuery} query, int page = 1, int pageSize = 20, CancellationToken ct = default)");
+                var ctrlSoftParam = info.SoftDelete ? ", bool includeDeleted = false" : "";
+                sb.AppendLine($"    public async Task<IActionResult> GetList([FromQuery] {fqQuery} query, int page = 1, int pageSize = 20{ctrlSoftParam}, CancellationToken ct = default)");
                 sb.AppendLine("    {");
                 sb.AppendLine("        var q = query.Apply(_store.Query());");
+                if (info.SoftDelete)
+                    sb.AppendLine("        if (!includeDeleted) q = q.Where(e => !e.IsDeleted);");
             }
             else
             {
                 sb.AppendLine("    [HttpGet]");
-                sb.AppendLine("    public async Task<IActionResult> GetList(int page = 1, int pageSize = 20, CancellationToken ct = default)");
+                var ctrlSoftParam2 = info.SoftDelete ? ", bool includeDeleted = false" : "";
+                sb.AppendLine($"    public async Task<IActionResult> GetList(int page = 1, int pageSize = 20{ctrlSoftParam2}, CancellationToken ct = default)");
                 sb.AppendLine("    {");
                 sb.AppendLine("        var q = _store.Query();");
+                if (info.SoftDelete)
+                    sb.AppendLine("        if (!includeDeleted) q = q.Where(e => !e.IsDeleted);");
             }
 
             var ctrlListType = info.ListResponseName ?? info.ResponseName;
@@ -493,7 +531,17 @@ public partial class DtoGenerator
             sb.AppendLine("    {");
             sb.AppendLine("        var entity = await _store.GetByIdAsync(id, ct);");
             sb.AppendLine("        if (entity is null) return NotFound();");
-            sb.AppendLine("        await _store.DeleteAsync(entity, ct);");
+            if (info.SoftDelete)
+            {
+                sb.AppendLine("        if (entity.IsDeleted) return NotFound();");
+                sb.AppendLine("        entity.IsDeleted = true;");
+                sb.AppendLine("        entity.DeletedAt = System.DateTime.UtcNow;");
+                sb.AppendLine("        await _store.UpdateAsync(entity, ct);");
+            }
+            else
+            {
+                sb.AppendLine("        await _store.DeleteAsync(entity, ct);");
+            }
             sb.AppendLine("        return NoContent();");
             sb.AppendLine("    }");
         }
@@ -547,6 +595,31 @@ public partial class DtoGenerator
         sb.AppendLine("/// </list>");
         sb.AppendLine("/// </summary>");
         sb.AppendLine($"partial class {entity} {{ }}");
+
+        return sb.ToString();
+    }
+
+    private static string GenerateSoftDeleteProperties(CrudApiInfo info)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+
+        if (info.Namespace is not null)
+        {
+            sb.AppendLine($"namespace {info.Namespace};");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"partial class {info.ClassName}");
+        sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>Soft-delete flag. Set by the generated DELETE endpoint when <c>[CrudApi(SoftDelete = true)]</c>.</summary>");
+        sb.AppendLine("    public bool IsDeleted { get; set; }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>UTC timestamp of soft deletion. Null when not deleted.</summary>");
+        sb.AppendLine("    public System.DateTime? DeletedAt { get; set; }");
+        sb.AppendLine("}");
 
         return sb.ToString();
     }

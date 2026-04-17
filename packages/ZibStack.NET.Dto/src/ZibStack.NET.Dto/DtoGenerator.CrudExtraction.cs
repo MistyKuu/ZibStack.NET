@@ -28,6 +28,8 @@ public partial class DtoGenerator
         var createPolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "CreatePolicy").Value.Value as string;
         var updatePolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "UpdatePolicy").Value.Value as string;
         var deletePolicy = attr.NamedArguments.FirstOrDefault(a => a.Key == "DeletePolicy").Value.Value as string;
+        var softDeleteRaw = attr.NamedArguments.FirstOrDefault(a => a.Key == "SoftDelete").Value.Value;
+        var softDelete = softDeleteRaw is true;
 
         // Resolve key property type
         var keyProp = GetAllProperties(symbol).FirstOrDefault(p => p.Name == keyProperty);
@@ -167,7 +169,7 @@ public partial class DtoGenerator
             updatePolicy,
             deletePolicy,
             listResponseName,
-            columnPermissions);
+            columnPermissions) { SoftDelete = softDelete };
     } catch { return null; } }
 
     // ─── Auto-implied DTOs from [CrudApi] ──────────────────────────────

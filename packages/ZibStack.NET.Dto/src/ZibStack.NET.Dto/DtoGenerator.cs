@@ -589,6 +589,10 @@ public partial class DtoGenerator : IIncrementalGenerator
 
             // Emit code map partial class with summary linking to all generated types
             spc.AddSource($"{info.FullyQualifiedName}.CodeMap.g.cs", GenerateCodeMap(info));
+
+            // Soft delete: emit IsDeleted + DeletedAt properties on the entity partial
+            if (info.SoftDelete)
+                spc.AddSource($"{info.FullyQualifiedName}.SoftDelete.g.cs", GenerateSoftDeleteProperties(info));
         });
 
         // [ImTiredOfCrud] (from ZibStack.NET.UI) → CRUD endpoints

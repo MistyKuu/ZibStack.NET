@@ -84,6 +84,15 @@ namespace ZibStack.NET.Dto
 
         /// <summary>Authorization policy for DELETE. Overrides AuthorizePolicy.</summary>
         public string? DeletePolicy { get; set; }
+
+        /// <summary>
+        /// When true, DELETE sets IsDeleted=true + DeletedAt=DateTime.UtcNow instead of
+        /// removing the record. GetList filters out deleted items by default (pass
+        /// ?includeDeleted=true to see them). GetById returns 404 for deleted entities.
+        /// The generator adds IsDeleted (bool) and DeletedAt (DateTime?) properties to the
+        /// entity partial class if they don't already exist.
+        /// </summary>
+        public bool SoftDelete { get; set; }
     }
 }
 ";

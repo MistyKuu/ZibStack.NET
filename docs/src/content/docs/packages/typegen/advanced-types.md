@@ -99,7 +99,7 @@ deserialisation lines up automatically:
 public enum OrderStatus { Pending, Shipped, Delivered }
 ```
 
-→ TypeScript (default — `TsEnumStyle.Union`):
+→ TypeScript (default — `Enum.Union`):
 ```typescript
 export type OrderStatus = "Pending" | "Shipped" | "Delivered";
 ```
