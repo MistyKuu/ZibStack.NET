@@ -14,7 +14,7 @@ export default defineConfig({
 			customCss: ['./src/styles/custom.css'],
 			sidebar: [
 				{ label: 'Getting Started', slug: 'getting-started' },
-				{ label: 'Live Playground', link: 'https://zibstack-net.onrender.com/index.html', attrs: { target: '_blank' } },
+				{ label: 'Live Playground', link: 'https://zibstack-playground-808858943057.europe-central2.run.app/index.html', attrs: { target: '_blank' } },
 				{
 					label: 'Drop-in Attributes',
 					items: [

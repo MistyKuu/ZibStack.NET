@@ -2,7 +2,7 @@
 
 A collection of .NET source generators and utilities for common application concerns — logging, tracing, DTOs, CRUD APIs, validation, UI metadata, and more. Zero reflection, zero runtime overhead.
 
-**[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)** | **[Live Playground](https://zibstack-net.onrender.com/index.html)**
+**[Documentation](https://mistykuu.github.io/ZibStack.NET/)** | **[Getting Started](https://mistykuu.github.io/ZibStack.NET/getting-started/)** | **[Live Playground](https://zibstack-playground-808858943057.europe-central2.run.app/index.html)**
 
 <a href="https://buymeacoffee.com/mistykuu" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
 
@@ -232,7 +232,7 @@ if (!result.IsValid) return BadRequest(result.Errors);
 
 ## Tier 3 — Opinionated scaffolding
 
-> **Before you adopt Tier 3:** these generators move a lot of code out of your hands. On solo or small-team projects the time savings are massive. On larger teams where everyone needs to understand the generated code, start with Tier 1 — adopt Tier 3 only when the whole team has seen how it works. The [Playground](https://zibstack-net.onrender.com/index.html) is the fastest way to show teammates what's generated.
+> **Before you adopt Tier 3:** these generators move a lot of code out of your hands. On solo or small-team projects the time savings are massive. On larger teams where everyone needs to understand the generated code, start with Tier 1 — adopt Tier 3 only when the whole team has seen how it works. The [Playground](https://zibstack-playground-808858943057.europe-central2.run.app/index.html) is the fastest way to show teammates what's generated.
 
 ### ZibStack.NET.Dto
 

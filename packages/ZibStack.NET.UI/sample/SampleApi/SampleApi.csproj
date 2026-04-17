@@ -16,11 +16,14 @@
     <ProjectReference Include="..\..\..\ZibStack.NET.Dto\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.EntityFramework\src\ZibStack.NET.EntityFramework\ZibStack.NET.EntityFramework.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <!-- Generator DLLs copied to output for playground runtime compilation -->
     <ProjectReference Include="..\..\src\ZibStack.NET.UI\ZibStack.NET.UI.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Core\src\ZibStack.NET.Core\ZibStack.NET.Core.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Dto\src\ZibStack.NET.Dto\ZibStack.NET.Dto.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Validation\src\ZibStack.NET.Validation\ZibStack.NET.Validation.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.csproj" ReferenceOutputAssembly="true" PrivateAssets="all" />
+    <ProjectReference Include="..\..\..\ZibStack.NET.TypeGen\src\ZibStack.NET.TypeGen.Abstractions\ZibStack.NET.TypeGen.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Query\src\ZibStack.NET.Query\ZibStack.NET.Query.csproj" />
   </ItemGroup>
 

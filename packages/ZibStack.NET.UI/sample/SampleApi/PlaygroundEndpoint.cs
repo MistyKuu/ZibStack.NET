@@ -131,6 +131,7 @@ public static class PlaygroundEndpoint
                 using ZibStack.NET.Dto;
                 using ZibStack.NET.Core;
                 using ZibStack.NET.Validation;
+                using ZibStack.NET.TypeGen;
                 """ + "\n" + code;
         }
 
@@ -205,6 +206,8 @@ public static class PlaygroundEndpoint
                     result.Generated.Add(new GeneratedFile("Utility Types", name, source));
                 else if (name.Contains(".Validation."))
                     result.Generated.Add(new GeneratedFile("Validation", name, source));
+                else if (name == "ZibStack.TypeGen.Manifest.g.cs")
+                    ParseTypeGenManifest(source, result);
                 else if (!name.EndsWith("Attribute.g.cs"))
                     result.Generated.Add(new GeneratedFile("Other", name, source));
             }
@@ -223,6 +226,25 @@ public static class PlaygroundEndpoint
             result.Error = string.Join("\n", diagnostics);
 
         return result;
+    }
+
+    private static void ParseTypeGenManifest(string source, PlaygroundResult result)
+    {
+        // Extract file count
+        var countMatch = Regex.Match(source, @"FileCount\s*=\s*(\d+)");
+        if (!countMatch.Success) return;
+        var count = int.Parse(countMatch.Groups[1].Value);
+
+        for (int i = 0; i < count; i++)
+        {
+            var fnMatch = Regex.Match(source, $@"FileName{i}\s*=\s*@""(.*?)"";\s*$", RegexOptions.Multiline);
+            var contentMatch = Regex.Match(source, $@"Content{i}\s*=\s*@""((?:[^""]|"""")*)"";", RegexOptions.Singleline);
+            if (!fnMatch.Success || !contentMatch.Success) continue;
+
+            var fileName = fnMatch.Groups[1].Value;
+            var content = contentMatch.Groups[1].Value.Replace("\"\"", "\"");
+            result.Generated.Add(new GeneratedFile("TypeGen", fileName, content));
+        }
     }
 
     private static string? ExtractJsonFromSource(string source)
@@ -250,6 +272,7 @@ public static class PlaygroundEndpoint
         AddAssembly(typeof(IQueryable).Assembly);
         AddAssembly(typeof(System.ComponentModel.DataAnnotations.RequiredAttribute).Assembly);
         AddAssembly(typeof(ZibStack.NET.Query.FilterParser).Assembly);
+        AddAssembly(typeof(ZibStack.NET.TypeGen.GenerateTypesAttribute).Assembly);
 
         // Ensure all core runtime assemblies are included
         var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
@@ -273,7 +296,7 @@ public static class PlaygroundEndpoint
     private static GeneratorDriver LoadCombinedDriver()
     {
         var allGens = new List<ISourceGenerator>();
-        foreach (var name in new[] { "ZibStack.NET.Validation", "ZibStack.NET.Core", "ZibStack.NET.UI", "ZibStack.NET.Dto" })
+        foreach (var name in new[] { "ZibStack.NET.Validation", "ZibStack.NET.Core", "ZibStack.NET.UI", "ZibStack.NET.Dto", "ZibStack.NET.TypeGen" })
             allGens.AddRange(LoadGenerator(name));
         return CSharpGeneratorDriver.Create(allGens.ToArray());
     }

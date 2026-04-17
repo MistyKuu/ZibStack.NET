@@ -74,7 +74,7 @@
 
 <header>
   <h1><em>ZibStack.NET</em> Playground</h1>
-  <span style="font-size:.6rem;color:var(--muted);margin-right:-.5rem" title="Hosted on Render free tier — for faster experience run locally">Slow? Run locally</span>
+  <span style="font-size:.6rem;color:var(--muted);margin-right:-.5rem" title="For the fastest experience, run locally">Slow? Run locally</span>
   <select class="sample-select" id="sample-select" onchange="loadSample(this.value)">
     <option value="imtiredofcrud">ImTiredOfCrud — Full Stack</option>
     <option value="crud-dtos">CRUD API + Separate DTOs</option>
@@ -86,6 +86,9 @@
     <option value="utility-types">Utility Types (Pick, Omit, Partial)</option>
     <option value="relations">Relations + Entity</option>
     <option value="querydto">QueryDto — Standalone DSL</option>
+    <option value="fluent-advanced">Fluent Advanced (SoftDelete, Auth, Flatten)</option>
+    <option value="crud-tests">CRUD Test Generation</option>
+    <option value="typegen">TypeGen (TS, Zod, GraphQL)</option>
   </select>
   <div class="tabs" id="tab-bar">
     <div class="tab active" data-tab="data">Data</div>
@@ -96,6 +99,7 @@
     <div class="tab" data-tab="ui">UI</div>
     <div class="tab" data-tab="utility">Utility</div>
     <div class="tab" data-tab="validation">Validation</div>
+    <div class="tab" data-tab="typegen">TypeGen</div>
     <div class="tab" data-tab="examples">Examples</div>
     <div class="tab" data-tab="schema">JSON</div>
   </div>
@@ -116,6 +120,7 @@
     <div class="tab-content" id="tab-ui"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-utility"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-validation"><div class="empty">Compiling...</div></div>
+    <div class="tab-content" id="tab-typegen"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-examples"><div class="empty">Compiling...</div></div>
     <div class="tab-content" id="tab-schema"><div class="panel"><h2>Table Schema</h2><pre class="json" id="schema-table"></pre></div><div class="panel"><h2>Form Schema</h2><pre class="json" id="schema-form"></pre></div></div>
   </div>
@@ -594,6 +599,186 @@ public partial class Product
 //
 // Select with nested:
 //   ?select=Name,Price,Category.Name → { "name": "...", "price": 99, "category": { "name": "..." } }`,
+
+'fluent-advanced': `// Advanced Fluent — CrudApi options, SoftDelete, auth policies, Flatten
+// Everything configured from a central file — the model has ZERO Dto markers.
+
+using ZibStack.NET.Dto;
+using ZibStack.NET.UI;
+using ZibStack.NET.Validation;
+
+namespace Demo;
+
+[UiForm]
+[UiTable(DefaultSort = "Name")]
+public partial class Customer
+{
+    [UiFormIgnore] [UiTableColumn(IsVisible = false)]
+    public int Id { get; set; }
+
+    [ZRequired] [ZMaxLength(100)]
+    [UiFormField(Label = "Name")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public required string Name { get; set; }
+
+    [ZEmail]
+    [UiFormField(Label = "Email")]
+    [UiTableColumn(Filterable = true)]
+    public required string Email { get; set; }
+
+    [UiFormField(Label = "Address")]
+    public Address? Address { get; set; }
+
+    [UiFormField(Label = "VIP")]
+    [Checkbox]
+    [UiTableColumn(Sortable = true)]
+    public bool IsVip { get; set; }
+}
+
+public class Address
+{
+    public string Street { get; set; } = "";
+    public string City { get; set; } = "";
+    public string ZipCode { get; set; } = "";
+}
+
+internal sealed class DtoConfig : IDtoConfigurator
+{
+    public void Configure(IDtoBuilder b)
+    {
+        b.ForType<Customer>()
+            .CrudApi(api =>
+            {
+                api.Route = "api/v2/customers";
+                api.Operations = CrudOperations.All;
+                api.SoftDelete = true;            // DELETE sets IsDeleted + DeletedAt
+                api.AuthorizePolicy = "ApiUser";   // default policy for all operations
+                api.DeletePolicy = "Admin";        // override: only admins can delete
+            })
+            .CreateDto(c => c.Name = "NewCustomer")
+            .UpdateDto()
+            .ResponseDto()
+            .QueryDto(q =>
+            {
+                q.DefaultSort = "Name";
+                q.Sortable = true;
+            })
+            .Property(p => p.Id).IgnoreIn(DtoTarget.Create | DtoTarget.Update)
+            .Property(p => p.Address).Flatten()    // Address.Street -> street in DTO
+            .Property(p => p.IsVip).OnlyIn(DtoTarget.Response);  // read-only
+    }
+}`,
+
+'crud-tests': \`// [GenerateCrudTests] — auto-generate xUnit integration tests
+// Add [assembly: GenerateCrudTests] and the generator creates a test class
+// per [CrudApi] entity with: GetList, GetById, Create, FullCrudCycle,
+// BulkCreate, BulkDelete tests using WebApplicationFactory + Bogus.
+
+using ZibStack.NET.Dto;
+using ZibStack.NET.UI;
+using ZibStack.NET.Validation;
+
+namespace Demo;
+
+[CrudApi(Route = "api/tickets", Operations = CrudOperations.AllWithBulk)]
+[CreateDto]
+[UpdateDto]
+[ResponseDto]
+[QueryDto(DefaultSort = "Title")]
+[UiForm]
+[UiTable]
+public partial class Ticket
+{
+    [DtoIgnore] [UiFormIgnore] public int Id { get; set; }
+
+    [ZRequired] [ZMaxLength(200)]
+    [UiFormField(Label = "Title")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public required string Title { get; set; }
+
+    [TextArea(Rows = 4)]
+    [UiFormField(Label = "Description")]
+    public string? Description { get; set; }
+
+    [Select(typeof(Priority))]
+    [UiFormField(Label = "Priority")]
+    [UiTableColumn(Sortable = true, Filterable = true)]
+    public Priority Priority { get; set; }
+
+    [UiFormField(Label = "Assigned To")]
+    [UiTableColumn(Filterable = true)]
+    public string? AssignedTo { get; set; }
+
+    [DtoIgnore(DtoTarget.Create)]
+    [UiFormReadOnly]
+    [UiTableColumn(Sortable = true)]
+    public DateTime CreatedAt { get; set; }
+}
+
+public enum Priority { Low, Medium, High, Critical }
+
+// In your test project, add this single line:
+//
+//   [assembly: GenerateCrudTests]
+//
+// The generator produces TicketCrudTests with:
+//   - GetList_ReturnsItemsArray
+//   - GetById_NonExistent_ReturnsNotFound
+//   - Create_PersistsAndReturnsLocation
+//   - FullCrudCycle_CreateReadUpdateDelete
+//   - BulkCreate_ActuallyCreatesItems
+//   - BulkDelete_ActuallyDeletesItems
+//
+// Each test uses Bogus to generate random valid data
+// matching your validation rules.\`,
+
+'typegen': \`// TypeGen — generate TypeScript, Zod schemas, and GraphQL from C# DTOs.
+// Open the "TypeGen" tab to see the generated output files.
+
+using ZibStack.NET.Dto;
+using ZibStack.NET.TypeGen;
+
+namespace Demo;
+
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)]
+[CrudApi(Route = "api/products")]
+[CreateDto]
+[ResponseDto]
+public partial class Product
+{
+    [DtoIgnore] public int Id { get; set; }
+
+    [TsName("productName")]    // override TS field name
+    public required string Name { get; set; }
+
+    public string? Description { get; set; }
+
+    [OpenApiProperty(Format = "decimal", Description = "Unit price in USD")]
+    public decimal Price { get; set; }
+
+    public int Stock { get; set; }
+    public bool IsActive { get; set; }
+    public ProductCategory Category { get; set; }
+
+    [TsIgnore]                // exclude from TypeScript output
+    [OpenApiIgnore]           // exclude from OpenAPI output
+    public string InternalSku { get; set; } = "";
+}
+
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.GraphQL)]
+public enum ProductCategory
+{
+    Electronics,
+    Clothing,
+    Food,
+    Books,
+    Other
+}
+
+// Generated output (see TypeGen tab):
+//   - TypeScript interfaces (Product, ProductCategory)
+//   - Zod runtime validation schemas
+//   - GraphQL SDL types\`,
 };
 
 function loadSample(name) { if(editor && samples[name]) { editor.setValue(samples[name]); } }
@@ -658,7 +843,7 @@ async function compile() {
     if(tableSchema&&!tableSchema.apiUrl)tableSchema.apiUrl='/api/products'; if(formSchema&&!formSchema.apiUrl)formSchema.apiUrl='/api/products';
     const gf=data.generated||[];lastGenerated=gf;const counts={};gf.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
     status.className='status-bar success';status.textContent=`${ms}ms | ${gf.length} files`;
-    ['endpoints','dtos','query','database','ui','utility','validation'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI',utility:'Utility Types',validation:'Validation'}[t]]));
+    ['endpoints','dtos','query','database','ui','utility','validation','typegen'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI',utility:'Utility Types',validation:'Validation',typegen:'TypeGen'}[t]]));
     $('#schema-table').textContent=tableSchema?JSON.stringify(tableSchema,null,2):'No table schema';
     $('#schema-form').textContent=formSchema?JSON.stringify(formSchema,null,2):'No form schema';
     renderCodeTab('tab-endpoints',gf.filter(f=>f.category==='Endpoints'),'Endpoints');
@@ -668,6 +853,7 @@ async function compile() {
     renderCodeTab('tab-ui',gf.filter(f=>f.category==='UI'),'UI Descriptors');
     renderCodeTab('tab-utility',gf.filter(f=>f.category==='Utility Types'),'Utility Types');
     renderCodeTab('tab-validation',gf.filter(f=>f.category==='Validation'),'Validation');
+    renderCodeTab('tab-typegen',gf.filter(f=>f.category==='TypeGen'),'TypeGen');
     renderExamples();
     currentSort=tableSchema?.defaultSort?.column||null;currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
     currentPage=1;activeFilters={};editingId=null; renderTable();renderForm();loadData();
