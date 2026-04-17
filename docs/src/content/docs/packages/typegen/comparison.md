@@ -7,31 +7,42 @@ description: "How ZibStack.NET.TypeGen compares to NSwag, jburzynski/TypeGen, Ta
 
 Note: there is a separate project called **TypeGen** ([jburzynski/TypeGen](https://github.com/jburzynski/TypeGen)) — reflection-based single-target C#→TS tool. Our package is `ZibStack.NET.TypeGen` (namespaced) to avoid collision, but keep this in mind when searching.
 
-The main table compares the four closest tools — NSwag (OpenAPI + TS client), Tapper (Roslyn-adjacent C#→TS), jburzynski/TypeGen (reflection-based C#→TS with attributes), and AutoRest (multi-language from OpenAPI). Reinforced.Typings and OpenAPI Generator are discussed in prose below.
+The main table compares the five most relevant tools — Microsoft.AspNetCore.OpenApi (.NET 9/10 built-in), NSwag, Tapper, jburzynski/TypeGen, and AutoRest. Others (Reinforced.Typings, OpenAPI Generator) are in prose below.
 
-| Feature | **ZibStack.NET.TypeGen** | NSwag | Tapper | jburzynski/TypeGen | AutoRest |
+| Feature | **ZibStack.NET.TypeGen** | Microsoft.AspNetCore.OpenApi | NSwag | Tapper | jburzynski/TypeGen |
 |---|---|---|---|---|---|
-| Mechanism | **Roslyn source gen (runs in compiler)** | reflection + OpenAPI intermediate | dotnet tool CLI | reflection + CLI / `dotnet tool` | OpenAPI-driven |
-| Needs running app / compiled DLL | ❌ pure compile-time | ✅ yes | ❌ | ✅ yes | external spec |
-| Regenerates on `dotnet build` | ✅ + live on IDE save | partial (build target) | ❌ manual rerun | ❌ manual rerun | ❌ |
-| TypeScript | ✅ | ✅ | ✅ | ✅ | ✅ |
-| TS string-literal unions (modern) | ✅ default | partial | ✅ | ❌ (TS enum only) | ❌ |
-| OpenAPI 3.0 document | ✅ from same DTOs | ✅ (core feature) | ❌ | ❌ | consumes, doesn't emit |
-| OpenAPI `paths:` without a running app | ✅ synthesized from `[CrudApi]` + scanned from `[ApiController]` + Minimal API | ❌ needs host | n/a | n/a | n/a |
-| Python (Pydantic v2) | ✅ native | ❌ | ❌ | ❌ | via OpenAPI |
-| Zod (runtime TS validation schemas) | ✅ native | ❌ | ❌ | ❌ | ❌ |
-| MessagePack | ❌ | ❌ | ✅ | ❌ | ❌ |
-| Compile-time fluent configurator | ✅ `ITypeGenConfigurator` | ❌ | ❌ | ❌ | ❌ |
-| Per-class / per-property attributes | ✅ `[TsName]`, `[TsType]`, `[UseType<T>]`, `[OpenApiProperty]`, … | partial | ✅ `[TranspilationSource]` | ✅ `[ExportTsClass]` | ❌ |
-| Validation → schema constraints | ✅ DataAnnotations + `[Z…]` → OpenAPI `minLength`/`pattern`, Zod `.email()`, Pydantic | ❌ | ❌ | ❌ | from OpenAPI spec |
-| Polymorphic types → discriminated union | ✅ TS + OpenAPI + Zod | partial | ❌ | ❌ | from spec |
-| Dto-companion synthesis (`CreateXRequest`, etc.) | ✅ `[CrudApi]` integration | ❌ | ❌ | ❌ | n/a |
-| License | MIT | LGPL (with MIT portions) | MIT | MIT | MIT |
+| Mechanism | **Roslyn source gen (runs in compiler)** | MSBuild launches app with mock server post-build | reflection + OpenAPI intermediate | dotnet tool CLI | reflection + CLI |
+| Needs running app / compiled DLL | ❌ pure compile-time | ✅ boots app with mock server | ✅ yes | ❌ | ✅ yes |
+| Works without DB / secrets / DI | ✅ | ❌ build fails if DI can't resolve | ❌ | ✅ | ❌ |
+| Regenerates on `dotnet build` | ✅ + live on IDE save | ✅ (post-build target) | partial | ❌ manual rerun | ❌ manual rerun |
+| TypeScript | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Python (Pydantic v2) | ✅ native | ❌ | ❌ | ❌ | ❌ |
+| Zod (runtime TS validation) | ✅ native | ❌ | ❌ | ❌ | ❌ |
+| OpenAPI document | ✅ 3.0 from DTOs | ✅ 3.1 from runtime | ✅ (core feature) | ❌ | ❌ |
+| OpenAPI `paths:` fidelity | static: `[CrudApi]` + `[ApiController]` + Minimal API syntax scan | **full runtime truth** (middleware, auth, endpoint filters, `Produces<T>()`) | runtime host | n/a | n/a |
+| Swagger UI / Scalar OOTB | ❌ (feed yaml to Scalar manually) | ✅ native | ✅ | n/a | n/a |
+| TS string-literal unions | ✅ default | n/a | partial | ✅ | ❌ |
+| MessagePack | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Fluent configurator | ✅ `ITypeGenConfigurator` | transformers API | ❌ | ❌ | ❌ |
+| Validation → schema constraints | ✅ DataAnnotations → OpenAPI `minLength`/`pattern`, Zod `.email()`, Pydantic | ✅ via runtime model binding | ❌ | ❌ | ❌ |
+| Polymorphic types → discriminated union | ✅ TS + OpenAPI + Zod | ✅ via `[JsonPolymorphic]` runtime | partial | ❌ | ❌ |
+| Dto-companion synthesis | ✅ `[CrudApi]` integration | n/a | ❌ | ❌ | ❌ |
+| License | MIT | free (part of ASP.NET Core) | LGPL | MIT | MIT |
 
 **Other tools worth mentioning:**
 
-- **Reinforced.Typings** — reflection + MSBuild, attribute-based TS generation. Older approach; closer to jburzynski/TypeGen in design. Works on .NET Framework too.
-- **OpenAPI Generator** (Apache 2.0) — the Swiss Army knife for generating clients from OpenAPI specs in 30+ languages. Pair it with our OpenAPI output if you want multi-language HTTP clients: `ZibStack.NET.TypeGen` → `openapi.yaml` → `openapi-generator` → Java/Ruby/PHP/…
+- **AutoRest** (MIT) — multi-language client generation from an OpenAPI spec. Consumes specs, doesn't emit them. Pair with our OpenAPI output or Microsoft's.
+- **Reinforced.Typings** — reflection + MSBuild, attribute-based TS generation. Older approach; works on .NET Framework too.
+- **OpenAPI Generator** (Apache 2.0) — the Swiss Army knife for generating clients from OpenAPI specs in 30+ languages. Pair it with our OpenAPI output: `ZibStack.NET.TypeGen` → `openapi.yaml` → `openapi-generator` → Java/Ruby/PHP/…
+
+### ZibStack.NET.TypeGen + Microsoft.AspNetCore.OpenApi — complementary, not competing
+
+The two tools address **different layers**:
+
+- **Microsoft's package** sees the **runtime truth** — every middleware, auth policy, endpoint filter, `Produces<T>()` call, and model binding quirk. It's the most faithful representation of what your API actually does. But it needs to boot the app, so CI environments without a database or external services can't use it.
+- **TypeGen** sees the **source truth** — the C# DTOs and their attributes, without booting anything. It can't see runtime middleware, but it also can't break when the DB is unavailable. And it emits TS + Python + Zod alongside the OpenAPI, which Microsoft's package doesn't do.
+
+**Best-of-both setup:** use TypeGen for multi-target contract generation (TS / Python / Zod) and a compile-time OpenAPI draft during development. Use Microsoft's package for the production-served OpenAPI document with full middleware fidelity. The two don't conflict — they emit to different paths and serve different consumers.
 
 ## What you give up
 
