@@ -541,6 +541,7 @@ namespace ZibStack.NET.Validation
         sb.AppendLine("{");
         sb.AppendLine("    public ValidationResult Validate(ValidationContext? context = null)");
         sb.AppendLine("    {");
+        sb.AppendLine("        context ??= new ValidationContext { RootObject = this };");
         sb.AppendLine("        var errors = new List<string>();");
         sb.AppendLine();
 

@@ -2,8 +2,8 @@ using ZibStack.NET.Validation;
 
 namespace ZibStack.NET.Dto.Sample.Models;
 
-// ── ValidationContext usage demo ──────────────────────────────────────────────
-// Shows how to pass context through the validation chain and use it at the call site.
+// ── Validation demo ───────────────────────────────────────────────────────────
+// Just call .Validate() — context is created and propagated automatically.
 
 public static class ValidationDemo
 {
@@ -18,12 +18,13 @@ public static class ValidationDemo
             Notes = new()
             {
                 new Note { Text = "First note" },
-                new Note { Text = "" },  // invalid — will show as Notes[1].Text
+                new Note { Text = "" },  // invalid
             },
         };
 
-        // 1. Simple validate — no context
+        // One call — nested objects + collections validated automatically
         var result = form.Validate();
+
         // result.Errors:
         //   "Email must be a valid email address."
         //   "Phone is required."
@@ -31,27 +32,20 @@ public static class ValidationDemo
         //   "BillingAddress.Zip must be XX-XXX format"
         //   "ShippingAddress.City is required."
         //   "Notes[1].Text is required."
+        //   "At least one of Phone or Email is required"
 
-        // 2. With context — Parent/Path/RootObject flow through nested chain
+        // ValidationContext is auto-created internally. Nested validators see:
+        //   context.Parent = form
+        //   context.Path = "BillingAddress" / "Notes[1]" / etc.
+        //   context.RootObject = form
+
+        // Optional: pass your own context with custom data
         var ctx = new ValidationContext
         {
-            RootObject = form,  // top-level object, accessible in nested validators
-            Items = { ["source"] = "API", ["userId"] = 42 },  // custom user data
+            Items = { ["source"] = "API", ["userId"] = 42 },
         };
         var result2 = form.Validate(ctx);
-        // Same errors, but nested validators received context with:
-        //   context.Parent = form (for BillingAddress/ShippingAddress/Notes)
-        //   context.Path = "BillingAddress" / "ShippingAddress" / "Notes[0]"
-        //   context.RootObject = form (preserved from root)
-        //   context.Items["source"] = "API" (copied to nested)
-
-        // 3. Validate a single nested object with explicit context
-        var addressResult = form.BillingAddress.Validate(new ValidationContext
-        {
-            Parent = form,
-            Path = "BillingAddress",
-        });
-        // addressResult.Errors: "Street is required.", "Zip must be XX-XXX format"
+        // Same validation, but context.Items are available in nested validators
     }
 }
 
