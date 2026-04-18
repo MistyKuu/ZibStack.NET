@@ -193,14 +193,12 @@ if (written > 0 || removed > 0)
   </Target>
 
   <!--
-    Design-time build hook: Rider and VS run CompileDesignTime (or similar
-    targets) on every save but skip CoreCompile. This target fires after
-    the generator has refreshed the manifest in obj/ during design-time
-    compilation, ensuring .ts/.yaml files update on save — not just on
-    explicit `dotnet build`.
+    Design-time build hooks: IDEs (Rider, VS) run various targets on save
+    but skip CoreCompile. Hook into multiple candidates so the manifest
+    gets processed regardless of which design-time path the IDE uses.
   -->
   <Target Name="ZibStackTypeGenWriteOutputFilesDesignTime"
-          AfterTargets="CompileDesignTime"
+          AfterTargets="CoreGenerateAssemblyInfo;GenerateMSBuildEditorConfigFile"
           Condition="Exists('$(IntermediateOutputPath)generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs')">
     <ZibStackTypeGenWriteOutput
         ManifestPath="$(IntermediateOutputPath)generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs"

@@ -348,6 +348,14 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // task path at build time so output isn't lost.
             if (!string.IsNullOrEmpty(projectDir))
                 TryWriteFilesDirectly(allFiles, projectDir, spc);
+            else
+            {
+                // projectDir empty — likely a sandboxed IDE host (Rider, VS Code).
+                // Try to infer from the compilation's syntax trees.
+                var inferredDir = InferProjectDir(compilation);
+                if (inferredDir != null)
+                    TryWriteFilesDirectly(allFiles, inferredDir, spc);
+            }
         });
     }
 
@@ -489,6 +497,38 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         {
             // Sweep is best-effort — the MSBuild task does the same sweep at build time.
         }
+    }
+#pragma warning restore RS1035
+
+    /// <summary>
+    /// Infer project directory from syntax tree file paths when MSBuildProjectDirectory
+    /// is not available (e.g. Rider's Roslyn host doesn't pass MSBuild properties).
+    /// Walks up from the first .cs file until we find a directory containing a .csproj.
+    /// </summary>
+#pragma warning disable RS1035
+    private static string? InferProjectDir(Compilation compilation)
+    {
+        try
+        {
+            foreach (var tree in compilation.SyntaxTrees)
+            {
+                var path = tree.FilePath;
+                if (string.IsNullOrEmpty(path)) continue;
+                // Skip generated files in obj/
+                if (path.Contains("obj" + System.IO.Path.DirectorySeparatorChar) ||
+                    path.Contains("obj" + System.IO.Path.AltDirectorySeparatorChar)) continue;
+
+                var dir = System.IO.Path.GetDirectoryName(path);
+                while (dir != null)
+                {
+                    if (System.IO.Directory.GetFiles(dir, "*.csproj").Length > 0)
+                        return dir;
+                    dir = System.IO.Directory.GetParent(dir)?.FullName;
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 #pragma warning restore RS1035
 
