@@ -47,6 +47,10 @@
     <Compile Remove="ValidateHandler.cs" />
     <Compile Remove="TransactionAttribute.cs" />
     <Compile Remove="TransactionHandler.cs" />
+    <Compile Remove="DebounceAttribute.cs" />
+    <Compile Remove="DebounceHandler.cs" />
+    <Compile Remove="ThrottleAttribute.cs" />
+    <Compile Remove="ThrottleHandler.cs" />
     <Compile Remove="AspectServiceCollectionExtensions.cs" />
   </ItemGroup>
 

@@ -330,6 +330,82 @@ public class TimeoutTests
     }
 }
 
+// ── Debounce tests ──────────────────────────────────────────────────────────
+
+[Collection("Aop")]
+public class DebounceTests
+{
+    public DebounceTests(AopFixture _) { }
+
+    [Fact]
+    public async Task Debounce_SingleCall_ExecutesNormally()
+    {
+        var svc = new DebounceTestService();
+        var result = await svc.SearchAsync("hello");
+        Assert.Equal(5, result);
+        Assert.Equal(1, svc.CallCount);
+    }
+
+    [Fact]
+    public async Task Debounce_RapidCalls_OnlyLastExecutes()
+    {
+        var svc = new DebounceTestService();
+
+        // Fire 5 rapid calls — only the last should execute
+        var tasks = new List<Task>();
+        for (int i = 0; i < 5; i++)
+            tasks.Add(Task.Run(() => svc.SearchAsync("query" + i)));
+
+        await Task.Delay(300); // wait for debounce to settle
+        Assert.Equal(1, svc.CallCount);
+    }
+}
+
+// ── Throttle tests ──────────────────────────────────────────────────────────
+
+[Collection("Aop")]
+public class ThrottleTests
+{
+    public ThrottleTests(AopFixture _) { }
+
+    [Fact]
+    public async Task Throttle_FirstCall_ExecutesImmediately()
+    {
+        var svc = new ThrottleTestService();
+        var result = await svc.NotifyAsync("user1");
+        Assert.Equal(1, result);
+        Assert.Equal(1, svc.CallCount);
+    }
+
+    [Fact]
+    public async Task Throttle_RapidCalls_NoTrailing_OnlyFirstExecutes()
+    {
+        var svc = new ThrottleTestService();
+        var key = Guid.NewGuid().ToString(); // unique key to avoid cross-test state
+
+        await svc.NotifyAsync(key);     // executes (first call)
+        await svc.NotifyAsync(key);     // dropped (within interval)
+        await svc.NotifyAsync(key);     // dropped (within interval)
+
+        Assert.Equal(1, svc.CallCount);
+    }
+
+    [Fact]
+    public async Task Throttle_AfterInterval_ExecutesAgain()
+    {
+        var svc = new ThrottleTestService();
+        var key = Guid.NewGuid().ToString();
+
+        await svc.NotifyAsync(key);     // executes
+        Assert.Equal(1, svc.CallCount);
+
+        await Task.Delay(250);          // wait past interval
+
+        await svc.NotifyAsync(key);     // executes again
+        Assert.Equal(2, svc.CallCount);
+    }
+}
+
 // ── Authorize tests ──────────────────────────────────────────────────────────
 
 [Collection("Aop")]

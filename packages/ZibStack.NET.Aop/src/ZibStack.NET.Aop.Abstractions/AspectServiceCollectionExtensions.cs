@@ -25,6 +25,8 @@ public static class AspectServiceCollectionExtensions
     ///   <item><see cref="CacheHandler"/> — in-memory caching (<see cref="CacheAttribute"/>)</item>
     ///   <item><see cref="MetricsHandler"/> — call count / duration / error counters (<see cref="MetricsAttribute"/>)</item>
     ///   <item><see cref="TimeoutHandler"/> — execution time limit (<see cref="TimeoutAttribute"/>)</item>
+    ///   <item><see cref="DebounceHandler"/> — quiet-period delay (<see cref="DebounceAttribute"/>)</item>
+    ///   <item><see cref="ThrottleHandler"/> — rate limiting (<see cref="ThrottleAttribute"/>)</item>
     /// </list>
     /// <see cref="AuthorizeHandler"/> is also registered but requires an
     /// <see cref="IAuthorizationProvider"/> implementation in DI to function.
@@ -47,6 +49,9 @@ public static class AspectServiceCollectionExtensions
         services.TryAddSingleton<TimeoutHandler>();
         services.TryAddSingleton<ValidateHandler>();
         services.TryAddSingleton<TransactionHandler>();
+
+        services.TryAddSingleton<DebounceHandler>();
+        services.TryAddSingleton<ThrottleHandler>();
 
         // AuthorizeHandler requires IAuthorizationProvider — only register if
         // the provider is already in DI (otherwise users get a clear DI error

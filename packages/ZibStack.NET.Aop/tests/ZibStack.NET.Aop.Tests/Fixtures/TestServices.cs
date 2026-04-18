@@ -438,6 +438,44 @@ public class TimeoutTestService
     }
 }
 
+// ── Built-in [Debounce] ─────────────────────────────────────────────────────────
+
+public class DebounceTestService
+{
+    public int CallCount;
+
+    [Debounce(DelayMs = 100)]
+    public async Task<int> SearchAsync(string query, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref CallCount);
+        await Task.Delay(1, cancellationToken);
+        return query.Length;
+    }
+}
+
+// ── Built-in [Throttle] ─────────────────────────────────────────────────────────
+
+public class ThrottleTestService
+{
+    public int CallCount;
+
+    [Throttle(IntervalMs = 200, Trailing = false)]
+    public async Task<int> NotifyAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref CallCount);
+        await Task.Delay(1, cancellationToken);
+        return CallCount;
+    }
+
+    [Throttle(IntervalMs = 200, Trailing = true)]
+    public async Task<int> NotifyTrailingAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref CallCount);
+        await Task.Delay(1, cancellationToken);
+        return CallCount;
+    }
+}
+
 // ── Built-in [Authorize] ────────────────────────────────────────────────────────
 
 public class AuthorizeTestService

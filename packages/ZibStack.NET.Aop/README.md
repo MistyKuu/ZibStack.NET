@@ -20,6 +20,8 @@ All registered automatically by `AddAop()`:
 | `[Metrics]` | `System.Diagnostics.Metrics` — call count, duration histogram, error count |
 | `[Timeout]` | Async execution time limit, throws `TimeoutException` |
 | `[Authorize]` | Policy/role-based auth via `IAuthorizationProvider` |
+| `[Debounce]` | Quiet-period delay — rapid calls collapse into a single execution |
+| `[Throttle]` | Rate limiting — at most one call per interval, optional trailing fire |
 
 Optional (require external packages): `[PollyRetry]` (Polly.Core), `[HybridCache]` (Microsoft.Extensions.Caching.Hybrid).
 

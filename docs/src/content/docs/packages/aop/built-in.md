@@ -18,6 +18,8 @@ description: Reference for the aspects that ship in ZibStack.NET.Aop — Trace, 
 | `[Validate]` | `ValidateHandler` | Auto-validate parameters via `DataAnnotations` before execution |
 | `[Transaction]` | `TransactionHandler` | Wrap method in `TransactionScope` (commit/rollback) |
 | `[Audit]` | `AuditHandler` | Before/after parameter snapshots → `IAuditStore`; respects `[Sensitive]`/`[NoLog]` |
+| `[Debounce]` | `DebounceHandler` | Delays execution until a quiet period elapses; rapid calls collapse into one |
+| `[Throttle]` | `ThrottleHandler` | Limits execution to at most once per interval; optional trailing call |
 
 Optional (separate packages):
 
@@ -401,6 +403,43 @@ builder.Services.AddScoped<IAuditStore, DbAuditStore>();
 ```
 
 Works on both sync and async methods. The user identity is resolved from `IHttpContextAccessor` when available, otherwise from `Thread.CurrentPrincipal`.
+
+### `[Debounce]` — quiet-period delay
+
+Delays method execution until no new calls arrive for the specified duration. Rapid successive calls collapse into a single execution — only the last one runs.
+
+```csharp
+[Debounce(DelayMs = 300)]
+public async Task OnSearchChangedAsync(string query) { ... }
+
+[Debounce(DelayMs = 1000)]
+public async Task AutoSaveAsync(Document doc) { ... }
+```
+
+| Property | Default | Description |
+|---|---|---|
+| `DelayMs` | `300` | Quiet period in milliseconds before execution |
+
+Calls with different arguments are debounced independently. Async-only.
+
+### `[Throttle]` — rate limiting
+
+Limits how often a method can execute. The first call runs immediately; subsequent calls within the interval are dropped. When `Trailing` is enabled, the last suppressed call fires when the interval expires.
+
+```csharp
+[Throttle(IntervalMs = 1000)]
+public async Task SendNotificationAsync(string userId, string msg) { ... }
+
+[Throttle(IntervalMs = 5000, Trailing = false)]
+public async Task RefreshDashboardAsync() { ... }
+```
+
+| Property | Default | Description |
+|---|---|---|
+| `IntervalMs` | `1000` | Minimum interval between executions in milliseconds |
+| `Trailing` | `true` | Execute the last suppressed call when the interval expires |
+
+Calls with different arguments are throttled independently. Async-only.
 
 ### When to use `[Trace]` vs manual `using var activity = ...`
 

@@ -30,6 +30,8 @@ public class AopFixture : IDisposable
         services.AddSingleton<TimeoutHandler>();
         services.AddSingleton<ValidateHandler>();
         services.AddSingleton<TransactionHandler>();
+        services.AddSingleton<DebounceHandler>();
+        services.AddSingleton<ThrottleHandler>();
         services.AddSingleton<IAuthorizationProvider>(AuthProvider);
         services.AddSingleton<AuthorizeHandler>();
         services.AddSingleton<IAuditStore>(AuditStore);
