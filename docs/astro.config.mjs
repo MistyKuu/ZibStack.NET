@@ -35,6 +35,7 @@ export default defineConfig({
 							items: [
 								{ label: 'Overview', slug: 'packages/aop' },
 								{ label: 'Built-in aspects', slug: 'packages/aop/built-in' },
+								{ label: 'Bulk Apply', slug: 'packages/aop/apply' },
 								{ label: 'Custom aspects & internals', slug: 'packages/aop/custom' },
 								{ label: 'Alternatives', slug: 'packages/aop/comparison' },
 							],

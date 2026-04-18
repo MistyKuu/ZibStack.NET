@@ -441,53 +441,6 @@ public async Task RefreshDashboardAsync() { ... }
 
 Calls with different arguments are throttled independently. Async-only.
 
-### Bulk Apply — aspects without attributes
-
-Use `b.Apply<TAspect>()` in your `IAopConfigurator` to apply aspects to entire namespaces, interfaces, or class hierarchies without placing attributes on individual methods:
-
-```csharp
-public sealed class AopConfig : IAopConfigurator
-{
-    public void Configure(IAopBuilder b)
-    {
-        // Cache all public methods on IRepository implementations
-        b.Apply<CacheAttribute>(to => to
-            .Implementing<IRepository>()
-            .PublicMethods()
-        , c => c.DurationSeconds = 120);
-
-        // Retry all async methods in a namespace
-        b.Apply<RetryAttribute>(to => to
-            .Namespace("MyApp.Services")
-            .MethodsWhere(m => m.IsAsync)
-        , r => r.MaxAttempts = 5);
-
-        // Trace everything derived from BaseService, except HealthCheck
-        b.Apply<TraceAttribute>(to => to
-            .DerivedFrom<BaseService>()
-            .Except<HealthCheck>()
-        );
-
-        // Metrics on all classes starting with "Order"
-        b.Apply<MetricsAttribute>(to => to
-            .ClassesWhere(c => c.Name.StartsWith("Order"))
-        );
-    }
-}
-```
-
-| Selector | Description |
-|---|---|
-| `.Namespace("X")` | Classes whose namespace starts with X |
-| `.Implementing<T>()` | Classes implementing interface T |
-| `.DerivedFrom<T>()` | Classes inheriting from T |
-| `.ClassesWhere(c => ...)` | Filter by class name, IsAbstract, IsSealed |
-| `.MethodsWhere(m => ...)` | Filter by method name, IsAsync, IsPublic, IsStatic |
-| `.PublicMethods()` | Shortcut for `.MethodsWhere(m => m.IsPublic)` |
-| `.Except<T>()` | Exclude a specific class |
-
-All selectors are AND-combined. Explicit `[Attribute]` on a method always wins over Apply rules. The second lambda (optional) configures aspect properties.
-
 ### When to use `[Trace]` vs manual `using var activity = ...`
 
 Use `[Trace]` when you want:
