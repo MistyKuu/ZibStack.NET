@@ -15,8 +15,14 @@ namespace ZibStack.NET.Dto.Sample.Models;
 [UiFormGroup("contact", Label = "Contact", Order = 2)]
 [ColumnPermission("Salary", "finance.read")]
 [ZValidate]
-public partial class Player
+public partial class Player : IValidationConfigurator<Player>
 {
+    public void Configure(IValidationBuilder<Player> b)
+    {
+        b.Rule(x => x.Salary >= 0, "Salary cannot be negative");
+        b.Rule(x => x.Level > 0 || x.TeamId == null, "Player must be at least level 1 to join a team");
+    }
+
     [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     [UiFormIgnore]
     [UiTableColumn(IsVisible = false)]
