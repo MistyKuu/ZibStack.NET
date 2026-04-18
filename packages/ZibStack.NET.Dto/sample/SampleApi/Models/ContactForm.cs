@@ -2,6 +2,59 @@ using ZibStack.NET.Validation;
 
 namespace ZibStack.NET.Dto.Sample.Models;
 
+// ── ValidationContext usage demo ──────────────────────────────────────────────
+// Shows how to pass context through the validation chain and use it at the call site.
+
+public static class ValidationDemo
+{
+    public static void Run()
+    {
+        var form = new ContactForm
+        {
+            Email = "bad",
+            Phone = "",
+            BillingAddress = new Address { Street = "", City = "NYC", Zip = "wrong" },
+            ShippingAddress = new Address { Street = "Oak Ave", City = "", Zip = "12-345" },
+            Notes = new()
+            {
+                new Note { Text = "First note" },
+                new Note { Text = "" },  // invalid — will show as Notes[1].Text
+            },
+        };
+
+        // 1. Simple validate — no context
+        var result = form.Validate();
+        // result.Errors:
+        //   "Email must be a valid email address."
+        //   "Phone is required."
+        //   "BillingAddress.Street is required."
+        //   "BillingAddress.Zip must be XX-XXX format"
+        //   "ShippingAddress.City is required."
+        //   "Notes[1].Text is required."
+
+        // 2. With context — Parent/Path/RootObject flow through nested chain
+        var ctx = new ValidationContext
+        {
+            RootObject = form,  // top-level object, accessible in nested validators
+            Items = { ["source"] = "API", ["userId"] = 42 },  // custom user data
+        };
+        var result2 = form.Validate(ctx);
+        // Same errors, but nested validators received context with:
+        //   context.Parent = form (for BillingAddress/ShippingAddress/Notes)
+        //   context.Path = "BillingAddress" / "ShippingAddress" / "Notes[0]"
+        //   context.RootObject = form (preserved from root)
+        //   context.Items["source"] = "API" (copied to nested)
+
+        // 3. Validate a single nested object with explicit context
+        var addressResult = form.BillingAddress.Validate(new ValidationContext
+        {
+            Parent = form,
+            Path = "BillingAddress",
+        });
+        // addressResult.Errors: "Street is required.", "Zip must be XX-XXX format"
+    }
+}
+
 // ── Nested validation demo ────────────────────────────────────────────────────
 // All validation defined via fluent IValidationConfigurator — no attributes needed.
 // Address validates itself, ContactForm auto-validates nested addresses + notes.
