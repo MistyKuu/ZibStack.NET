@@ -703,6 +703,7 @@ internal static class SchemaParser
             EmittedName = symbol.Name,   // global StripSuffixes applied later in pipeline
             Targets = targets,
             OutputDir = outputDir,
+            HasExplicitOutputDir = forceTarget is null && outputDir != ".",
             TsNameOverride = ReadStringArg(symbol, TsNameAttr, "Name"),
             OpenApiNameOverride = ReadStringArg(symbol, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(symbol, TsIgnoreAttr),
@@ -846,6 +847,7 @@ internal static class SchemaParser
             EmittedName = symbol.Name,
             Targets = targets,
             OutputDir = outputDir,
+            HasExplicitOutputDir = forceTarget is null && outputDir != ".",
             TsNameOverride = ReadStringArg(symbol, TsNameAttr, "Name"),
             OpenApiNameOverride = ReadStringArg(symbol, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(symbol, TsIgnoreAttr),

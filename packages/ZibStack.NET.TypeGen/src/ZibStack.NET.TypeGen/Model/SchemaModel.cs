@@ -273,8 +273,12 @@ internal sealed class SchemaClass
     /// </summary>
     public string EmittedName { get; set; } = "";
 
-    /// <summary>Output directory from <c>[GenerateTypes(OutputDir = "...")]</c>.</summary>
+    /// <summary>Output directory from <c>[GenerateTypes(OutputDir = "...")]</c> or fluent per-type override.</summary>
     public string OutputDir { get; set; } = ".";
+
+    /// <summary>True when OutputDir was set explicitly via attribute or fluent per-type override
+    /// (not inherited from parent or defaulted to ".").</summary>
+    public bool HasExplicitOutputDir { get; set; }
 
     /// <summary>Targets requested via <c>[GenerateTypes(Targets = ...)]</c>.</summary>
     public TypeTarget Targets { get; set; }
@@ -531,6 +535,7 @@ internal sealed class SchemaEnum
     public string SourceName { get; set; } = "";
     public string EmittedName { get; set; } = "";
     public string OutputDir { get; set; } = ".";
+    public bool HasExplicitOutputDir { get; set; }
     public TypeTarget Targets { get; set; }
     public List<SchemaEnumMember> Members { get; } = new();
 

@@ -199,7 +199,10 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                                         synthAux.TsNameOverride ??= kvp.Value.TsName;
                                         synthAux.OpenApiNameOverride ??= kvp.Value.OpenApiName;
                                         if (!string.IsNullOrEmpty(kvp.Value.OutputDir))
+                                        {
                                             synthAux.OutputDir = kvp.Value.OutputDir!;
+                                            synthAux.HasExplicitOutputDir = true;
+                                        }
                                         else if (!string.IsNullOrEmpty(config.Settings.TypeScript.OutputDir))
                                             synthAux.OutputDir = config.Settings.TypeScript.OutputDir!;
                                     }

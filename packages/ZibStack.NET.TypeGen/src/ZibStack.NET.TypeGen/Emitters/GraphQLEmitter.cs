@@ -51,7 +51,7 @@ internal static class GraphQLEmitter
                 EmitEnum(sb, en);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.GraphQL,
-                    OutputDir: !string.IsNullOrEmpty(globalGqlDir) && en.OutputDir == "." ? globalGqlDir : en.OutputDir,
+                    OutputDir: en.HasExplicitOutputDir ? en.OutputDir : !string.IsNullOrEmpty(globalGqlDir) ? globalGqlDir : en.OutputDir,
                     FileName: (en.EmittedName ?? en.SourceName) + ".graphql",
                     Content: sb.ToString()));
             }
@@ -66,7 +66,7 @@ internal static class GraphQLEmitter
                 EmitType(sb, cls, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.GraphQL,
-                    OutputDir: !string.IsNullOrEmpty(globalGqlDir) && cls.OutputDir == "." ? globalGqlDir : cls.OutputDir,
+                    OutputDir: cls.HasExplicitOutputDir ? cls.OutputDir : !string.IsNullOrEmpty(globalGqlDir) ? globalGqlDir : cls.OutputDir,
                     FileName: (cls.EmittedName ?? cls.SourceName) + ".graphql",
                     Content: sb.ToString()));
             }

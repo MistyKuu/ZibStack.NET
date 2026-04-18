@@ -84,7 +84,7 @@ internal static class ZodEmitter
                 EmitClass(sb, cls, zs, nameByCSharp, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
-                    OutputDir: !string.IsNullOrEmpty(globalZodDir) && cls.OutputDir == "." ? globalZodDir : cls.OutputDir,
+                    OutputDir: cls.HasExplicitOutputDir ? cls.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : cls.OutputDir,
                     FileName: cls.EmittedName + zs.FileSuffix + ".ts",
                     Content: sb.ToString()));
             }
@@ -98,7 +98,7 @@ internal static class ZodEmitter
                 EmitEnum(sb, en, zs);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
-                    OutputDir: !string.IsNullOrEmpty(globalZodDir) && en.OutputDir == "." ? globalZodDir : en.OutputDir,
+                    OutputDir: en.HasExplicitOutputDir ? en.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : en.OutputDir,
                     FileName: en.EmittedName + zs.FileSuffix + ".ts",
                     Content: sb.ToString()));
             }
