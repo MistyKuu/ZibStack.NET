@@ -237,8 +237,8 @@ public static class PlaygroundEndpoint
 
         for (int i = 0; i < count; i++)
         {
-            var fnMatch = Regex.Match(source, $@"FileName{i}\s*=\s*@""(.*?)"";\s*$", RegexOptions.Multiline);
-            var contentMatch = Regex.Match(source, $@"Content{i}\s*=\s*@""((?:[^""]|"""")*)"";", RegexOptions.Singleline);
+            var fnMatch = Regex.Match(source, $@"^\s+internal\s+const\s+string\s+FileName{i}\s*=\s*@""(.*?)"";\s*$", RegexOptions.Multiline);
+            var contentMatch = Regex.Match(source, $@"^\s+internal\s+const\s+string\s+Content{i}\s*=\s*@""((?:[^""]|"""")*)"";", RegexOptions.Multiline | RegexOptions.Singleline);
             if (!fnMatch.Success || !contentMatch.Success) continue;
 
             var fileName = fnMatch.Groups[1].Value;

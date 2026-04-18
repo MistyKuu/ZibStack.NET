@@ -50,9 +50,10 @@ public sealed class SampleApiBuildTests
 
         // Cross-file imports must follow the renamed type — proves the import resolver
         // walks the post-fluent emitted name, not the source name.
+        // TypeNameStyle=CamelCase in SampleApi/TypeGenConfig.cs lowercases all type names.
         var orderTs = File.ReadAllText(Path.Combine(GeneratedDir, "Order.ts"));
         Assert.Contains("import { hoho } from './hoho';", orderTs);
-        Assert.Contains("import { OrderStatus } from './OrderStatus';", orderTs);
+        Assert.Contains("import { orderStatus } from './orderStatus';", orderTs);
 
         // Per-property fluent on the renamed class: UnitPrice -> ASD via
         // b.ForType<OrderItem>().Property(x => x.UnitPrice).TsName("ASD").
