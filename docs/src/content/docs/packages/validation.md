@@ -115,6 +115,22 @@ public partial class PasswordForm : IValidationConfigurator<PasswordForm>
 
 Available comparisons: `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`, `EqualTo`, `NotEqualTo`. Cross-field rules combine with per-property attributes — both are checked in the generated `Validate()` method.
 
+### Complex expressions
+
+`b.Rule()` accepts any lambda that compiles as C# in the class context — nested members, arithmetic, null checks, `&&`/`||`:
+
+```csharp
+public void Configure(IValidationBuilder<OrderRequest> b)
+{
+    b.Rule(x => x.Items.Count > 0, "Order must have at least one item");
+    b.Rule(x => x.Discount >= 0 && x.Discount <= x.Subtotal, "Discount cannot exceed subtotal");
+    b.Rule(x => x.Total == x.Subtotal - x.Discount, "Total must equal Subtotal minus Discount");
+    b.Rule(x => x.ShipBy == null || x.ShipBy > x.CreatedAt, "ShipBy must be after CreatedAt");
+}
+```
+
+The generator inlines the lambda body directly into the `Validate()` method — no expression tree evaluation at runtime.
+
 ## IValidatable Interface
 
 All `[ZValidate]` types implement `IValidatable`:
