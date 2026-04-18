@@ -101,3 +101,29 @@ public partial class RangeConfig : IValidationConfigurator<RangeConfig>
         b.Property(x => x.Max).GreaterThanOrEqual(x => x.Min);
     }
 }
+
+// ── Complex cross-field lambdas ───────────────────────────────────────────────
+
+[ZValidate]
+public partial class OrderRequest : IValidationConfigurator<OrderRequest>
+{
+    [ZRequired]
+    public string Customer { get; set; } = "";
+
+    public List<string> Items { get; set; } = new();
+
+    public decimal Subtotal { get; set; }
+    public decimal Discount { get; set; }
+    public decimal Total { get; set; }
+
+    public DateTime? ShipBy { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public void Configure(IValidationBuilder<OrderRequest> b)
+    {
+        b.Rule(x => x.Items.Count > 0, "Order must have at least one item");
+        b.Rule(x => x.Discount >= 0 && x.Discount <= x.Subtotal, "Discount cannot exceed subtotal");
+        b.Rule(x => x.Total == x.Subtotal - x.Discount, "Total must equal Subtotal minus Discount");
+        b.Rule(x => x.ShipBy == null || x.ShipBy > x.CreatedAt, "ShipBy must be after CreatedAt");
+    }
+}

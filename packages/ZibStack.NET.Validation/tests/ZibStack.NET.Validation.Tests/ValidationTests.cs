@@ -326,4 +326,68 @@ public class ValidationTests
         Assert.False(result.IsValid);
         Assert.True(result.Errors.Count >= 2); // at least ZRange error + cross-field error
     }
+
+    // ── Complex lambda expressions ──────────────────────────────────
+
+    [Fact]
+    public void CrossField_ComplexLambda_EmptyItems_Invalid()
+    {
+        var order = new OrderRequest { Customer = "Bob", Items = new(), Subtotal = 100, Discount = 0, Total = 100 };
+        var result = order.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("at least one item"));
+    }
+
+    [Fact]
+    public void CrossField_ComplexLambda_WithItems_Valid()
+    {
+        var order = new OrderRequest { Customer = "Bob", Items = new() { "Widget" }, Subtotal = 100, Discount = 10, Total = 90 };
+        var result = order.Validate();
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void CrossField_ComplexLambda_DiscountExceedsSubtotal_Invalid()
+    {
+        var order = new OrderRequest { Customer = "Bob", Items = new() { "Widget" }, Subtotal = 100, Discount = 150, Total = -50 };
+        var result = order.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Discount cannot exceed subtotal"));
+    }
+
+    [Fact]
+    public void CrossField_ComplexLambda_TotalMismatch_Invalid()
+    {
+        var order = new OrderRequest { Customer = "Bob", Items = new() { "Widget" }, Subtotal = 100, Discount = 10, Total = 999 };
+        var result = order.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Total must equal"));
+    }
+
+    [Fact]
+    public void CrossField_ComplexLambda_ShipByBeforeCreated_Invalid()
+    {
+        var order = new OrderRequest
+        {
+            Customer = "Bob", Items = new() { "Widget" },
+            Subtotal = 100, Discount = 0, Total = 100,
+            CreatedAt = new DateTime(2026, 6, 1),
+            ShipBy = new DateTime(2026, 1, 1), // before CreatedAt
+        };
+        var result = order.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("ShipBy must be after"));
+    }
+
+    [Fact]
+    public void CrossField_ComplexLambda_ShipByNull_Valid()
+    {
+        var order = new OrderRequest
+        {
+            Customer = "Bob", Items = new() { "Widget" },
+            Subtotal = 50, Discount = 0, Total = 50,
+            ShipBy = null, // null is OK per the rule
+        };
+        Assert.True(order.Validate().IsValid);
+    }
 }
