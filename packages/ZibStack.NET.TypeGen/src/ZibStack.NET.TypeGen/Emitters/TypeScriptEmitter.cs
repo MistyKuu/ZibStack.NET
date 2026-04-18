@@ -79,6 +79,11 @@ internal static class TypeScriptEmitter
         }
         else
         {
+            // Global ts.OutputDir is the fallback when a class/enum doesn't have
+            // an explicit per-type OutputDir (attribute or fluent). Without this,
+            // b.TypeScript(ts => ts.OutputDir = "client") has no effect in
+            // FilePerClass mode — only SingleFile mode would respect it.
+            var globalTsDir = ts.OutputDir;
             foreach (var cls in model.Classes)
             {
                 if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) continue;
@@ -88,7 +93,7 @@ internal static class TypeScriptEmitter
                 EmitClass(sb, cls, ts, tsNameByCSharp, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.TypeScript,
-                    OutputDir: cls.OutputDir,
+                    OutputDir: !string.IsNullOrEmpty(globalTsDir) && cls.OutputDir == "." ? globalTsDir : cls.OutputDir,
                     FileName: cls.EmittedName + ".ts",
                     Content: sb.ToString()));
             }
@@ -100,7 +105,7 @@ internal static class TypeScriptEmitter
                 EmitEnum(sb, en, ts);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.TypeScript,
-                    OutputDir: en.OutputDir,
+                    OutputDir: !string.IsNullOrEmpty(globalTsDir) && en.OutputDir == "." ? globalTsDir : en.OutputDir,
                     FileName: en.EmittedName + ".ts",
                     Content: sb.ToString()));
             }

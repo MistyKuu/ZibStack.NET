@@ -40,6 +40,7 @@ internal static class GraphQLEmitter
         }
         else
         {
+            var globalGqlDir = gql.OutputDir;
             foreach (var en in model.Enums)
             {
                 if ((en.Targets & TypeTarget.GraphQL) == 0) continue;
@@ -50,7 +51,7 @@ internal static class GraphQLEmitter
                 EmitEnum(sb, en);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.GraphQL,
-                    OutputDir: en.OutputDir,
+                    OutputDir: !string.IsNullOrEmpty(globalGqlDir) && en.OutputDir == "." ? globalGqlDir : en.OutputDir,
                     FileName: (en.EmittedName ?? en.SourceName) + ".graphql",
                     Content: sb.ToString()));
             }
@@ -65,7 +66,7 @@ internal static class GraphQLEmitter
                 EmitType(sb, cls, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.GraphQL,
-                    OutputDir: cls.OutputDir,
+                    OutputDir: !string.IsNullOrEmpty(globalGqlDir) && cls.OutputDir == "." ? globalGqlDir : cls.OutputDir,
                     FileName: (cls.EmittedName ?? cls.SourceName) + ".graphql",
                     Content: sb.ToString()));
             }

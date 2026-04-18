@@ -72,6 +72,7 @@ internal static class ZodEmitter
         }
         else
         {
+            var globalZodDir = zs.OutputDir;
             foreach (var cls in model.Classes)
             {
                 if (SkipClass(cls)) continue;
@@ -83,7 +84,7 @@ internal static class ZodEmitter
                 EmitClass(sb, cls, zs, nameByCSharp, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
-                    OutputDir: cls.OutputDir,
+                    OutputDir: !string.IsNullOrEmpty(globalZodDir) && cls.OutputDir == "." ? globalZodDir : cls.OutputDir,
                     FileName: cls.EmittedName + zs.FileSuffix + ".ts",
                     Content: sb.ToString()));
             }
@@ -97,7 +98,7 @@ internal static class ZodEmitter
                 EmitEnum(sb, en, zs);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
-                    OutputDir: en.OutputDir,
+                    OutputDir: !string.IsNullOrEmpty(globalZodDir) && en.OutputDir == "." ? globalZodDir : en.OutputDir,
                     FileName: en.EmittedName + zs.FileSuffix + ".ts",
                     Content: sb.ToString()));
             }
