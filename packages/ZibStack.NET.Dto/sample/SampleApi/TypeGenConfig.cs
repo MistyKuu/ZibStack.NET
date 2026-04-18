@@ -21,7 +21,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         });
 
         
-        b.TypeScript(ts => { ts.OutputDir = "generated"; });
+        b.TypeScript(ts => ts.OutputDir = "generated");
         // Article: declared so the parser recognizes the symbol — no .WithGeneratedTypes
         // here means the entity itself is NOT emitted as TS / OpenAPI. It's only here to
         // anchor companion lookups below. (You CAN still chain config like .TsName(...)
