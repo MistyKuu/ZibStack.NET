@@ -16,7 +16,13 @@ public sealed class ValidationGenerator : IIncrementalGenerator
 #nullable enable
 namespace ZibStack.NET.Validation
 {
-    /// <summary>Generates a compile-time Validate() method based on validation attributes.</summary>
+    /// <summary>
+    /// Generates a compile-time <see cref=""IValidatable.Validate""/> method from validation
+    /// attributes (<see cref=""ZRequiredAttribute""/>, <see cref=""ZRangeAttribute""/>, etc.)
+    /// and optional fluent rules via <see cref=""IValidationConfigurator{T}""/>.
+    /// <para>No reflection, no runtime overhead — validation code is emitted by the source generator.</para>
+    /// <para>Supports nested object/collection validation and cross-field rules.</para>
+    /// </summary>
     [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct, Inherited = false)]
     internal sealed class ZValidateAttribute : System.Attribute { }
 }
@@ -84,7 +90,10 @@ namespace ZibStack.NET.Validation
 #nullable enable
 namespace ZibStack.NET.Validation
 {
-    /// <summary>Property must not be null (or empty for strings).</summary>
+    /// <summary>
+    /// Property must not be null (or empty/whitespace for strings).
+    /// Fluent equivalent: <c>b.Property(x => x.Prop).Required()</c> via <see cref=""IValidationConfigurator{T}""/>.
+    /// </summary>
     [System.AttributeUsage(System.AttributeTargets.Property, Inherited = true)]
     internal sealed class ZRequiredAttribute : System.Attribute
     {
@@ -198,35 +207,97 @@ namespace ZibStack.NET.Validation
 namespace ZibStack.NET.Validation
 {
     /// <summary>
-    /// Implement on a [ZValidate] class to define cross-field validation rules.
+    /// Implement on a <c>[ZValidate]</c> class to define validation rules via fluent DSL.
     /// The generator parses <see cref=""Configure""/> at compile time — it is never invoked at runtime.
+    /// <code>
+    /// [ZValidate]
+    /// public partial class MyForm : IValidationConfigurator&lt;MyForm&gt;
+    /// {
+    ///     public string Email { get; set; } = """";
+    ///     public DateTime Start { get; set; }
+    ///     public DateTime End { get; set; }
+    ///
+    ///     public void Configure(IValidationBuilder&lt;MyForm&gt; b)
+    ///     {
+    ///         b.Property(x => x.Email).Required().Email();
+    ///         b.Rule(x => x.End > x.Start, ""End must be after Start"");
+    ///     }
+    /// }
+    /// </code>
     /// </summary>
     public interface IValidationConfigurator<T>
     {
+        /// <summary>Define validation rules for <typeparamref name=""T""/>. Parsed at compile time.</summary>
         void Configure(IValidationBuilder<T> b);
     }
 
-    /// <summary>Fluent builder for cross-field validation rules.</summary>
+    /// <summary>
+    /// Fluent builder for validation rules. Supports per-property rules and cross-field expressions.
+    /// </summary>
     public interface IValidationBuilder<T>
     {
         /// <summary>
-        /// Add a cross-field rule with a predicate expression.
+        /// Add a cross-field rule with a predicate expression. Any valid C# expression works.
         /// <code>b.Rule(x => x.EndDate > x.StartDate, ""EndDate must be after StartDate"");</code>
         /// </summary>
-        void Rule(System.Linq.Expressions.Expression<System.Func<T, bool>> predicate, string message);
+        IValidationBuilder<T> Rule(System.Linq.Expressions.Expression<System.Func<T, bool>> predicate, string message);
 
-        /// <summary>Begin a per-property cross-field rule chain.</summary>
+        /// <summary>
+        /// Begin a per-property rule chain. Supports both single-property rules and cross-field comparisons.
+        /// <code>b.Property(x => x.Email).Required().Email();</code>
+        /// </summary>
         IPropertyValidationBuilder<T> Property(System.Linq.Expressions.Expression<System.Func<T, object?>> selector);
     }
 
-    /// <summary>Per-property cross-field comparison rules.</summary>
+    /// <summary>
+    /// Per-property validation builder. Chain rules fluently — each returns the builder for further chaining.
+    /// </summary>
     public interface IPropertyValidationBuilder<T>
     {
+        // ── Single-property rules (equivalent to [Z*] attributes) ───────
+
+        /// <summary>Property must not be null (or empty/whitespace for strings). Equivalent to <c>[ZRequired]</c>.</summary>
+        IPropertyValidationBuilder<T> Required(string? message = null);
+
+        /// <summary>String/collection must have at least <paramref name=""length""/> characters/items. Equivalent to <c>[ZMinLength]</c>.</summary>
+        IPropertyValidationBuilder<T> MinLength(int length, string? message = null);
+
+        /// <summary>String/collection must have at most <paramref name=""length""/> characters/items. Equivalent to <c>[ZMaxLength]</c>.</summary>
+        IPropertyValidationBuilder<T> MaxLength(int length, string? message = null);
+
+        /// <summary>Numeric value must be within range (inclusive). Equivalent to <c>[ZRange]</c>.</summary>
+        IPropertyValidationBuilder<T> Range(double min, double max, string? message = null);
+
+        /// <summary>Must be a valid email address. Equivalent to <c>[ZEmail]</c>.</summary>
+        IPropertyValidationBuilder<T> Email(string? message = null);
+
+        /// <summary>Must be a valid absolute URL. Equivalent to <c>[ZUrl]</c>.</summary>
+        IPropertyValidationBuilder<T> Url(string? message = null);
+
+        /// <summary>Must match the regex <paramref name=""pattern""/>. Equivalent to <c>[ZMatch]</c>.</summary>
+        IPropertyValidationBuilder<T> Match(string pattern, string? message = null);
+
+        /// <summary>Collection must have items; string must not be whitespace. Equivalent to <c>[ZNotEmpty]</c>.</summary>
+        IPropertyValidationBuilder<T> NotEmpty(string? message = null);
+
+        // ── Cross-field comparisons ─────────────────────────────────────
+
+        /// <summary>This property must be greater than <paramref name=""other""/>.</summary>
         IPropertyValidationBuilder<T> GreaterThan(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+
+        /// <summary>This property must be greater than or equal to <paramref name=""other""/>.</summary>
         IPropertyValidationBuilder<T> GreaterThanOrEqual(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+
+        /// <summary>This property must be less than <paramref name=""other""/>.</summary>
         IPropertyValidationBuilder<T> LessThan(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+
+        /// <summary>This property must be less than or equal to <paramref name=""other""/>.</summary>
         IPropertyValidationBuilder<T> LessThanOrEqual(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+
+        /// <summary>This property must equal <paramref name=""other""/>.</summary>
         IPropertyValidationBuilder<T> EqualTo(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+
+        /// <summary>This property must not equal <paramref name=""other""/>.</summary>
         IPropertyValidationBuilder<T> NotEqualTo(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
 
         /// <summary>Start a new property chain.</summary>
@@ -420,7 +491,8 @@ namespace ZibStack.NET.Validation
                         && methodSyntax.Identifier.Text == "Configure"
                         && methodSyntax.Body is not null)
                     {
-                        ParseCrossFieldRules(methodSyntax.Body, context.SemanticModel, crossFieldRules);
+                        // Pass symbol so fluent rules can look up property types
+                        ParseCrossFieldRules(methodSyntax.Body, context.SemanticModel, crossFieldRules, properties, symbol);
                         break;
                     }
                 }
@@ -654,7 +726,7 @@ namespace ZibStack.NET.Validation
     /// Parses cross-field rules from IValidationConfigurator.Configure() body.
     /// Supports b.Rule(x => expr, "msg") and b.Property(x => x.Prop).GreaterThan(x => x.Other).
     /// </summary>
-    private static void ParseCrossFieldRules(BlockSyntax body, SemanticModel sm, List<CrossFieldRule> rules)
+    private static void ParseCrossFieldRules(BlockSyntax body, SemanticModel sm, List<CrossFieldRule> rules, List<PropertyValidationInfo>? fluentProperties = null, INamedTypeSymbol? typeSymbol = null)
     {
         foreach (var stmt in body.Statements)
         {
@@ -691,11 +763,11 @@ namespace ZibStack.NET.Validation
 
             // Try b.Property(x => x.Left).GreaterThan(x => x.Right, "msg")
             // Walk the chain from outermost to innermost
-            ParsePropertyChain(expr, sm, rules);
+            ParsePropertyChain(expr, sm, rules, fluentProperties, typeSymbol);
         }
     }
 
-    private static void ParsePropertyChain(ExpressionSyntax expr, SemanticModel sm, List<CrossFieldRule> rules)
+    private static void ParsePropertyChain(ExpressionSyntax expr, SemanticModel sm, List<CrossFieldRule> rules, List<PropertyValidationInfo>? fluentProperties = null, INamedTypeSymbol? typeSymbol = null)
     {
         // Collect chain calls in order
         var calls = new List<(string Method, InvocationExpressionSyntax Inv)>();
@@ -746,8 +818,64 @@ namespace ZibStack.NET.Validation
                     Message = msg,
                 });
             }
+            else if (leftProp != null && IsFluentValidationMethod(method) && fluentProperties != null)
+            {
+                // Per-property fluent rules: .Required(), .Email(), .MinLength(n), etc.
+                string? msg = null;
+                var args = inv.ArgumentList.Arguments;
+
+                ValidationRule? rule = method switch
+                {
+                    "Required" => new ValidationRule(ValidationRuleKind.Required, GetOptionalMessage(args, 0, sm)),
+                    "Email" => new ValidationRule(ValidationRuleKind.Email, GetOptionalMessage(args, 0, sm)),
+                    "Url" => new ValidationRule(ValidationRuleKind.Url, GetOptionalMessage(args, 0, sm)),
+                    "NotEmpty" => new ValidationRule(ValidationRuleKind.NotEmpty, GetOptionalMessage(args, 0, sm)),
+                    "MinLength" when args.Count >= 1 && sm.GetConstantValue(args[0].Expression) is { HasValue: true, Value: int minLen }
+                        => new ValidationRule(ValidationRuleKind.MinLength, GetOptionalMessage(args, 1, sm), minValue: minLen),
+                    "MaxLength" when args.Count >= 1 && sm.GetConstantValue(args[0].Expression) is { HasValue: true, Value: int maxLen }
+                        => new ValidationRule(ValidationRuleKind.MaxLength, GetOptionalMessage(args, 1, sm), maxValue: maxLen),
+                    "Range" when args.Count >= 2
+                        && sm.GetConstantValue(args[0].Expression) is { HasValue: true, Value: var minV }
+                        && sm.GetConstantValue(args[1].Expression) is { HasValue: true, Value: var maxV }
+                        => new ValidationRule(ValidationRuleKind.Range, GetOptionalMessage(args, 2, sm),
+                            minValue: System.Convert.ToDouble(minV), maxValue: System.Convert.ToDouble(maxV)),
+                    "Match" when args.Count >= 1 && sm.GetConstantValue(args[0].Expression) is { HasValue: true, Value: string pattern }
+                        => new ValidationRule(ValidationRuleKind.Match, GetOptionalMessage(args, 1, sm), pattern: pattern),
+                    _ => null,
+                };
+
+                if (rule != null)
+                {
+                    // Find or create PropertyValidationInfo for this property
+                    var existing = fluentProperties.Find(p => p.PropertyName == leftProp);
+                    if (existing != null)
+                    {
+                        existing.Rules.Add(rule);
+                    }
+                    else
+                    {
+                        // Look up actual property type from symbol
+                        var propSymbol = typeSymbol?.GetMembers(leftProp).OfType<IPropertySymbol>().FirstOrDefault();
+                        var typeName = propSymbol?.Type.ToDisplayString() ?? "object";
+                        var isNullable = propSymbol?.Type.NullableAnnotation == NullableAnnotation.Annotated;
+                        var isValue = propSymbol?.Type.IsValueType ?? false;
+                        var propInfo = new PropertyValidationInfo(leftProp, typeName, isNullable, isValue, new List<ValidationRule> { rule });
+                        fluentProperties.Add(propInfo);
+                    }
+                }
+            }
         }
     }
+
+    private static string? GetOptionalMessage(SeparatedSyntaxList<ArgumentSyntax> args, int index, SemanticModel sm)
+    {
+        if (args.Count <= index) return null;
+        var cv = sm.GetConstantValue(args[index].Expression);
+        return cv.HasValue ? cv.Value as string : null;
+    }
+
+    private static bool IsFluentValidationMethod(string name)
+        => name is "Required" or "Email" or "Url" or "NotEmpty" or "MinLength" or "MaxLength" or "Range" or "Match";
 
     private static string? ExtractPropertyName(ExpressionSyntax expr)
     {

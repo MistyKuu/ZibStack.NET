@@ -3,30 +3,28 @@ using ZibStack.NET.Validation;
 namespace ZibStack.NET.Dto.Sample.Models;
 
 // ── Nested validation demo ────────────────────────────────────────────────────
-// Address is validated on its own, ContactForm auto-validates both addresses.
-// ShippingAddress is nullable — skipped when null.
+// All validation defined via fluent IValidationConfigurator — no attributes needed.
+// Address validates itself, ContactForm auto-validates nested addresses + notes.
 
 [ZValidate]
-public partial class Address
+public partial class Address : IValidationConfigurator<Address>
 {
-    [ZRequired]
     public string Street { get; set; } = "";
-
-    [ZRequired]
     public string City { get; set; } = "";
-
-    [ZMatch(@"^\d{2}-\d{3}$", Message = "Zip must be XX-XXX format")]
     public string? Zip { get; set; }
+
+    public void Configure(IValidationBuilder<Address> b)
+    {
+        b.Property(x => x.Street).Required();
+        b.Property(x => x.City).Required();
+        b.Property(x => x.Zip).Match(@"^\d{2}-\d{3}$", "Zip must be XX-XXX format");
+    }
 }
 
 [ZValidate]
 public partial class ContactForm : IValidationConfigurator<ContactForm>
 {
-    [ZRequired]
-    [ZEmail]
     public string Email { get; set; } = "";
-
-    [ZRequired]
     public string Phone { get; set; } = "";
 
     // Nested — auto-validated with path prefix ("BillingAddress.Street is required.")
@@ -40,7 +38,11 @@ public partial class ContactForm : IValidationConfigurator<ContactForm>
 
     public void Configure(IValidationBuilder<ContactForm> b)
     {
-        // Cross-field: phone or email must be provided (at least one)
+        // Per-property fluent rules (equivalent to [ZRequired], [ZEmail])
+        b.Property(x => x.Email).Required().Email();
+        b.Property(x => x.Phone).Required();
+
+        // Cross-field: at least one contact method
         b.Rule(x => !string.IsNullOrEmpty(x.Phone) || !string.IsNullOrEmpty(x.Email),
             "At least one of Phone or Email is required");
 
@@ -50,9 +52,12 @@ public partial class ContactForm : IValidationConfigurator<ContactForm>
 }
 
 [ZValidate]
-public partial class Note
+public partial class Note : IValidationConfigurator<Note>
 {
-    [ZRequired]
-    [ZMaxLength(500)]
     public string Text { get; set; } = "";
+
+    public void Configure(IValidationBuilder<Note> b)
+    {
+        b.Property(x => x.Text).Required().MaxLength(500);
+    }
 }
