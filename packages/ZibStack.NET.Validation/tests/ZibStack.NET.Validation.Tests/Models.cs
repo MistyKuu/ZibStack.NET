@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using ZibStack.NET.Validation;
 
 namespace ZibStack.NET.Validation.Tests;
@@ -47,4 +48,56 @@ public partial record ProductRecord
 
     [ZMaxLength(500)]
     public string? Description { get; init; }
+}
+
+// ── Cross-field validation with b.Rule() ──────────────────────────────────────
+
+[ZValidate]
+public partial class DateRangeRequest : IValidationConfigurator<DateRangeRequest>
+{
+    [ZRequired]
+    public DateTime StartDate { get; set; }
+
+    [ZRequired]
+    public DateTime EndDate { get; set; }
+
+    public void Configure(IValidationBuilder<DateRangeRequest> b)
+    {
+        b.Rule(x => x.EndDate > x.StartDate, "EndDate must be after StartDate");
+    }
+}
+
+// ── Cross-field validation with b.Property().EqualTo() ────────────────────────
+
+[ZValidate]
+public partial class PasswordForm : IValidationConfigurator<PasswordForm>
+{
+    [ZRequired]
+    [ZMinLength(8)]
+    public string Password { get; set; } = "";
+
+    [ZRequired]
+    public string ConfirmPassword { get; set; } = "";
+
+    public void Configure(IValidationBuilder<PasswordForm> b)
+    {
+        b.Property(x => x.ConfirmPassword).EqualTo(x => x.Password, "Passwords must match");
+    }
+}
+
+// ── Mixed: per-property attrs + cross-field fluent ────────────────────────────
+
+[ZValidate]
+public partial class RangeConfig : IValidationConfigurator<RangeConfig>
+{
+    [ZRange(0, 1000)]
+    public int Min { get; set; }
+
+    [ZRange(0, 1000)]
+    public int Max { get; set; }
+
+    public void Configure(IValidationBuilder<RangeConfig> b)
+    {
+        b.Property(x => x.Max).GreaterThanOrEqual(x => x.Min);
+    }
 }

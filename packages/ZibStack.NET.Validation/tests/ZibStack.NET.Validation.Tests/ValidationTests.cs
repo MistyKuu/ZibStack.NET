@@ -246,4 +246,84 @@ public class ValidationTests
         Assert.True(ValidationResult.Success.IsValid);
         Assert.Empty(ValidationResult.Success.Errors);
     }
+
+    // ── Cross-field: b.Rule() ────────────────────────────────────────
+
+    [Fact]
+    public void CrossField_Rule_EndAfterStart_Valid()
+    {
+        var req = new DateRangeRequest { StartDate = new(2026, 1, 1), EndDate = new(2026, 12, 31) };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void CrossField_Rule_EndBeforeStart_Invalid()
+    {
+        var req = new DateRangeRequest { StartDate = new(2026, 12, 31), EndDate = new(2026, 1, 1) };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("EndDate must be after StartDate"));
+    }
+
+    [Fact]
+    public void CrossField_Rule_EqualDates_Invalid()
+    {
+        var req = new DateRangeRequest { StartDate = new(2026, 6, 1), EndDate = new(2026, 6, 1) };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+    }
+
+    // ── Cross-field: b.Property().EqualTo() ──────────────────────────
+
+    [Fact]
+    public void CrossField_EqualTo_MatchingPasswords_Valid()
+    {
+        var form = new PasswordForm { Password = "secret123", ConfirmPassword = "secret123" };
+        Assert.True(form.Validate().IsValid);
+    }
+
+    [Fact]
+    public void CrossField_EqualTo_MismatchedPasswords_Invalid()
+    {
+        var form = new PasswordForm { Password = "secret123", ConfirmPassword = "different" };
+        var result = form.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Passwords must match"));
+    }
+
+    // ── Cross-field: b.Property().GreaterThanOrEqual() ───────────────
+
+    [Fact]
+    public void CrossField_GreaterThanOrEqual_Valid()
+    {
+        var cfg = new RangeConfig { Min = 10, Max = 100 };
+        Assert.True(cfg.Validate().IsValid);
+    }
+
+    [Fact]
+    public void CrossField_GreaterThanOrEqual_Equal_Valid()
+    {
+        var cfg = new RangeConfig { Min = 50, Max = 50 };
+        Assert.True(cfg.Validate().IsValid);
+    }
+
+    [Fact]
+    public void CrossField_GreaterThanOrEqual_MaxLessThanMin_Invalid()
+    {
+        var cfg = new RangeConfig { Min = 100, Max = 10 };
+        var result = cfg.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Max") && e.Contains("Min"));
+    }
+
+    // ── Cross-field + per-property combined ──────────────────────────
+
+    [Fact]
+    public void CrossField_Combined_PerPropertyAndCrossField_BothFail()
+    {
+        var cfg = new RangeConfig { Min = 5000, Max = 2 }; // Min out of [ZRange(0,1000)] AND Max < Min
+        var result = cfg.Validate();
+        Assert.False(result.IsValid);
+        Assert.True(result.Errors.Count >= 2); // at least ZRange error + cross-field error
+    }
 }
