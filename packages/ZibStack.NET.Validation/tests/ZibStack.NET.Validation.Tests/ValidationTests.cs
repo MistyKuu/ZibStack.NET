@@ -390,4 +390,107 @@ public class ValidationTests
         };
         Assert.True(order.Validate().IsValid);
     }
+
+    // ── Nested object validation ────────────────────────────────────
+
+    [Fact]
+    public void Nested_ValidAddress_Valid()
+    {
+        var form = new CustomerForm
+        {
+            Name = "Alice",
+            BillingAddress = new Address { Street = "Main St", City = "NYC" },
+        };
+        Assert.True(form.Validate().IsValid);
+    }
+
+    [Fact]
+    public void Nested_InvalidAddress_PropagatesErrors()
+    {
+        var form = new CustomerForm
+        {
+            Name = "Alice",
+            BillingAddress = new Address { Street = "", City = "" }, // both required
+        };
+        var result = form.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.StartsWith("BillingAddress."));
+    }
+
+    [Fact]
+    public void Nested_NullableProperty_SkipsWhenNull()
+    {
+        var form = new CustomerForm
+        {
+            Name = "Alice",
+            BillingAddress = new Address { Street = "Main St", City = "NYC" },
+            ShippingAddress = null,
+        };
+        Assert.True(form.Validate().IsValid);
+    }
+
+    [Fact]
+    public void Nested_NullableProperty_ValidatesWhenPresent()
+    {
+        var form = new CustomerForm
+        {
+            Name = "Alice",
+            BillingAddress = new Address { Street = "Main St", City = "NYC" },
+            ShippingAddress = new Address { Street = "", City = "LA" }, // Street required
+        };
+        var result = form.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.StartsWith("ShippingAddress."));
+    }
+
+    // ── Nested collection validation ────────────────────────────────
+
+    [Fact]
+    public void NestedCollection_AllValid_Valid()
+    {
+        var invoice = new Invoice
+        {
+            InvoiceNumber = "INV-001",
+            Lines = new()
+            {
+                new LineItem { Sku = "WIDGET-1", Quantity = 5 },
+                new LineItem { Sku = "GADGET-2", Quantity = 1 },
+            },
+        };
+        Assert.True(invoice.Validate().IsValid);
+    }
+
+    [Fact]
+    public void NestedCollection_InvalidItem_PropagatesWithIndex()
+    {
+        var invoice = new Invoice
+        {
+            InvoiceNumber = "INV-001",
+            Lines = new()
+            {
+                new LineItem { Sku = "WIDGET-1", Quantity = 5 },
+                new LineItem { Sku = "", Quantity = 0 }, // both invalid
+            },
+        };
+        var result = invoice.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.StartsWith("Lines[1]."));
+    }
+
+    // ── ValidationContext ───────────────────────────────────────────
+
+    [Fact]
+    public void Context_PassedToNested_HasParentAndPath()
+    {
+        var form = new CustomerForm
+        {
+            Name = "Alice",
+            BillingAddress = new Address { Street = "", City = "NYC" }, // will fail
+        };
+        var ctx = new ValidationContext { RootObject = form };
+        var result = form.Validate(ctx);
+        Assert.False(result.IsValid);
+        // Errors are prefixed with path
+        Assert.Contains(result.Errors, e => e.Contains("BillingAddress."));
+    }
 }

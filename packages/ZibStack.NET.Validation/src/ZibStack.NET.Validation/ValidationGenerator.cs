@@ -43,7 +43,38 @@ namespace ZibStack.NET.Validation
     /// <summary>Interface implemented by all [ZValidate]-decorated types.</summary>
     public interface IValidatable
     {
-        ValidationResult Validate();
+        ValidationResult Validate(ValidationContext? context = null);
+    }
+
+    /// <summary>
+    /// Runtime context passed through the validation chain. Carries parent reference,
+    /// property path, root object, and a user-data bag.
+    /// </summary>
+    public sealed class ValidationContext
+    {
+        /// <summary>The object that triggered this nested validation.</summary>
+        public object? Parent { get; set; }
+
+        /// <summary>Dot-separated path from root (e.g. ""Order.Address.City"").</summary>
+        public string Path { get; set; } = """";
+
+        /// <summary>The top-level object that started the validation chain.</summary>
+        public object? RootObject { get; set; }
+
+        /// <summary>User-defined key-value bag for custom data.</summary>
+        public System.Collections.Generic.Dictionary<string, object?> Items { get; } = new();
+
+        internal ValidationContext ForNested(object parent, string propertyName)
+        {
+            var ctx = new ValidationContext
+            {
+                Parent = parent,
+                Path = string.IsNullOrEmpty(Path) ? propertyName : Path + ""."" + propertyName,
+                RootObject = RootObject ?? parent,
+            };
+            foreach (var kv in Items) ctx.Items[kv.Key] = kv.Value;
+            return ctx;
+        }
     }
 }
 ";
@@ -276,6 +307,7 @@ namespace ZibStack.NET.Validation
             var isStruct = context.TargetNode is StructDeclarationSyntax;
 
             var properties = new List<PropertyValidationInfo>();
+            var nestedProps = new List<NestedValidatableInfo>();
 
             foreach (var member in symbol.GetMembers())
             {
@@ -345,6 +377,34 @@ namespace ZibStack.NET.Validation
                     properties.Add(new PropertyValidationInfo(
                         prop.Name, typeName, isNullableRef, isValueType, rules));
                 }
+
+                // Check if property type is IValidatable (has [ZValidate] or Configure method)
+                var propType = prop.Type;
+                if (propType.NullableAnnotation == NullableAnnotation.Annotated && propType is INamedTypeSymbol nts && nts.TypeArguments.Length == 1)
+                    propType = nts.TypeArguments[0]; // unwrap Nullable<T>
+
+                // Check for collection: IEnumerable<T> where T is validatable
+                var elementType = GetCollectionElementType(propType);
+                var typeToCheck = elementType ?? propType;
+
+                if (typeToCheck is INamedTypeSymbol namedCheck)
+                {
+                    bool isValidatable = namedCheck.GetAttributes()
+                        .Any(a => a.AttributeClass?.ToDisplayString() == ZValidateAttributeFqn);
+                    if (!isValidatable)
+                        isValidatable = namedCheck.GetMembers().OfType<IMethodSymbol>()
+                            .Any(m => m.Name == "Configure" && m.Parameters.Length == 1
+                                && m.Parameters[0].Type.Name == "IValidationBuilder");
+                    if (isValidatable)
+                    {
+                        nestedProps.Add(new NestedValidatableInfo
+                        {
+                            PropertyName = prop.Name,
+                            IsNullable = isNullableRef || prop.Type.NullableAnnotation == NullableAnnotation.Annotated,
+                            IsCollection = elementType != null,
+                        });
+                    }
+                }
             }
 
             // Parse cross-field rules from Configure(IValidationBuilder<T>) method.
@@ -366,7 +426,7 @@ namespace ZibStack.NET.Validation
                 }
             }
 
-            if (properties.Count == 0 && crossFieldRules.Count == 0) return null;
+            if (properties.Count == 0 && crossFieldRules.Count == 0 && nestedProps.Count == 0) return null;
 
             var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
 
@@ -377,6 +437,7 @@ namespace ZibStack.NET.Validation
             var info = new ValidationInfo(
                 symbol.Name, ns, hintName, isRecord, properties, isPartial);
             info.CrossFieldRules.AddRange(crossFieldRules);
+            info.NestedProperties.AddRange(nestedProps);
             return info;
         }
         catch
@@ -406,7 +467,7 @@ namespace ZibStack.NET.Validation
         var keyword = info.IsRecord ? "record" : "class";
         sb.AppendLine($"partial {keyword} {info.ClassName} : IValidatable");
         sb.AppendLine("{");
-        sb.AppendLine("    public ValidationResult Validate()");
+        sb.AppendLine("    public ValidationResult Validate(ValidationContext? context = null)");
         sb.AppendLine("    {");
         sb.AppendLine("        var errors = new List<string>();");
         sb.AppendLine();
@@ -417,6 +478,14 @@ namespace ZibStack.NET.Validation
             {
                 EmitRule(sb, prop, rule);
             }
+        }
+
+        // Nested IValidatable properties
+        if (info.NestedProperties.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        // Nested validation");
+            EmitNestedValidation(sb, info);
         }
 
         // Cross-field rules from IValidationConfigurator<T>
@@ -702,6 +771,62 @@ namespace ZibStack.NET.Validation
         _ => method,
     };
 
+    private static void EmitNestedValidation(StringBuilder sb, ValidationInfo info)
+    {
+        for (int i = 0; i < info.NestedProperties.Count; i++)
+        {
+            var nested = info.NestedProperties[i];
+            if (nested.IsCollection)
+            {
+                var guard = nested.IsNullable ? $"{nested.PropertyName} is not null" : "true";
+                sb.AppendLine($"        if ({guard})");
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var __idx{i} = 0;");
+                sb.AppendLine($"            foreach (var __item{i} in {nested.PropertyName})");
+                sb.AppendLine($"            {{");
+                sb.AppendLine($"                if (__item{i} is IValidatable __v{i})");
+                sb.AppendLine($"                {{");
+                sb.AppendLine($"                    var __nested{i} = __v{i}.Validate(context?.ForNested(this, \"{nested.PropertyName}[\" + __idx{i} + \"]\") ?? new ValidationContext {{ Parent = this, Path = \"{nested.PropertyName}[\" + __idx{i} + \"]\" }});");
+                sb.AppendLine($"                    if (!__nested{i}.IsValid)");
+                sb.AppendLine($"                        foreach (var __e in __nested{i}.Errors) errors.Add(\"{nested.PropertyName}[\" + __idx{i} + \"].\" + __e);");
+                sb.AppendLine($"                }}");
+                sb.AppendLine($"                __idx{i}++;");
+                sb.AppendLine($"            }}");
+                sb.AppendLine($"        }}");
+            }
+            else
+            {
+                sb.AppendLine($"        if ({nested.PropertyName} is IValidatable __v{i})");
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var __nested{i} = __v{i}.Validate(context?.ForNested(this, \"{nested.PropertyName}\") ?? new ValidationContext {{ Parent = this, Path = \"{nested.PropertyName}\" }});");
+                sb.AppendLine($"            if (!__nested{i}.IsValid)");
+                sb.AppendLine($"                foreach (var __e in __nested{i}.Errors) errors.Add(\"{nested.PropertyName}.\" + __e);");
+                sb.AppendLine($"        }}");
+            }
+        }
+    }
+
+    private static ITypeSymbol? GetCollectionElementType(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array)
+            return array.ElementType;
+        if (type is INamedTypeSymbol named)
+        {
+            // Check IEnumerable<T>, List<T>, ICollection<T>, etc.
+            foreach (var iface in named.AllInterfaces)
+            {
+                if (iface.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>"
+                    && iface.TypeArguments.Length == 1)
+                    return iface.TypeArguments[0];
+            }
+            // Also check if the type itself is generic IEnumerable
+            if (named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>"
+                && named.TypeArguments.Length == 1)
+                return named.TypeArguments[0];
+        }
+        return null;
+    }
+
     private static string EscapeString(string s)
         => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 }
@@ -766,6 +891,7 @@ internal sealed class ValidationInfo
     public List<PropertyValidationInfo> Properties { get; }
 
     public List<CrossFieldRule> CrossFieldRules { get; } = new();
+    public List<NestedValidatableInfo> NestedProperties { get; } = new();
 
     public ValidationInfo(string className, string? ns, string hintName, bool isRecord, List<PropertyValidationInfo> properties, bool isPartial = false)
     {
@@ -789,6 +915,13 @@ internal enum CrossFieldRuleKind
     LessThanOrEqual,
     EqualTo,
     NotEqualTo,
+}
+
+internal sealed class NestedValidatableInfo
+{
+    public string PropertyName { get; set; } = "";
+    public bool IsNullable { get; set; }
+    public bool IsCollection { get; set; }
 }
 
 internal sealed class CrossFieldRule

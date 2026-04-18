@@ -131,6 +131,59 @@ public void Configure(IValidationBuilder<OrderRequest> b)
 
 The generator inlines the lambda body directly into the `Validate()` method — no expression tree evaluation at runtime.
 
+## Nested Validation
+
+Properties whose type has `[ZValidate]` are automatically validated. Errors are prefixed with the property path:
+
+```csharp
+[ZValidate]
+public partial class Address
+{
+    [ZRequired] public string Street { get; set; } = "";
+    [ZRequired] public string City { get; set; } = "";
+}
+
+[ZValidate]
+public partial class CustomerForm
+{
+    [ZRequired] public string Name { get; set; } = "";
+    public Address BillingAddress { get; set; } = new();
+    public Address? ShippingAddress { get; set; }  // null → skipped
+}
+```
+
+`form.Validate()` returns errors like `"BillingAddress.Street is required."`. Nullable properties are skipped when null.
+
+### Collections
+
+Collections of `[ZValidate]` types are validated element-by-element with index:
+
+```csharp
+[ZValidate]
+public partial class Invoice
+{
+    public List<LineItem> Lines { get; set; } = new();
+}
+```
+
+Errors: `"Lines[0].Sku is required."`, `"Lines[2].Quantity must be between 1 and 9999."`.
+
+### ValidationContext
+
+`Validate()` accepts an optional `ValidationContext` that flows through the nested chain:
+
+```csharp
+var ctx = new ValidationContext { RootObject = form };
+var result = form.Validate(ctx);
+```
+
+| Property | Description |
+|---|---|
+| `Parent` | The object that triggered this nested validation |
+| `Path` | Dot-separated path from root (`"Order.BillingAddress"`) |
+| `RootObject` | The top-level object that started the chain |
+| `Items` | `Dictionary<string, object?>` for custom user data |
+
 ## IValidatable Interface
 
 All `[ZValidate]` types implement `IValidatable`:
@@ -138,7 +191,7 @@ All `[ZValidate]` types implement `IValidatable`:
 ```csharp
 public interface IValidatable
 {
-    ValidationResult Validate();
+    ValidationResult Validate(ValidationContext? context = null);
 }
 
 // Use in generic code

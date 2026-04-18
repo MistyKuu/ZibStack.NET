@@ -127,3 +127,49 @@ public partial class OrderRequest : IValidationConfigurator<OrderRequest>
         b.Rule(x => x.ShipBy == null || x.ShipBy > x.CreatedAt, "ShipBy must be after CreatedAt");
     }
 }
+
+// ── Nested validation ─────────────────────────────────────────────────────────
+
+[ZValidate]
+public partial class Address
+{
+    [ZRequired]
+    public string Street { get; set; } = "";
+
+    [ZRequired]
+    public string City { get; set; } = "";
+
+    [ZMatch(@"^\d{2}-\d{3}$", Message = "Zip must be XX-XXX format")]
+    public string? Zip { get; set; }
+}
+
+[ZValidate]
+public partial class CustomerForm
+{
+    [ZRequired]
+    public string Name { get; set; } = "";
+
+    public Address BillingAddress { get; set; } = new();
+    public Address? ShippingAddress { get; set; }
+}
+
+// ── Nested collection validation ──────────────────────────────────────────────
+
+[ZValidate]
+public partial class LineItem
+{
+    [ZRequired]
+    public string Sku { get; set; } = "";
+
+    [ZRange(1, 9999)]
+    public int Quantity { get; set; }
+}
+
+[ZValidate]
+public partial class Invoice
+{
+    [ZRequired]
+    public string InvoiceNumber { get; set; } = "";
+
+    public List<LineItem> Lines { get; set; } = new();
+}
