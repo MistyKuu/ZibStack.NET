@@ -52,21 +52,34 @@ public static class AopPipeline
                 predicate: static (node, _) => node is MethodDeclarationSyntax or ClassDeclarationSyntax,
                 transform: static (ctx, ct) =>
                 {
-                    if (ctx.Node is MethodDeclarationSyntax)
+                    if (ctx.Node is MethodDeclarationSyntax mds)
                     {
-                        var methodSymbol = ctx.SemanticModel.GetDeclaredSymbol((MethodDeclarationSyntax)ctx.Node, ct);
-                        if (methodSymbol is null) return null;
+                        if (ctx.SemanticModel.GetDeclaredSymbol(mds, ct) is not IMethodSymbol methodSymbol) return null;
                         bool hasAspect = methodSymbol.GetAttributes()
                             .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+                        if (!hasAspect)
+                        {
+                            var rules = AopConfiguratorParser.ReadAll(ctx.SemanticModel.Compilation).ApplyRules;
+                            hasAspect = rules.Any(r => AopParser.MatchesApplyRule(r, methodSymbol));
+                        }
                         return hasAspect ? methodSymbol.ContainingType : null;
+                    }
+                    else if (ctx.Node is ClassDeclarationSyntax cds)
+                    {
+                        if (ctx.SemanticModel.GetDeclaredSymbol(cds, ct) is not INamedTypeSymbol classSymbol) return null;
+                        bool hasAspect = classSymbol.GetAttributes()
+                            .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
+                        if (!hasAspect)
+                        {
+                            var rules = AopConfiguratorParser.ReadAll(ctx.SemanticModel.Compilation).ApplyRules;
+                            hasAspect = classSymbol.GetMembers().OfType<IMethodSymbol>()
+                                .Any(m => rules.Any(r => AopParser.MatchesApplyRule(r, m)));
+                        }
+                        return hasAspect ? classSymbol : null;
                     }
                     else
                     {
-                        var classSymbol = ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node, ct);
-                        if (classSymbol is null) return null;
-                        bool hasAspect = classSymbol.GetAttributes()
-                            .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
-                        return hasAspect ? classSymbol : null;
+                        return null;
                     }
                 })
             .Where(static t => t is not null)

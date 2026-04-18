@@ -625,3 +625,80 @@ public class AuditTests
         Assert.DoesNotContain("supersecret", entry.BeforeSnapshot!);
     }
 }
+
+// ── Apply() bulk aspect tests ───────────────────────────────────────────────
+
+[Collection("Aop")]
+public class ApplyTests : IDisposable
+{
+    public ApplyTests(AopFixture _) => CacheHandler.ClearAll();
+    public void Dispose() => CacheHandler.ClearAll();
+
+    [Fact]
+    public void Apply_ImplementingSelector_CachesTargetService()
+    {
+        // ApplyTargetService implements IApplyTarget — should get [Cache] via Apply()
+        var svc = new ApplyTargetService();
+
+        var first = svc.GetValue(42);
+        var second = svc.GetValue(42);
+
+        Assert.Equal(84, first);
+        Assert.Equal(84, second);
+        // If cache works, GetValue body was called only once
+        Assert.Equal(1, svc.CallCount);
+    }
+
+    [Fact]
+    public void Apply_NonTargetService_NotCached()
+    {
+        // NonTargetService does NOT implement IApplyTarget — should NOT get cached
+        var svc = new NonTargetService();
+
+        svc.GetValue(42);
+        svc.GetValue(42);
+
+        // No cache — called twice
+        Assert.Equal(2, svc.CallCount);
+    }
+
+    [Fact]
+    public void Apply_Except_ExcludedServiceNotCached()
+    {
+        // ExcludedApplyService implements IApplyTarget but is Except<>'d
+        var svc = new ExcludedApplyService();
+
+        svc.GetValue(42);
+        svc.GetValue(42);
+
+        // No cache — called twice because Except<ExcludedApplyService>
+        Assert.Equal(2, svc.CallCount);
+    }
+
+    [Fact]
+    public void Apply_DerivedFrom_AppliesRetry()
+    {
+        // DerivedApplyService extends BaseApplyService — gets [Retry] via Apply
+        var svc = new DerivedApplyService();
+
+        // Just verify it runs without error (retry wraps the call)
+        var result = svc.Compute(5);
+        Assert.Equal(50, result);
+        Assert.Equal(1, svc.CallCount);
+    }
+
+    [Fact]
+    public void Apply_ClassesWhere_NameStartsWith()
+    {
+        // OrderProcessor starts with "Order" — gets [Cache] via Apply
+        var svc = new OrderProcessor();
+
+        var first = svc.Handle(7);
+        var second = svc.Handle(7);
+
+        Assert.Equal(7, first);
+        Assert.Equal(7, second);
+        // Cached — only called once
+        Assert.Equal(1, svc.CallCount);
+    }
+}

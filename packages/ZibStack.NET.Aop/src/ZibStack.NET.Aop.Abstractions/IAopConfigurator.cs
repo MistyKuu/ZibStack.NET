@@ -35,7 +35,7 @@ public interface IAopConfigurator
     void Configure(IAopBuilder b);
 }
 
-/// <summary>Fluent builder for project-wide aspect defaults. Chain sections; per-method attribute arguments win.</summary>
+/// <summary>Fluent builder for project-wide aspect defaults and bulk application. Chain sections; per-method attribute arguments win.</summary>
 public interface IAopBuilder
 {
     IAopBuilder Retry(Action<RetryDefaults> configure);
@@ -43,6 +43,32 @@ public interface IAopBuilder
     IAopBuilder Trace(Action<TraceDefaults> configure);
     IAopBuilder Cache(Action<CacheDefaults> configure);
     IAopBuilder Metrics(Action<MetricsDefaults> configure);
+
+    /// <summary>
+    /// Bulk-apply an aspect to all methods matching the selector. Equivalent to placing
+    /// <c>[TAspect]</c> on every matching method — but driven from a central config file
+    /// instead of individual attributes.
+    /// <code>
+    /// b.Apply&lt;CacheAttribute&gt;(to => to
+    ///     .Namespace("MyApp.Services")
+    ///     .Implementing&lt;IRepository&gt;()
+    ///     .PublicMethods()
+    /// );
+    /// </code>
+    /// </summary>
+    /// <typeparam name="TAspect">Aspect attribute type (must derive from <see cref="AspectAttribute"/>).</typeparam>
+    /// <param name="selector">Fluent selector chain narrowing which classes/methods receive the aspect.</param>
+    IAopBuilder Apply<TAspect>(Action<IAspectSelector> selector) where TAspect : AspectAttribute;
+
+    /// <summary>
+    /// Bulk-apply an aspect with configuration to all methods matching the selector.
+    /// <code>
+    /// b.Apply&lt;RetryAttribute&gt;(to => to
+    ///     .Implementing&lt;IExternalService&gt;()
+    /// , r => r.MaxAttempts = 5);
+    /// </code>
+    /// </summary>
+    IAopBuilder Apply<TAspect>(Action<IAspectSelector> selector, Action<TAspect> configure) where TAspect : AspectAttribute;
 }
 
 /// <summary>Defaults merged into every <c>[Retry]</c> attribute.</summary>

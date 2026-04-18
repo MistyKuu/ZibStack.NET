@@ -23,6 +23,35 @@ All registered automatically by `AddAop()`:
 | `[Debounce]` | Quiet-period delay — rapid calls collapse into a single execution |
 | `[Throttle]` | Rate limiting — at most one call per interval, optional trailing fire |
 
+### Bulk Apply (no attributes needed)
+
+Apply aspects to entire namespaces, interfaces, or base classes — no per-method attributes required:
+
+```csharp
+public sealed class AopConfig : IAopConfigurator
+{
+    public void Configure(IAopBuilder b)
+    {
+        b.Apply<CacheAttribute>(to => to
+            .Implementing<IRepository>()
+            .PublicMethods()
+        , c => c.DurationSeconds = 120);
+
+        b.Apply<RetryAttribute>(to => to
+            .Namespace("MyApp.Services")
+            .MethodsWhere(m => m.IsAsync)
+        , r => r.MaxAttempts = 5);
+
+        b.Apply<TraceAttribute>(to => to
+            .DerivedFrom<BaseService>()
+            .Except<HealthCheck>()
+        );
+    }
+}
+```
+
+Selectors: `.Namespace()`, `.Implementing<T>()`, `.DerivedFrom<T>()`, `.ClassesWhere()`, `.MethodsWhere()`, `.PublicMethods()`, `.Except<T>()`.
+
 Optional (require external packages): `[PollyRetry]` (Polly.Core), `[HybridCache]` (Microsoft.Extensions.Caching.Hybrid).
 
 ```csharp

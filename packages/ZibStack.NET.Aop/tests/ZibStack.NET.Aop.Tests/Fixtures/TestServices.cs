@@ -566,3 +566,99 @@ public class AuditTestService
     [Audit]
     public string SensitiveMethod(int id, [Sensitive] string secret) => "ok";
 }
+
+// ── Apply() bulk aspect test services ──────────────────────────────────────────
+
+// Interface used by Apply().Implementing<IApplyTarget>()
+public interface IApplyTarget
+{
+    int GetValue(int x);
+}
+
+// NO aspect attributes — aspects are applied via IAopConfigurator.Apply()
+public class ApplyTargetService : IApplyTarget
+{
+    public int CallCount;
+
+    public int GetValue(int x)
+    {
+        Interlocked.Increment(ref CallCount);
+        return x * 2;
+    }
+
+    public int InternalMethod(int x) => x + 1;
+}
+
+// Service NOT implementing IApplyTarget — should NOT get the aspect
+public class NonTargetService
+{
+    public int CallCount;
+
+    public int GetValue(int x)
+    {
+        Interlocked.Increment(ref CallCount);
+        return x * 3;
+    }
+}
+
+// Base class for DerivedFrom tests
+public abstract class BaseApplyService
+{
+    public abstract int Compute(int x);
+}
+
+public class DerivedApplyService : BaseApplyService
+{
+    public int CallCount;
+    public override int Compute(int x)
+    {
+        Interlocked.Increment(ref CallCount);
+        return x * 10;
+    }
+}
+
+// Class name predicate test
+public class OrderProcessor
+{
+    public int CallCount;
+    public int Handle(int x)
+    {
+        Interlocked.Increment(ref CallCount);
+        return x;
+    }
+}
+
+// Excluded class
+public class ExcludedApplyService : IApplyTarget
+{
+    public int CallCount;
+    public int GetValue(int x)
+    {
+        Interlocked.Increment(ref CallCount);
+        return x * 5;
+    }
+}
+
+// Configurator with multiple Apply rules
+public sealed class ApplyTestConfig : IAopConfigurator
+{
+    public void Configure(IAopBuilder b)
+    {
+        // Rule 1: Cache all public methods on IApplyTarget implementations, except ExcludedApplyService
+        b.Apply<CacheAttribute>(to => to
+            .Implementing<IApplyTarget>()
+            .PublicMethods()
+            .Except<ExcludedApplyService>()
+        );
+
+        // Rule 2: Retry on DerivedFrom<BaseApplyService>
+        b.Apply<RetryAttribute>(to => to
+            .DerivedFrom<BaseApplyService>()
+        , r => r.MaxAttempts = 2);
+
+        // Rule 3: Cache on classes whose name starts with "Order"
+        b.Apply<CacheAttribute>(to => to
+            .ClassesWhere(c => c.Name.StartsWith("Order"))
+        );
+    }
+}

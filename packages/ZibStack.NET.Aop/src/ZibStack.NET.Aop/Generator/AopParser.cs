@@ -46,6 +46,13 @@ public static class AopParser
             hasAspect = methodSymbol.ContainingType.GetAttributes()
                 .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
 
+        // Also check if any Apply() rule from IAopConfigurator matches this method
+        if (!hasAspect)
+        {
+            var applyRules = AopConfiguratorParser.ReadAll(context.SemanticModel.Compilation).ApplyRules;
+            hasAspect = applyRules.Any(r => MatchesApplyRule(r, methodSymbol));
+        }
+
         // Interface-dispatch: a consumer calling through an interface reference sees
         // ContainingType = interface, which often has no [aspect] attribute even when the
         // concrete impl class carries [Log] at class level. We provisionally accept any
@@ -108,6 +115,17 @@ public static class AopParser
         // `__X_Aop` class and cannot satisfy private/protected access rules.
         if (method.ContainingType != null && IsInterceptableAccessibility(method.DeclaredAccessibility))
             CollectAspects(method.ContainingType.GetAttributes(), method, aspects, seenAspectTypes);
+
+        // Apply() rules from IAopConfigurator — adds virtual aspects for matching methods.
+        if ((method.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } compilation)
+        {
+            var config = AopConfiguratorParser.ReadAll(compilation);
+            foreach (var rule in config.ApplyRules)
+            {
+                if (!seenAspectTypes.Contains(rule.AspectFqn) && MatchesApplyRule(rule, method))
+                    CollectVirtualAspect(rule, method, aspects, seenAspectTypes, compilation);
+            }
+        }
 
         if (aspects.Count == 0)
             return null;
@@ -474,6 +492,148 @@ public static class AopParser
             .Replace("<", "_").Replace(">", "_").Replace(",", "_").Replace(" ", "");
 
         return new SanitizedTypeModel(fullName, safeName, properties);
+    }
+
+    /// <summary>Checks whether a method matches an Apply() rule's selectors.</summary>
+    internal static bool MatchesApplyRule(AopConfiguratorParser.ApplyRule rule, IMethodSymbol method)
+    {
+        var type = method.ContainingType;
+        if (type is null) return false;
+
+        // Must be interceptable (not private, not static for now)
+        if (method.IsStatic) return false;
+        if (!IsInterceptableAccessibility(method.DeclaredAccessibility)) return false;
+        if (method.MethodKind != MethodKind.Ordinary) return false;
+
+        // Namespace prefix
+        if (rule.NamespacePrefix != null)
+        {
+            var ns = type.ContainingNamespace.IsGlobalNamespace ? "" : type.ContainingNamespace.ToDisplayString();
+            if (!ns.StartsWith(rule.NamespacePrefix)) return false;
+        }
+
+        // Implementing<T>
+        if (rule.ImplementingFqn != null &&
+            !type.AllInterfaces.Any(i => i.ToDisplayString() == rule.ImplementingFqn))
+            return false;
+
+        // DerivedFrom<T>
+        if (rule.DerivedFromFqn != null)
+        {
+            bool found = false;
+            for (var b = type.BaseType; b != null; b = b.BaseType)
+                if (b.ToDisplayString() == rule.DerivedFromFqn) { found = true; break; }
+            if (!found) return false;
+        }
+
+        // Except<T>
+        if (rule.ExceptFqns.Count > 0 && rule.ExceptFqns.Contains(type.ToDisplayString()))
+            return false;
+
+        // Class predicates
+        if (rule.ClassNameStartsWith != null && !type.Name.StartsWith(rule.ClassNameStartsWith))
+            return false;
+        if (rule.ClassNameEndsWith != null && !type.Name.EndsWith(rule.ClassNameEndsWith))
+            return false;
+        if (rule.ClassNameContains != null && !type.Name.Contains(rule.ClassNameContains))
+            return false;
+        if (rule.ClassIsAbstract.HasValue && type.IsAbstract != rule.ClassIsAbstract.Value)
+            return false;
+        if (rule.ClassIsSealed.HasValue && type.IsSealed != rule.ClassIsSealed.Value)
+            return false;
+
+        // Method predicates
+        if (rule.MethodIsAsync.HasValue && method.IsAsync != rule.MethodIsAsync.Value)
+            return false;
+        if (rule.MethodIsPublic.HasValue && (method.DeclaredAccessibility == Accessibility.Public) != rule.MethodIsPublic.Value)
+            return false;
+        if (rule.MethodIsStatic.HasValue && method.IsStatic != rule.MethodIsStatic.Value)
+            return false;
+        if (rule.MethodNameStartsWith != null && !method.Name.StartsWith(rule.MethodNameStartsWith))
+            return false;
+        if (rule.MethodNameEndsWith != null && !method.Name.EndsWith(rule.MethodNameEndsWith))
+            return false;
+        if (rule.MethodNameContains != null && !method.Name.Contains(rule.MethodNameContains))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Creates an AspectInfo from an Apply rule — equivalent to having the attribute
+    /// on the method, but driven from the fluent config.
+    /// </summary>
+    private static void CollectVirtualAspect(
+        AopConfiguratorParser.ApplyRule rule,
+        IMethodSymbol method,
+        List<AspectInfo> aspects,
+        HashSet<string> seenTypes,
+        Compilation compilation)
+    {
+        if (!seenTypes.Add(rule.AspectFqn)) return;
+
+        // Look up the aspect attribute type to find its handler
+        var aspectType = compilation.GetTypeByMetadataName(rule.AspectFqn);
+        if (aspectType is null) return;
+
+        var props = new Dictionary<string, object?>(rule.Properties);
+
+        // Merge project-wide defaults
+        var allDefaults = AopConfiguratorParser.Read(compilation);
+        if (allDefaults.TryGetValue(rule.AspectFqn, out var defaults))
+            foreach (var kv in defaults)
+                if (!props.ContainsKey(kv.Key)) props[kv.Key] = kv.Value;
+
+        string? handlerTypeName = null;
+        string? genericAroundTypeArg = null;
+        bool isAsyncHandler = false, hasSyncHandler = false, isAroundHandler = false, isAsyncAroundHandler = false;
+
+        foreach (var classAttr in aspectType.GetAttributes())
+        {
+            if (classAttr.AttributeClass?.ToDisplayString() == AspectHandlerAttributeFullName
+                && classAttr.ConstructorArguments.Length > 0
+                && classAttr.ConstructorArguments[0].Value is INamedTypeSymbol handlerType)
+            {
+                if (handlerType.IsGenericType && !handlerType.IsUnboundGenericType)
+                    handlerTypeName = handlerType.ToDisplayString();
+                else if (handlerType.IsUnboundGenericType)
+                {
+                    var returnType = method.ReturnType;
+                    if (returnType is INamedTypeSymbol { IsGenericType: true } namedReturn
+                        && namedReturn.TypeArguments.Length > 0)
+                    {
+                        genericAroundTypeArg = namedReturn.TypeArguments[0].ToDisplayString();
+                        handlerTypeName = handlerType.ConstructedFrom.Construct(namedReturn.TypeArguments[0]).ToDisplayString();
+                    }
+                    else
+                        handlerTypeName = handlerType.OriginalDefinition.ToDisplayString();
+                }
+                else
+                    handlerTypeName = handlerType.ToDisplayString();
+
+                var actualHandler = handlerType.IsUnboundGenericType ? handlerType.OriginalDefinition : handlerType;
+                var ifaceNames = new HashSet<string>(actualHandler.AllInterfaces.Select(i => i.OriginalDefinition.ToDisplayString()));
+                hasSyncHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAspectHandler");
+                isAsyncHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAspectHandler");
+                isAroundHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAroundAspectHandler")
+                               || ifaceNames.Contains("ZibStack.NET.Aop.IAroundAspectHandler<T>");
+                isAsyncAroundHandler = ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler")
+                                     || ifaceNames.Contains("ZibStack.NET.Aop.IAsyncAroundAspectHandler<T>");
+            }
+        }
+
+        if (handlerTypeName is null) return;
+
+        aspects.Add(new AspectInfo(
+            rule.AspectFqn,
+            order: 0,
+            properties: props,
+            handlerTypeName: handlerTypeName,
+            hasSyncHandler: hasSyncHandler,
+            isAsyncHandler: isAsyncHandler,
+            isAroundHandler: isAroundHandler,
+            isAsyncAroundHandler: isAsyncAroundHandler,
+            genericAroundTypeArg: genericAroundTypeArg));
     }
 
     private static void CollectAspects(
