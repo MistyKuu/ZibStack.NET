@@ -346,15 +346,17 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // try/catch since some IDE / language-server contexts sandbox analyzer I/O.
             // Failure surfaces as TG0020 (Info severity) and falls back to the MSBuild-
             // task path at build time so output isn't lost.
-            if (!string.IsNullOrEmpty(projectDir))
-                TryWriteFilesDirectly(allFiles, projectDir, spc);
-            else
+            var effectiveDir = !string.IsNullOrEmpty(projectDir) ? projectDir : InferProjectDir(compilation);
+            if (!string.IsNullOrEmpty(effectiveDir))
             {
-                // projectDir empty — likely a sandboxed IDE host (Rider, VS Code).
-                // Try to infer from the compilation's syntax trees.
-                var inferredDir = InferProjectDir(compilation);
-                if (inferredDir != null)
-                    TryWriteFilesDirectly(allFiles, inferredDir, spc);
+                if (!TryWriteFilesDirectly(allFiles, effectiveDir, spc))
+                {
+                    // Direct I/O was sandboxed (Rider, VS Code Dev Kit). The manifest
+                    // .g.cs is already on disk via EmitCompilerGeneratedFiles — shell
+                    // out to `dotnet msbuild -t:TypeGenSync` which reads the manifest
+                    // and writes the real output files outside the sandbox.
+                    TryShellSync(effectiveDir);
+                }
             }
         });
     }
@@ -367,7 +369,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
     /// returns — the MSBuild task path will write the same files at build time.
     /// </summary>
 #pragma warning disable RS1035 // File I/O is intentional here — see method summary.
-    private static void TryWriteFilesDirectly(IReadOnlyList<EmittedFile> files, string projectDir, SourceProductionContext spc)
+    /// <returns>true if at least one file was written successfully; false if all writes were sandboxed.</returns>
+    private static bool TryWriteFilesDirectly(IReadOnlyList<EmittedFile> files, string projectDir, SourceProductionContext spc)
     {
         var written = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         var touchedDirs = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
@@ -497,7 +500,40 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         {
             // Sweep is best-effort — the MSBuild task does the same sweep at build time.
         }
+
+        return !anyWriteFailed;
     }
+
+    /// <summary>
+    /// Fallback when TryWriteFilesDirectly is sandboxed (Rider, VS Code Dev Kit).
+    /// Shells out to <c>dotnet msbuild -t:TypeGenSync</c> which reads the manifest
+    /// from obj/ and writes output files in an unsandboxed process.
+    /// </summary>
+    private static void TryShellSync(string projectDir)
+    {
+        try
+        {
+            // Find a .csproj in projectDir
+            var csproj = System.IO.Directory.GetFiles(projectDir, "*.csproj");
+            if (csproj.Length == 0) return;
+
+            var psi = new System.Diagnostics.ProcessStartInfo("dotnet",
+                $"msbuild \"{csproj[0]}\" -t:TypeGenSync -nologo -v:minimal")
+            {
+                WorkingDirectory = projectDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            var p = System.Diagnostics.Process.Start(psi);
+            // Fire and forget — don't block the generator. The process writes
+            // files independently and exits quickly (~200ms for the MSBuild task).
+            // Intentionally not waiting — Rider would freeze the UI otherwise.
+        }
+        catch { /* Process.Start may also be sandboxed — nothing more we can do */ }
+    }
+
 #pragma warning restore RS1035
 
     /// <summary>

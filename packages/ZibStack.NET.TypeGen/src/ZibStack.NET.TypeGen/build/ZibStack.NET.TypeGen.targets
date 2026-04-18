@@ -193,16 +193,25 @@ if (written > 0 || removed > 0)
   </Target>
 
   <!--
-    Design-time build hooks: IDEs (Rider, VS) run various targets on save
-    but skip CoreCompile. Hook into multiple candidates so the manifest
-    gets processed regardless of which design-time path the IDE uses.
+    Standalone target for processing the manifest outside a full build.
+    Rider writes the manifest to obj/Debug/ on save (EmitCompilerGeneratedFiles),
+    so users can run:
+      dotnet msbuild -t:TypeGenSync
+    or use dotnet-watch / File Watcher to auto-sync on save.
   -->
-  <Target Name="ZibStackTypeGenWriteOutputFilesDesignTime"
-          AfterTargets="CoreGenerateAssemblyInfo;GenerateMSBuildEditorConfigFile"
-          Condition="Exists('$(IntermediateOutputPath)generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs')">
+  <Target Name="TypeGenSync">
+    <!-- Try Debug first (IDE default), then Release -->
+    <PropertyGroup>
+      <_TGManifestDebug>obj\Debug\$(TargetFramework)\generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs</_TGManifestDebug>
+      <_TGManifestRelease>obj\Release\$(TargetFramework)\generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs</_TGManifestRelease>
+      <_TGManifest Condition="Exists('$(_TGManifestDebug)')">$(_TGManifestDebug)</_TGManifest>
+      <_TGManifest Condition="'$(_TGManifest)' == '' AND Exists('$(_TGManifestRelease)')">$(_TGManifestRelease)</_TGManifest>
+    </PropertyGroup>
     <ZibStackTypeGenWriteOutput
-        ManifestPath="$(IntermediateOutputPath)generated\ZibStack.NET.TypeGen\ZibStack.NET.TypeGen.Generator.TypeGenGenerator\ZibStack.TypeGen.Manifest.g.cs"
+        Condition="'$(_TGManifest)' != ''"
+        ManifestPath="$(_TGManifest)"
         ProjectDir="$(MSBuildProjectDirectory)" />
+    <Message Condition="'$(_TGManifest)' == ''" Importance="high" Text="ZibStack.TypeGen: no manifest found in obj/ — build the project first." />
   </Target>
 
 </Project>
