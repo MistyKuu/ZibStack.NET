@@ -16,8 +16,18 @@ namespace ZibStack.NET.Dto.Sample.Models;
 // contract without a second tool.
 [GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.OpenApi,
                OutputDir = "generated")]
-public partial class Team
+public partial class Team : IValidationConfigurator<Team>
 {
+    public void Configure(IValidationBuilder<Team> b)
+    {
+        // Collection validation — check count via cross-field rule
+        b.Rule(x => x.Players.Count <= x.MaxMembers, "Team has more players than MaxMembers allows");
+
+        // Null-safe nested access — use ?. to avoid NRE when Description is null
+        b.Rule(x => x.Description == null || x.Description.Length >= 10,
+            "Description must be at least 10 characters if provided");
+    }
+
     [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
     [UiFormIgnore]
     [UiTableColumn(IsVisible = false)]
