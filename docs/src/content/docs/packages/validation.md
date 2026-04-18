@@ -75,6 +75,46 @@ All attributes support a `Message` property for custom error messages:
 [ZMatch(@"^\d{3}-\d{4}$", Message = "Phone must be in format XXX-XXXX")]
 ```
 
+## Cross-field Validation
+
+Implement `IValidationConfigurator<T>` to add rules that compare properties against each other. The generator parses `Configure()` at compile time — it's never invoked at runtime.
+
+### Free-form expressions
+
+```csharp
+[ZValidate]
+public partial class DateRange : IValidationConfigurator<DateRange>
+{
+    [ZRequired] public DateTime StartDate { get; set; }
+    [ZRequired] public DateTime EndDate { get; set; }
+
+    public void Configure(IValidationBuilder<DateRange> b)
+    {
+        b.Rule(x => x.EndDate > x.StartDate, "EndDate must be after StartDate");
+    }
+}
+```
+
+### Per-property comparisons
+
+```csharp
+[ZValidate]
+public partial class PasswordForm : IValidationConfigurator<PasswordForm>
+{
+    [ZRequired] [ZMinLength(8)]
+    public string Password { get; set; } = "";
+    [ZRequired]
+    public string ConfirmPassword { get; set; } = "";
+
+    public void Configure(IValidationBuilder<PasswordForm> b)
+    {
+        b.Property(x => x.ConfirmPassword).EqualTo(x => x.Password, "Passwords must match");
+    }
+}
+```
+
+Available comparisons: `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`, `EqualTo`, `NotEqualTo`. Cross-field rules combine with per-property attributes — both are checked in the generated `Validate()` method.
+
 ## IValidatable Interface
 
 All `[ZValidate]` types implement `IValidatable`:
