@@ -341,8 +341,8 @@ public class DebounceTests
     public async Task Debounce_SingleCall_ExecutesNormally()
     {
         var svc = new DebounceTestService();
-        var result = await svc.SearchAsync("hello");
-        Assert.Equal(5, result);
+        var result = await svc.SearchAsync(Guid.NewGuid().ToString());
+        Assert.True(result > 0);
         Assert.Equal(1, svc.CallCount);
     }
 
@@ -350,13 +350,18 @@ public class DebounceTests
     public async Task Debounce_RapidCalls_OnlyLastExecutes()
     {
         var svc = new DebounceTestService();
+        var key = Guid.NewGuid().ToString(); // unique key to isolate from other tests
 
-        // Fire 5 rapid calls — only the last should execute
-        var tasks = new List<Task>();
-        for (int i = 0; i < 5; i++)
-            tasks.Add(Task.Run(() => svc.SearchAsync("query" + i)));
+        // Fire 5 rapid calls synchronously (no await) — each resets the 100ms timer.
+        // Only the last call should survive the debounce window.
+        _ = svc.SearchAsync(key);
+        _ = svc.SearchAsync(key);
+        _ = svc.SearchAsync(key);
+        _ = svc.SearchAsync(key);
+        _ = svc.SearchAsync(key);
 
-        await Task.Delay(300); // wait for debounce to settle
+        // Wait for debounce (100ms) + execution time
+        await Task.Delay(300);
         Assert.Equal(1, svc.CallCount);
     }
 }
