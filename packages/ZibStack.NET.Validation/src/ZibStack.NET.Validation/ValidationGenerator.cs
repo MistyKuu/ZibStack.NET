@@ -32,17 +32,73 @@ namespace ZibStack.NET.Validation
 #nullable enable
 namespace ZibStack.NET.Validation
 {
+    /// <summary>A single validation error with property path and message.</summary>
+    public sealed class ValidationError
+    {
+        /// <summary>Dot-separated property path (e.g. ""BillingAddress.Street"", ""Notes[1].Text""). Empty for class-level rules.</summary>
+        public string Property { get; }
+
+        /// <summary>Error message (e.g. ""is required."").</summary>
+        public string Message { get; }
+
+        /// <summary>Full error string: Property + Message (e.g. ""BillingAddress.Street is required."").</summary>
+        public string FullMessage => string.IsNullOrEmpty(Property) ? Message : Property + "": "" + Message;
+
+        public ValidationError(string property, string message)
+        {
+            Property = property;
+            Message = message;
+        }
+
+        public override string ToString() => FullMessage;
+    }
+
     /// <summary>Result of a validation operation.</summary>
     public sealed class ValidationResult
     {
-        public static readonly ValidationResult Success = new(System.Array.Empty<string>());
+        public static readonly ValidationResult Success = new(
+            System.Array.Empty<ValidationError>());
 
+        /// <summary>Structured errors with property path and message.</summary>
+        public System.Collections.Generic.IReadOnlyList<ValidationError> ValidationErrors { get; }
+
+        /// <summary>Flat error messages for backward compatibility.</summary>
         public System.Collections.Generic.IReadOnlyList<string> Errors { get; }
-        public bool IsValid => Errors.Count == 0;
 
+        public bool IsValid => ValidationErrors.Count == 0;
+
+        public ValidationResult(System.Collections.Generic.IReadOnlyList<ValidationError> errors)
+        {
+            ValidationErrors = errors;
+            var flat = new string[errors.Count];
+            for (int i = 0; i < errors.Count; i++) flat[i] = errors[i].FullMessage;
+            Errors = flat;
+        }
+
+        /// <summary>Backward-compatible constructor from flat string list.</summary>
         public ValidationResult(System.Collections.Generic.IReadOnlyList<string> errors)
         {
+            var structured = new ValidationError[errors.Count];
+            for (int i = 0; i < errors.Count; i++) structured[i] = new ValidationError("""", errors[i]);
+            ValidationErrors = structured;
             Errors = errors;
+        }
+
+        /// <summary>Errors grouped by property path — matches ASP.NET ModelState shape.</summary>
+        public System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<string>> ToDictionary()
+        {
+            var dict = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<string>>();
+            foreach (var e in ValidationErrors)
+            {
+                var key = string.IsNullOrEmpty(e.Property) ? """" : e.Property;
+                if (!dict.TryGetValue(key, out var list))
+                {
+                    list = new System.Collections.Generic.List<string>();
+                    dict[key] = list;
+                }
+                list.Add(e.Message);
+            }
+            return dict;
         }
     }
 
@@ -542,7 +598,7 @@ namespace ZibStack.NET.Validation
         sb.AppendLine("    public ValidationResult Validate(ValidationContext? context = null)");
         sb.AppendLine("    {");
         sb.AppendLine("        context ??= new ValidationContext { RootObject = this };");
-        sb.AppendLine("        var errors = new List<string>();");
+        sb.AppendLine("        var errors = new List<ValidationError>();");
         sb.AppendLine();
 
         foreach (var prop in info.Properties)
@@ -603,6 +659,9 @@ namespace ZibStack.NET.Validation
         return sb.ToString();
     }
 
+    private static string Err(string prop, string msg)
+        => $"new ValidationError(\"{EscapeString(prop)}\", \"{EscapeString(msg)}\")";
+
     private static void EmitRule(StringBuilder sb, PropertyValidationInfo prop, ValidationRule rule)
     {
         var name = prop.PropertyName;
@@ -615,15 +674,14 @@ namespace ZibStack.NET.Validation
                 var msg = rule.CustomMessage ?? $"{displayName} is required.";
                 if (prop.IsValueType)
                 {
-                    // For nullable value types
                     if (prop.TypeName.EndsWith("?"))
-                        sb.AppendLine($"        if ({name} is null) errors.Add(\"{EscapeString(msg)}\");");
+                        sb.AppendLine($"        if ({name} is null) errors.Add({Err(name, msg)});");
                 }
                 else
                 {
-                    sb.AppendLine($"        if ({name} is null) errors.Add(\"{EscapeString(msg)}\");");
+                    sb.AppendLine($"        if ({name} is null) errors.Add({Err(name, msg)});");
                     if (prop.TypeName == "string" || prop.TypeName == "string?")
-                        sb.AppendLine($"        else if (string.IsNullOrWhiteSpace({name})) errors.Add(\"{EscapeString(msg)}\");");
+                        sb.AppendLine($"        else if (string.IsNullOrWhiteSpace({name})) errors.Add({Err(name, msg)});");
                 }
                 break;
             }
@@ -632,7 +690,7 @@ namespace ZibStack.NET.Validation
             {
                 var len = (int)rule.MinValue;
                 var msg = rule.CustomMessage ?? $"{displayName} must be at least {len} characters.";
-                sb.AppendLine($"        if ({name} is not null && {name}.Length < {len}) errors.Add(\"{EscapeString(msg)}\");");
+                sb.AppendLine($"        if ({name} is not null && {name}.Length < {len}) errors.Add({Err(name, msg)});");
                 break;
             }
 
@@ -640,7 +698,7 @@ namespace ZibStack.NET.Validation
             {
                 var len = (int)rule.MaxValue;
                 var msg = rule.CustomMessage ?? $"{displayName} must be at most {len} characters.";
-                sb.AppendLine($"        if ({name} is not null && {name}.Length > {len}) errors.Add(\"{EscapeString(msg)}\");");
+                sb.AppendLine($"        if ({name} is not null && {name}.Length > {len}) errors.Add({Err(name, msg)});");
                 break;
             }
 
@@ -648,34 +706,30 @@ namespace ZibStack.NET.Validation
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must be between {rule.MinValue} and {rule.MaxValue}.";
                 if (prop.IsNullableRef || prop.TypeName.EndsWith("?"))
-                {
-                    sb.AppendLine($"        if ({name} is not null && ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue})) errors.Add(\"{EscapeString(msg)}\");");
-                }
+                    sb.AppendLine($"        if ({name} is not null && ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue})) errors.Add({Err(name, msg)});");
                 else
-                {
-                    sb.AppendLine($"        if ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue}) errors.Add(\"{EscapeString(msg)}\");");
-                }
+                    sb.AppendLine($"        if ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue}) errors.Add({Err(name, msg)});");
                 break;
             }
 
             case ValidationRuleKind.Email:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must be a valid email address.";
-                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$\")) errors.Add(\"{EscapeString(msg)}\");");
+                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$\")) errors.Add({Err(name, msg)});");
                 break;
             }
 
             case ValidationRuleKind.Url:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must be a valid URL.";
-                sb.AppendLine($"        if ({name} is not null && !System.Uri.TryCreate({name}, System.UriKind.Absolute, out _)) errors.Add(\"{EscapeString(msg)}\");");
+                sb.AppendLine($"        if ({name} is not null && !System.Uri.TryCreate({name}, System.UriKind.Absolute, out _)) errors.Add({Err(name, msg)});");
                 break;
             }
 
             case ValidationRuleKind.Match:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} does not match the required pattern.";
-                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"{rule.Pattern!.Replace("\"", "\"\"")}\")) errors.Add(\"{EscapeString(msg)}\");");
+                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"{rule.Pattern!.Replace("\"", "\"\"")}\")) errors.Add({Err(name, msg)});");
                 break;
             }
 
@@ -683,9 +737,9 @@ namespace ZibStack.NET.Validation
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must not be empty.";
                 if (prop.TypeName == "string" || prop.TypeName == "string?")
-                    sb.AppendLine($"        if ({name} is not null && string.IsNullOrWhiteSpace({name})) errors.Add(\"{EscapeString(msg)}\");");
+                    sb.AppendLine($"        if ({name} is not null && string.IsNullOrWhiteSpace({name})) errors.Add({Err(name, msg)});");
                 else
-                    sb.AppendLine($"        if ({name} is not null && ((System.Collections.ICollection){name}).Count == 0) errors.Add(\"{EscapeString(msg)}\");");
+                    sb.AppendLine($"        if ({name} is not null && ((System.Collections.ICollection){name}).Count == 0) errors.Add({Err(name, msg)});");
                 break;
             }
         }
@@ -695,29 +749,29 @@ namespace ZibStack.NET.Validation
     {
         foreach (var rule in info.CrossFieldRules)
         {
-            var msg = EscapeString(rule.Message);
+            var prop = rule.LeftProperty ?? "";
             switch (rule.Kind)
             {
                 case CrossFieldRuleKind.Expression:
-                    sb.AppendLine($"        if (!({rule.ExpressionText})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (!({rule.ExpressionText})) errors.Add({Err(prop, rule.Message)});");
                     break;
                 case CrossFieldRuleKind.GreaterThan:
-                    sb.AppendLine($"        if (!({rule.LeftProperty} > {rule.RightProperty})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (!({rule.LeftProperty} > {rule.RightProperty})) errors.Add({Err(prop, rule.Message)});");
                     break;
                 case CrossFieldRuleKind.GreaterThanOrEqual:
-                    sb.AppendLine($"        if (!({rule.LeftProperty} >= {rule.RightProperty})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (!({rule.LeftProperty} >= {rule.RightProperty})) errors.Add({Err(prop, rule.Message)});");
                     break;
                 case CrossFieldRuleKind.LessThan:
-                    sb.AppendLine($"        if (!({rule.LeftProperty} < {rule.RightProperty})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (!({rule.LeftProperty} < {rule.RightProperty})) errors.Add({Err(prop, rule.Message)});");
                     break;
                 case CrossFieldRuleKind.LessThanOrEqual:
-                    sb.AppendLine($"        if (!({rule.LeftProperty} <= {rule.RightProperty})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (!({rule.LeftProperty} <= {rule.RightProperty})) errors.Add({Err(prop, rule.Message)});");
                     break;
                 case CrossFieldRuleKind.EqualTo:
-                    sb.AppendLine($"        if (!object.Equals({rule.LeftProperty}, {rule.RightProperty})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (!object.Equals({rule.LeftProperty}, {rule.RightProperty})) errors.Add({Err(prop, rule.Message)});");
                     break;
                 case CrossFieldRuleKind.NotEqualTo:
-                    sb.AppendLine($"        if (object.Equals({rule.LeftProperty}, {rule.RightProperty})) errors.Add(\"{msg}\");");
+                    sb.AppendLine($"        if (object.Equals({rule.LeftProperty}, {rule.RightProperty})) errors.Add({Err(prop, rule.Message)});");
                     break;
             }
         }
@@ -917,7 +971,7 @@ namespace ZibStack.NET.Validation
                 sb.AppendLine($"                {{");
                 sb.AppendLine($"                    var __nested{i} = __v{i}.Validate(context.ForNested(this, \"{nested.PropertyName}[\" + __idx{i} + \"]\"));");
                 sb.AppendLine($"                    if (!__nested{i}.IsValid)");
-                sb.AppendLine($"                        foreach (var __e in __nested{i}.Errors) errors.Add(\"{nested.PropertyName}[\" + __idx{i} + \"].\" + __e);");
+                sb.AppendLine($"                        foreach (var __e in __nested{i}.ValidationErrors) errors.Add(new ValidationError(\"{nested.PropertyName}[\" + __idx{i} + \"].\" + __e.Property, __e.Message));");
                 sb.AppendLine($"                }}");
                 sb.AppendLine($"                __idx{i}++;");
                 sb.AppendLine($"            }}");
@@ -929,7 +983,7 @@ namespace ZibStack.NET.Validation
                 sb.AppendLine($"        {{");
                 sb.AppendLine($"            var __nested{i} = __v{i}.Validate(context.ForNested(this, \"{nested.PropertyName}\"));");
                 sb.AppendLine($"            if (!__nested{i}.IsValid)");
-                sb.AppendLine($"                foreach (var __e in __nested{i}.Errors) errors.Add(\"{nested.PropertyName}.\" + __e);");
+                sb.AppendLine($"                foreach (var __e in __nested{i}.ValidationErrors) errors.Add(new ValidationError(\"{nested.PropertyName}.\" + __e.Property, __e.Message));");
                 sb.AppendLine($"        }}");
             }
         }
