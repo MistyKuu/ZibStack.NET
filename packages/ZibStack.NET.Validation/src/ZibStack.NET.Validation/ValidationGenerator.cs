@@ -907,15 +907,15 @@ namespace ZibStack.NET.Validation
             var nested = info.NestedProperties[i];
             if (nested.IsCollection)
             {
-                var guard = nested.IsNullable ? $"{nested.PropertyName} is not null" : "true";
-                sb.AppendLine($"        if ({guard})");
+                if (nested.IsNullable)
+                    sb.AppendLine($"        if ({nested.PropertyName} is not null)");
                 sb.AppendLine($"        {{");
                 sb.AppendLine($"            var __idx{i} = 0;");
                 sb.AppendLine($"            foreach (var __item{i} in {nested.PropertyName})");
                 sb.AppendLine($"            {{");
                 sb.AppendLine($"                if (__item{i} is IValidatable __v{i})");
                 sb.AppendLine($"                {{");
-                sb.AppendLine($"                    var __nested{i} = __v{i}.Validate(context?.ForNested(this, \"{nested.PropertyName}[\" + __idx{i} + \"]\") ?? new ValidationContext {{ Parent = this, Path = \"{nested.PropertyName}[\" + __idx{i} + \"]\" }});");
+                sb.AppendLine($"                    var __nested{i} = __v{i}.Validate(context.ForNested(this, \"{nested.PropertyName}[\" + __idx{i} + \"]\"));");
                 sb.AppendLine($"                    if (!__nested{i}.IsValid)");
                 sb.AppendLine($"                        foreach (var __e in __nested{i}.Errors) errors.Add(\"{nested.PropertyName}[\" + __idx{i} + \"].\" + __e);");
                 sb.AppendLine($"                }}");
@@ -927,7 +927,7 @@ namespace ZibStack.NET.Validation
             {
                 sb.AppendLine($"        if ({nested.PropertyName} is IValidatable __v{i})");
                 sb.AppendLine($"        {{");
-                sb.AppendLine($"            var __nested{i} = __v{i}.Validate(context?.ForNested(this, \"{nested.PropertyName}\") ?? new ValidationContext {{ Parent = this, Path = \"{nested.PropertyName}\" }});");
+                sb.AppendLine($"            var __nested{i} = __v{i}.Validate(context.ForNested(this, \"{nested.PropertyName}\"));");
                 sb.AppendLine($"            if (!__nested{i}.IsValid)");
                 sb.AppendLine($"                foreach (var __e in __nested{i}.Errors) errors.Add(\"{nested.PropertyName}.\" + __e);");
                 sb.AppendLine($"        }}");
