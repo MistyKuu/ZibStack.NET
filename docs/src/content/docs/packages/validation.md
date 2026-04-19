@@ -152,7 +152,7 @@ public partial class CustomerForm
 }
 ```
 
-`form.Validate()` returns errors like `"BillingAddress.Street is required."`. Nullable properties are skipped when null.
+`form.Validate()` returns structured errors with property paths. Nullable properties are skipped when null. Context is auto-created — just call `form.Validate()`.
 
 ### Collections
 
@@ -170,18 +170,24 @@ Errors: `"Lines[0].Sku is required."`, `"Lines[2].Quantity must be between 1 and
 
 ### ValidationContext
 
-`Validate()` accepts an optional `ValidationContext` that flows through the nested chain:
+Context is auto-created at the root and flows through nested validators automatically. You only pass it explicitly if you need custom data:
 
 ```csharp
-var ctx = new ValidationContext { RootObject = form };
-var result = form.Validate(ctx);
+// Auto — context created internally with RootObject = form
+var result = form.Validate();
+
+// Optional — pass custom data via Items
+var result = form.Validate(new ValidationContext
+{
+    Items = { ["source"] = "API", ["userId"] = 42 },
+});
 ```
 
 | Property | Description |
 |---|---|
-| `Parent` | The object that triggered this nested validation |
-| `Path` | Dot-separated path from root (`"Order.BillingAddress"`) |
-| `RootObject` | The top-level object that started the chain |
+| `Parent` | The object that triggered this nested validation (auto-set) |
+| `Path` | Dot-separated path from root, e.g. `"BillingAddress"` (auto-set) |
+| `RootObject` | The top-level object that started the chain (auto-set) |
 | `Items` | `Dictionary<string, object?>` for custom user data |
 
 ## IValidatable Interface
@@ -208,11 +214,38 @@ void Process<T>(T request) where T : IValidatable
 ```csharp
 public sealed class ValidationResult
 {
-    public IReadOnlyList<string> Errors { get; }
     public bool IsValid { get; }
 
-    public static readonly ValidationResult Success; // singleton
+    // Structured errors with property path + message
+    public IReadOnlyList<ValidationError> ValidationErrors { get; }
+
+    // Flat error strings (backward compat)
+    public IReadOnlyList<string> Errors { get; }
+
+    // Group by property — matches ASP.NET ModelState shape
+    public Dictionary<string, List<string>> ToDictionary();
+
+    public static readonly ValidationResult Success;
 }
+
+public sealed class ValidationError
+{
+    public string Property { get; }    // "BillingAddress.Street"
+    public string Message { get; }     // "Street is required."
+    public string FullMessage { get; } // "BillingAddress.Street: Street is required."
+}
+```
+
+```csharp
+var result = form.Validate();
+
+// Structured access
+result.ValidationErrors[0].Property  // "Email"
+result.ValidationErrors[0].Message   // "Email is required."
+
+// ASP.NET ModelState style
+var dict = result.ToDictionary();
+// { "Email": ["Email is required."], "BillingAddress.Street": ["Street is required."] }
 ```
 
 ## Records
