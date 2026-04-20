@@ -4,16 +4,26 @@ using Microsoft.CodeAnalysis;
 namespace ZibStack.NET.Aop.Generator;
 
 /// <summary>
-/// Standalone generator for [AspectHandler]-based runtime aspects.
-/// Consuming packages that need inline emitters should create their own
-/// IIncrementalGenerator and use AopPipeline.Register() with their emitters.
+/// The single AOP generator that handles ALL aspects:
+/// - Runtime handler-based aspects ([Trace], [Retry], [Cache], [Metrics], etc.)
+/// - Inline emitter aspects ([Log])
+/// - Apply() bulk rules for any of the above
 /// </summary>
 [Generator]
 public sealed class AopStandaloneGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // No inline emitters — only runtime handlers via [AspectHandler]
-        AopPipeline.Register(context, new Dictionary<string, IAspectEmitter>());
+        var emitters = new Dictionary<string, IAspectEmitter>
+        {
+            { "ZibStack.NET.Log.LogAttribute", new ZibStack.NET.Log.Generator.LogAspectEmitter() }
+        };
+
+        var classDataProviders = new List<IClassDataProvider>
+        {
+            new ZibStack.NET.Log.Generator.LogClassDataProvider()
+        };
+
+        AopPipeline.Register(context, emitters, classDataProviders);
     }
 }

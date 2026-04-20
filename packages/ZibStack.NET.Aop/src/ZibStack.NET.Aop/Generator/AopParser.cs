@@ -125,7 +125,11 @@ public static class AopParser
             CollectAspects(method.ContainingType.GetAttributes(), method, aspects, seenAspectTypes);
 
         // Apply() rules from IAopConfigurator — adds virtual aspects for matching methods.
-        if ((method.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } compilation)
+        // Skip for interface members: they get aspects through ParseInterfaceProxy() which
+        // matches rules against the IMPL class. Without this guard, interfaces in a matching
+        // namespace get both a direct class model AND a proxy model, causing CS9153.
+        if (method.ContainingType?.TypeKind != TypeKind.Interface
+            && (method.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } compilation)
         {
             var config = AopConfiguratorParser.ReadAll(compilation);
             foreach (var rule in config.ApplyRules)

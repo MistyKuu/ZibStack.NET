@@ -27,6 +27,10 @@
                       ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\..\src\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop.Abstractions\ZibStack.NET.Aop.Abstractions.csproj" />
+    <!-- AOP generator now handles [Log] aspect emission -->
+    <ProjectReference Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\ZibStack.NET.Aop.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

@@ -44,19 +44,12 @@
                       PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- Include Aop generator source files directly (generators must be single-assembly) -->
+  <!-- [Log] aspect is now handled by ZibStack.NET.Aop generator.
+       This package only provides the interpolated-string logging interceptor.
+       Exclude emitter files (they're linked into the AOP generator project). -->
   <ItemGroup>
-    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopParser.cs" Link="AopGenerator\AopParser.cs" />
-    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopEmitter.cs" Link="AopGenerator\AopEmitter.cs" />
-    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopGenerator.cs" Link="AopGenerator\AopGenerator.cs" />
-    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\IAspectEmitter.cs" Link="AopGenerator\IAspectEmitter.cs" />
-    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\InterceptionModel.cs" Link="AopGenerator\InterceptionModel.cs" />
-    <!-- AopParser merges IAopConfigurator project defaults into aspect NamedArgs — same file
-         linked here so the Log generator's shared AopParser compiles. Harmless for [Log]:
-         the parser only merges defaults for aspects whose FQN is in its SectionToAspect table
-         (Retry/Timeout/Trace/Cache/Metrics), so [Log] isn't affected. -->
-    <Compile Include="..\..\..\ZibStack.NET.Aop\src\ZibStack.NET.Aop\Generator\AopConfiguratorParser.cs" Link="AopGenerator\AopConfiguratorParser.cs" />
-    <!-- NOT including AopStandaloneGenerator.cs — we have our own ZibLogGenerator -->
+    <Compile Remove="Generator\LogAspectEmitter.cs" />
+    <Compile Remove="Generator\DiagnosticDescriptors.cs" />
   </ItemGroup>
 
   <ItemGroup>
