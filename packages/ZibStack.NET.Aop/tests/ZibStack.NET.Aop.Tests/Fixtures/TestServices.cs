@@ -660,5 +660,66 @@ public sealed class ApplyTestConfig : IAopConfigurator
         b.Apply<CacheAttribute>(to => to
             .ClassesWhere(c => c.Name.StartsWith("Order"))
         );
+
+        // Rule 4-6: E2E showcase — Trace + Metrics + Record on all E2e* classes
+        b.Apply<TraceAttribute>(to => to
+            .ClassesWhere(c => c.Name.StartsWith("E2e"))
+            .PublicMethods()
+        );
+
+        b.Apply<MetricsAttribute>(to => to
+            .ClassesWhere(c => c.Name.StartsWith("E2e"))
+            .PublicMethods()
+        );
+
+        b.Apply<RecordAttribute>(to => to
+            .ClassesWhere(c => c.Name.StartsWith("E2e"))
+            .PublicMethods()
+        );
     }
+}
+
+// ── E2E global-apply showcase services ────────────────────────────────────
+// NO aspect attributes — everything applied via IAopConfigurator.Apply() rules 4-6.
+
+public class E2eOrderService
+{
+    public int CallCount;
+
+    public string PlaceOrder(string customer, decimal total)
+    {
+        Interlocked.Increment(ref CallCount);
+        return $"order-{customer}-{total}";
+    }
+
+    public int GetStatus(int orderId)
+    {
+        Interlocked.Increment(ref CallCount);
+        return orderId * 10;
+    }
+}
+
+public class E2eInventoryService
+{
+    public int CallCount;
+
+    public int CheckStock(string sku)
+    {
+        Interlocked.Increment(ref CallCount);
+        return sku.Length;
+    }
+
+    public async Task<bool> ReserveAsync(string sku, int qty)
+    {
+        Interlocked.Increment(ref CallCount);
+        await Task.Delay(1);
+        return qty > 0;
+    }
+}
+
+// Control group: does NOT start with "E2e" — should NOT be intercepted by rules 4-6.
+public class ControlGroupService
+{
+    public int CallCount;
+    public int DoWork(int x) { Interlocked.Increment(ref CallCount); return x; }
 }

@@ -103,3 +103,64 @@ public class BaseLogService
 }
 
 public class DerivedLogService : BaseLogService { }
+
+// ── Apply() bulk [Log] test services ────────────────────────────────────────
+// NO [Log] attributes — logging applied via IAopConfigurator.Apply()
+
+public class E2ePaymentService
+{
+    public int CallCount;
+
+    public string Charge(string customer, decimal amount)
+    {
+        Interlocked.Increment(ref CallCount);
+        return $"charged-{customer}-{amount}";
+    }
+
+    public int GetBalance(int accountId)
+    {
+        Interlocked.Increment(ref CallCount);
+        return accountId * 100;
+    }
+}
+
+public class E2eShippingService
+{
+    public int CallCount;
+
+    public string Ship(string address)
+    {
+        Interlocked.Increment(ref CallCount);
+        return $"shipped-{address}";
+    }
+
+    public async Task<bool> TrackAsync(string trackingId)
+    {
+        Interlocked.Increment(ref CallCount);
+        await Task.Delay(1);
+        return trackingId.Length > 0;
+    }
+}
+
+public class E2eThrowingService
+{
+    public int Explode() => throw new InvalidOperationException("kaboom");
+}
+
+// Control group — name does NOT start with "E2e"
+public class PlainUninstrumentedService
+{
+    public int DoWork(int x) => x;
+}
+
+// Configurator applying [Log] to all E2e* classes
+public sealed class LogApplyTestConfig : ZibStack.NET.Aop.IAopConfigurator
+{
+    public void Configure(ZibStack.NET.Aop.IAopBuilder b)
+    {
+        b.Apply<LogAttribute>(to => to
+            .ClassesWhere(c => c.Name.StartsWith("E2e"))
+            .PublicMethods()
+        );
+    }
+}

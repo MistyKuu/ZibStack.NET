@@ -622,8 +622,6 @@ public static class AopParser
             }
         }
 
-        if (handlerTypeName is null) return;
-
         aspects.Add(new AspectInfo(
             rule.AspectFqn,
             order: 0,

@@ -24,6 +24,7 @@ public class AopFixture : IDisposable
         services.AddSingleton(AroundHandler);
 
         // Built-in handlers
+        services.AddSingleton<TraceHandler>();
         services.AddSingleton<RetryHandler>();
         services.AddSingleton<CacheHandler>();
         services.AddSingleton<MetricsHandler>();
