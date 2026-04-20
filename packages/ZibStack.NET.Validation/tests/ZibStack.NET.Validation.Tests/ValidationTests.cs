@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using ZibStack.NET.Validation;
 
@@ -698,4 +699,74 @@ public class ValidationTests
         var result = obj.Validate(null, "Create");
         Assert.True(result.IsValid);
     }
+
+    // ── Localization ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Localization_WithoutLocalizer_ReturnsDefaultMessage()
+    {
+        // No localizer registered → default English messages
+        ValidationServiceProvider.ServiceProvider = null;
+        var obj = new CascadeTest { Name = "" };
+        var result = obj.Validate();
+
+        Assert.Contains(result.Errors, e => e.Contains("is required"));
+    }
+
+    [Fact]
+    public void Localization_WithLocalizer_ReturnsLocalizedMessage()
+    {
+        // Register a test localizer
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<IValidationLocalizer>(new TestLocalizer());
+        var sp = services.BuildServiceProvider();
+        ValidationServiceProvider.ServiceProvider = sp;
+
+        try
+        {
+            var obj = new CascadeTest { Name = "" };
+            var result = obj.Validate();
+
+            Assert.Contains(result.Errors, e => e.Contains("LOCALIZED:"));
+        }
+        finally
+        {
+            ValidationServiceProvider.ServiceProvider = null;
+        }
+    }
+
+    [Fact]
+    public void Localization_ReturnsNull_FallsBackToDefault()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<IValidationLocalizer>(new NullLocalizer());
+        var sp = services.BuildServiceProvider();
+        ValidationServiceProvider.ServiceProvider = sp;
+
+        try
+        {
+            var obj = new CascadeTest { Name = "" };
+            var result = obj.Validate();
+
+            // NullLocalizer returns null → falls back to default
+            Assert.Contains(result.Errors, e => e.Contains("is required"));
+        }
+        finally
+        {
+            ValidationServiceProvider.ServiceProvider = null;
+        }
+    }
+}
+
+// Test localizers
+internal class TestLocalizer : IValidationLocalizer
+{
+    public string? GetMessage(string property, string defaultMessage)
+        => $"LOCALIZED: {defaultMessage}";
+}
+
+internal class NullLocalizer : IValidationLocalizer
+{
+    public string? GetMessage(string property, string defaultMessage)
+        => null; // fall back to default
 }

@@ -88,6 +88,44 @@ app.MapPost("/api/users", (UserDto dto) =>
 
 > Note: `.WithValidation()` calls `Validate()` with no ruleset (validates all). For selective validation, call manually in the handler.
 
+## Localization (i18n)
+
+Register an `IValidationLocalizer` in DI — all generated messages pass through it automatically:
+
+```csharp
+// 1. Implement the interface:
+public class PolishLocalizer : IValidationLocalizer
+{
+    private readonly IStringLocalizer<SharedResources> _loc;
+    
+    public PolishLocalizer(IStringLocalizer<SharedResources> loc) => _loc = loc;
+
+    public string? GetMessage(string property, string defaultMessage)
+    {
+        var localized = _loc[defaultMessage];
+        return localized.ResourceNotFound ? null : localized.Value;
+    }
+}
+
+// 2. Register in DI:
+builder.Services.AddSingleton<IValidationLocalizer, PolishLocalizer>();
+
+// 3. Call once at startup:
+app.Services.ConfigureValidation();
+```
+
+That's it. `.WithValidation()` auto-resolves the localizer. Manual `Validate()` also uses it (resolved from the static `ValidationServiceProvider`).
+
+Without `IValidationLocalizer` in DI → default English messages (zero breaking change).
+
+## Setup
+
+```csharp
+var app = builder.Build();
+app.Services.ConfigureValidation();  // bridges DI → validation runtime (for localization)
+app.Services.ConfigureAop();         // if using [Log]/[Trace] etc.
+```
+
 ## Requirements
 
 `.WithValidation()` is auto-generated when your project references `Microsoft.AspNetCore.Http` (Web SDK projects). Non-web projects (class libraries, test projects) don't get this extension method — it's conditionally emitted.
