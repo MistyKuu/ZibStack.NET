@@ -241,6 +241,18 @@ public class GlobalAopE2eTests : IDisposable
     }
 
     [Fact]
+    public void GlobalApply_BaseMethodCalledThroughGenericInterface_RecordFires()
+    {
+        // Call Execute() (declared on IE2eHandler) through IE2eHandler<T> reference
+        IE2eHandler<string> svc = new E2eGenericHandler<string>();
+        svc.Execute(); // inherited from IE2eHandler
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Execute"
+            && c.Context.ClassName == "IE2eHandler");
+    }
+
+    [Fact]
     public void GlobalApply_BothArities_CoexistWithoutCollision()
     {
         IE2eHandler simple = new E2eSimpleHandler();
