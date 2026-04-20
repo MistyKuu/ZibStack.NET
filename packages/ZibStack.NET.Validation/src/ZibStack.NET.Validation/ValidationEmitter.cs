@@ -110,6 +110,12 @@ public sealed partial class ValidationGenerator
         sb.AppendLine();
         sb.AppendLine("        return errors.Count == 0 ? ValidationResult.Success : new ValidationResult(errors);");
         sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static string __Localize(string property, string defaultMessage)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var localizer = ValidationServiceProvider.ServiceProvider?.GetService(typeof(IValidationLocalizer)) as IValidationLocalizer;");
+        sb.AppendLine("        return localizer?.GetMessage(property, defaultMessage) ?? defaultMessage;");
+        sb.AppendLine("    }");
         sb.AppendLine("}");
 
         return sb.ToString();
@@ -142,7 +148,7 @@ public sealed partial class ValidationGenerator
     }
 
     private static string Err(string prop, string msg)
-        => $"new ValidationError(\"{EscapeString(prop)}\", \"{EscapeString(msg)}\")";
+        => $"new ValidationError(\"{EscapeString(prop)}\", __Localize(\"{EscapeString(prop)}\", \"{EscapeString(msg)}\"))";
 
     /// <summary>Builds error expression with {PropertyName}/{PropertyValue} placeholder support.</summary>
     private static string ErrWithPlaceholders(string propName, string msg, string accessExpr)
@@ -161,7 +167,7 @@ public sealed partial class ValidationGenerator
 
         // Contains {PropertyValue} — emit as interpolated string
         var parts = resolvedMsg.Replace("\"", "\\\"").Replace("{PropertyValue}", $"\" + {accessExpr} + \"");
-        return $"new ValidationError(\"{EscapeString(propName)}\", \"{parts}\")";
+        return $"new ValidationError(\"{EscapeString(propName)}\", __Localize(\"{EscapeString(propName)}\", \"{parts}\"))";
     }
 
     private static void EmitRule(StringBuilder sb, PropertyValidationInfo prop, ValidationRule rule, string extraIndent = "", bool cascade = false)
