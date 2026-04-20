@@ -223,9 +223,12 @@ public static class AopPipeline
             // Interface proxies use a distinct suffix so they don't collide with a real
             // class named the same as the interface (and so both files can be emitted when
             // a class has class-level [Log] + implements an interface of matching name).
+            var arityTag = classModel.TypeParameters.Count > 0
+                ? $"_{classModel.TypeParameters.Count}"
+                : "";
             var hintName = classModel.IsInterfaceProxy
-                ? $"{classModel.ClassName}_IfaceAop.g.cs"
-                : $"{classModel.ClassName}_Aop.g.cs";
+                ? $"{classModel.ClassName}{arityTag}_IfaceAop.g.cs"
+                : $"{classModel.ClassName}{arityTag}_Aop.g.cs";
             spc.AddSource(hintName, source);
 
             // Emit code map only for partial classes (never for interface proxies — they
