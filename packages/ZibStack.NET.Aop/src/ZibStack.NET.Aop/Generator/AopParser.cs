@@ -15,6 +15,15 @@ public static class AopParser
     private const string SensitiveAttributeName = "ZibStack.NET.Log.SensitiveAttribute";
     private const string NoLogAttributeName = "ZibStack.NET.Log.NoLogAttribute";
 
+    /// <summary>FullyQualifiedFormat + nullable annotations (shows ? on type args, arrays, etc.)</summary>
+    private static readonly SymbolDisplayFormat NullableFullyQualifiedFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+    private static readonly SymbolDisplayFormat NullableMinimalFormat =
+        SymbolDisplayFormat.MinimallyQualifiedFormat.AddMiscellaneousOptions(
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
     /// <summary>
     /// Checks if an invocation calls a method that has any AspectAttribute-derived attribute.
     /// Returns call-site info if so.
@@ -171,21 +180,34 @@ public static class AopParser
             if (isComplex && !isNoLog && !isSensitive)
                 sanitizedType = ParseTypeProperties(param.Type);
 
+            var fqType = param.Type.ToDisplayString(NullableFullyQualifiedFormat);
+            var minType = param.Type.ToDisplayString(NullableMinimalFormat);
+            // Top-level nullable annotation (param itself marked ?)
+            if (param.NullableAnnotation == NullableAnnotation.Annotated
+                && !fqType.EndsWith("?"))
+            {
+                fqType += "?";
+                minType += "?";
+            }
+
             parameters.Add(new InterceptedParameterModel(
                 param.Name,
-                param.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
-                param.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                minType,
+                fqType,
                 isSensitive,
                 isNoLog,
                 isComplex,
                 sanitizedType));
         }
 
-        // Return type
+        // Return type (with nullable annotations preserved)
         var returnType = method.ReturnType;
         bool isAsync = false;
         bool returnsVoid = returnType.SpecialType == SpecialType.System_Void;
-        string returnTypeStr = returnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string returnTypeStr = returnType.ToDisplayString(NullableFullyQualifiedFormat);
+        if (method.ReturnNullableAnnotation == NullableAnnotation.Annotated
+            && !returnTypeStr.EndsWith("?"))
+            returnTypeStr += "?";
 
         if (returnType is INamedTypeSymbol namedReturn)
         {
