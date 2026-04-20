@@ -47,6 +47,7 @@ internal sealed class PropertyValidationInfo
     public bool IsNullableRef { get; }
     public bool IsValueType { get; }
     public List<ValidationRule> Rules { get; }
+    public bool CascadeStopOnFirst { get; set; }
 
     public PropertyValidationInfo(string propertyName, string typeName, bool isNullableRef, bool isValueType, List<ValidationRule> rules)
     {
@@ -70,6 +71,7 @@ internal sealed class ValidationInfo
     public List<CrossFieldRule> CrossFieldRules { get; } = new();
     public List<NestedValidatableInfo> NestedProperties { get; } = new();
     public List<ConditionalRule> ConditionalRules { get; } = new();
+    public List<RuleSetRule> RuleSetRules { get; } = new();
 
     public ValidationInfo(string className, string? ns, string hintName, bool isRecord, List<PropertyValidationInfo> properties, bool isPartial = false)
     {
@@ -119,5 +121,13 @@ internal sealed class ConditionalRule
     /// <summary>The condition expression text (with parameter stripped, e.g. "RequiresShipping").</summary>
     public string ConditionExpression { get; set; } = "";
     /// <summary>Inner rules to emit when condition is true.</summary>
+    public List<CrossFieldRule> InnerRules { get; set; } = new();
+}
+
+internal sealed class RuleSetRule
+{
+    /// <summary>The name of the rule set (e.g. "Create", "Update").</summary>
+    public string Name { get; set; } = "";
+    /// <summary>Inner rules belonging to this rule set.</summary>
     public List<CrossFieldRule> InnerRules { get; set; } = new();
 }

@@ -218,3 +218,47 @@ public partial class ShippingRequest : IValidationConfigurator<ShippingRequest>
         });
     }
 }
+
+// ── CascadeMode test ─────────────────────────────────────────────────────────
+
+[ZValidate]
+public partial class CascadeTest
+{
+    [ZRequired] [ZMinLength(5)] [ZCascade]
+    public string Name { get; set; } = "";
+}
+
+// ── Placeholder test ─────────────────────────────────────────────────────────
+
+[ZValidate]
+public partial class PlaceholderTest
+{
+    [ZRequired(Message = "{PropertyName} cannot be empty")]
+    public string Title { get; set; } = "";
+
+    [ZRange(1, 100, Message = "{PropertyName} must be 1-100, got {PropertyValue}")]
+    public int Score { get; set; }
+}
+
+// ── RuleSet test ─────────────────────────────────────────────────────────────
+
+[ZValidate]
+public partial class RuleSetTest : IValidationConfigurator<RuleSetTest>
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Password { get; set; } = "";
+
+    public void Configure(IValidationBuilder<RuleSetTest> b)
+    {
+        b.Rule(x => !string.IsNullOrEmpty(x.Name), "Name required");
+        b.RuleSet("Create", set =>
+        {
+            set.Rule(x => !string.IsNullOrEmpty(x.Password), "Password required for creation");
+        });
+        b.RuleSet("Update", set =>
+        {
+            set.Rule(x => x.Id > 0, "Id required for update");
+        });
+    }
+}

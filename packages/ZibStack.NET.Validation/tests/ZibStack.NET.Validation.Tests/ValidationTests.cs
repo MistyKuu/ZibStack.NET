@@ -590,4 +590,112 @@ public class ValidationTests
         var req = new ShippingRequest { RequiresShipping = true, ShippingAddress = "123 Main St" };
         Assert.True(req.Validate().IsValid);
     }
+
+    // ── CascadeMode ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Cascade_NullName_OnlyRequiredError()
+    {
+        var obj = new CascadeTest { Name = null! };
+        var result = obj.Validate();
+        Assert.False(result.IsValid);
+        Assert.Single(result.ValidationErrors);
+        Assert.Contains("required", result.ValidationErrors[0].Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Cascade_EmptyName_OnlyRequiredError()
+    {
+        var obj = new CascadeTest { Name = "  " };
+        var result = obj.Validate();
+        Assert.False(result.IsValid);
+        Assert.Single(result.ValidationErrors);
+    }
+
+    [Fact]
+    public void Cascade_ShortName_OnlyMinLengthError()
+    {
+        var obj = new CascadeTest { Name = "Hi" };
+        var result = obj.Validate();
+        Assert.False(result.IsValid);
+        Assert.Single(result.ValidationErrors);
+        Assert.Contains("at least 5", result.ValidationErrors[0].Message);
+    }
+
+    [Fact]
+    public void Cascade_ValidName_NoError()
+    {
+        var obj = new CascadeTest { Name = "Hello" };
+        Assert.True(obj.Validate().IsValid);
+    }
+
+    // ── Placeholders ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Placeholder_PropertyName_InMessage()
+    {
+        var obj = new PlaceholderTest { Title = "", Score = 50 };
+        var result = obj.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.ValidationErrors, e => e.Message == "Title cannot be empty");
+    }
+
+    [Fact]
+    public void Placeholder_PropertyValue_InMessage()
+    {
+        var obj = new PlaceholderTest { Title = "OK", Score = 200 };
+        var result = obj.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Score must be 1-100, got 200"));
+    }
+
+    [Fact]
+    public void Placeholder_ValidData_NoError()
+    {
+        var obj = new PlaceholderTest { Title = "Good", Score = 50 };
+        Assert.True(obj.Validate().IsValid);
+    }
+
+    // ── RuleSet ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RuleSet_NoSetsSpecified_RunsAll()
+    {
+        var obj = new RuleSetTest { Name = "", Password = "", Id = 0 };
+        var result = obj.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Name required"));
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Password required"));
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Id required"));
+    }
+
+    [Fact]
+    public void RuleSet_CreateOnly_RunsBaseAndCreate()
+    {
+        var obj = new RuleSetTest { Name = "", Password = "", Id = 0 };
+        var result = obj.Validate(null, "Create");
+        Assert.False(result.IsValid);
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Name required"));
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Password required"));
+        Assert.DoesNotContain(result.ValidationErrors, e => e.Message.Contains("Id required"));
+    }
+
+    [Fact]
+    public void RuleSet_UpdateOnly_RunsBaseAndUpdate()
+    {
+        var obj = new RuleSetTest { Name = "", Password = "", Id = 0 };
+        var result = obj.Validate(null, "Update");
+        Assert.False(result.IsValid);
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Name required"));
+        Assert.Contains(result.ValidationErrors, e => e.Message.Contains("Id required"));
+        Assert.DoesNotContain(result.ValidationErrors, e => e.Message.Contains("Password required"));
+    }
+
+    [Fact]
+    public void RuleSet_ValidForCreate_NoError()
+    {
+        var obj = new RuleSetTest { Name = "Test", Password = "secret", Id = 0 };
+        var result = obj.Validate(null, "Create");
+        Assert.True(result.IsValid);
+    }
 }

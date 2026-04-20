@@ -118,10 +118,16 @@ public sealed partial class ValidationGenerator
                     }
                 }
 
+                // Check for [ZCascade] attribute
+                var hasCascade = prop.GetAttributes()
+                    .Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Validation.ZCascadeAttribute");
+
                 if (rules.Count > 0)
                 {
-                    properties.Add(new PropertyValidationInfo(
-                        prop.Name, typeName, isNullableRef, isValueType, rules));
+                    var propInfo = new PropertyValidationInfo(
+                        prop.Name, typeName, isNullableRef, isValueType, rules);
+                    propInfo.CascadeStopOnFirst = hasCascade;
+                    properties.Add(propInfo);
                 }
 
                 // Check if property type is IValidatable (has [ZValidate] or Configure method)
@@ -156,6 +162,7 @@ public sealed partial class ValidationGenerator
             // Parse cross-field rules from Configure(IValidationBuilder<T>) method.
             var crossFieldRules = new List<CrossFieldRule>();
             var conditionalRules = new List<ConditionalRule>();
+            var ruleSetRules = new List<RuleSetRule>();
             if (context.TargetNode is TypeDeclarationSyntax tds)
             {
                 foreach (var member in tds.Members)
@@ -164,13 +171,13 @@ public sealed partial class ValidationGenerator
                         && methodSyntax.Identifier.Text == "Configure"
                         && methodSyntax.Body is not null)
                     {
-                        ParseCrossFieldRules(methodSyntax.Body, context.SemanticModel, crossFieldRules, properties, symbol, conditionalRules);
+                        ParseCrossFieldRules(methodSyntax.Body, context.SemanticModel, crossFieldRules, properties, symbol, conditionalRules, ruleSetRules);
                         break;
                     }
                 }
             }
 
-            if (properties.Count == 0 && crossFieldRules.Count == 0 && nestedProps.Count == 0 && conditionalRules.Count == 0) return null;
+            if (properties.Count == 0 && crossFieldRules.Count == 0 && nestedProps.Count == 0 && conditionalRules.Count == 0 && ruleSetRules.Count == 0) return null;
 
             var hintName = symbol.ToDisplayString().Replace(".", "_").Replace("<", "_").Replace(">", "_");
 
@@ -183,6 +190,7 @@ public sealed partial class ValidationGenerator
             info.CrossFieldRules.AddRange(crossFieldRules);
             info.NestedProperties.AddRange(nestedProps);
             info.ConditionalRules.AddRange(conditionalRules);
+            info.RuleSetRules.AddRange(ruleSetRules);
             return info;
         }
         catch
@@ -196,7 +204,7 @@ public sealed partial class ValidationGenerator
     /// Supports b.Rule(x => expr, "msg"), b.Property(x => x.Prop).GreaterThan(x => x.Other),
     /// and b.When(x => condition, then => { ... }).
     /// </summary>
-    private static void ParseCrossFieldRules(BlockSyntax body, SemanticModel sm, List<CrossFieldRule> rules, List<PropertyValidationInfo>? fluentProperties = null, INamedTypeSymbol? typeSymbol = null, List<ConditionalRule>? conditionalRules = null)
+    private static void ParseCrossFieldRules(BlockSyntax body, SemanticModel sm, List<CrossFieldRule> rules, List<PropertyValidationInfo>? fluentProperties = null, INamedTypeSymbol? typeSymbol = null, List<ConditionalRule>? conditionalRules = null, List<RuleSetRule>? ruleSetRules = null)
     {
         foreach (var stmt in body.Statements)
         {
@@ -204,6 +212,37 @@ public sealed partial class ValidationGenerator
 
             // Unwrap the call chain
             var expr = es.Expression;
+
+            // Try b.RuleSet("name", set => { ... })
+            if (expr is InvocationExpressionSyntax rsInv
+                && rsInv.Expression is MemberAccessExpressionSyntax rsMae
+                && rsMae.Name.Identifier.Text == "RuleSet"
+                && rsInv.ArgumentList.Arguments.Count == 2
+                && ruleSetRules != null)
+            {
+                var nameArg = rsInv.ArgumentList.Arguments[0].Expression;
+                var bodyArg = rsInv.ArgumentList.Arguments[1].Expression;
+
+                var nameVal = sm.GetConstantValue(nameArg);
+                if (nameVal.HasValue && nameVal.Value is string rsName && bodyArg is SimpleLambdaExpressionSyntax rsLambda)
+                {
+                    var innerRules = new List<CrossFieldRule>();
+                    if (rsLambda.Body is BlockSyntax innerBlock)
+                    {
+                        ParseCrossFieldRules(innerBlock, sm, innerRules, fluentProperties, typeSymbol, null, null);
+                    }
+
+                    if (innerRules.Count > 0)
+                    {
+                        ruleSetRules.Add(new RuleSetRule
+                        {
+                            Name = rsName,
+                            InnerRules = innerRules,
+                        });
+                    }
+                }
+                continue;
+            }
 
             // Try b.When(x => condition, then => { ... }) or b.Unless(x => condition, then => { ... })
             if (expr is InvocationExpressionSyntax whenInv

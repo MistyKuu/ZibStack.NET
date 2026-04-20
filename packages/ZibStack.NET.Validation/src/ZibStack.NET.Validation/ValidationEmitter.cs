@@ -27,7 +27,20 @@ public sealed partial class ValidationGenerator
         var keyword = info.IsRecord ? "record" : "class";
         sb.AppendLine($"partial {keyword} {info.ClassName} : IValidatable");
         sb.AppendLine("{");
-        sb.AppendLine("    public ValidationResult Validate(ValidationContext? context = null)");
+
+        bool hasRuleSets = info.RuleSetRules.Count > 0;
+
+        if (hasRuleSets)
+        {
+            sb.AppendLine("    public ValidationResult Validate(ValidationContext? context = null) => Validate(context, null);");
+            sb.AppendLine();
+            sb.AppendLine("    public ValidationResult Validate(ValidationContext? context, params string[]? ruleSets)");
+        }
+        else
+        {
+            sb.AppendLine("    public ValidationResult Validate(ValidationContext? context = null)");
+        }
+
         sb.AppendLine("    {");
         sb.AppendLine("        context ??= new ValidationContext { RootObject = this };");
         sb.AppendLine("        var errors = new List<ValidationError>();");
@@ -35,9 +48,21 @@ public sealed partial class ValidationGenerator
 
         foreach (var prop in info.Properties)
         {
-            foreach (var rule in prop.Rules)
+            if (prop.CascadeStopOnFirst && prop.Rules.Count > 1)
             {
-                EmitRule(sb, prop, rule);
+                sb.AppendLine("        do {");
+                foreach (var rule in prop.Rules)
+                {
+                    EmitRule(sb, prop, rule, "    ", cascade: true);
+                }
+                sb.AppendLine("        } while (false);");
+            }
+            else
+            {
+                foreach (var rule in prop.Rules)
+                {
+                    EmitRule(sb, prop, rule);
+                }
             }
         }
 
@@ -63,6 +88,23 @@ public sealed partial class ValidationGenerator
             sb.AppendLine();
             sb.AppendLine("        // Conditional rules");
             EmitConditionalRules(sb, info);
+        }
+
+        // RuleSet rules
+        if (hasRuleSets)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        // RuleSet rules");
+            foreach (var rs in info.RuleSetRules)
+            {
+                sb.AppendLine($"        if (ruleSets == null || ruleSets.Length == 0 || System.Array.IndexOf(ruleSets, \"{EscapeString(rs.Name)}\") >= 0)");
+                sb.AppendLine($"        {{");
+                foreach (var rule in rs.InnerRules)
+                {
+                    EmitSingleCrossFieldRule(sb, rule, "            ");
+                }
+                sb.AppendLine($"        }}");
+            }
         }
 
         sb.AppendLine();
@@ -102,26 +144,56 @@ public sealed partial class ValidationGenerator
     private static string Err(string prop, string msg)
         => $"new ValidationError(\"{EscapeString(prop)}\", \"{EscapeString(msg)}\")";
 
-    private static void EmitRule(StringBuilder sb, PropertyValidationInfo prop, ValidationRule rule)
+    /// <summary>Builds error expression with {PropertyName}/{PropertyValue} placeholder support.</summary>
+    private static string ErrWithPlaceholders(string propName, string msg, string accessExpr)
+    {
+        bool hasPropertyValue = msg.Contains("{PropertyValue}");
+        bool hasPropertyName = msg.Contains("{PropertyName}");
+
+        if (!hasPropertyValue && !hasPropertyName)
+            return Err(propName, msg);
+
+        // Replace {PropertyName} with the literal property name
+        var resolvedMsg = msg.Replace("{PropertyName}", propName);
+
+        if (!hasPropertyValue)
+            return Err(propName, resolvedMsg);
+
+        // Contains {PropertyValue} — emit as interpolated string
+        var parts = resolvedMsg.Replace("\"", "\\\"").Replace("{PropertyValue}", $"\" + {accessExpr} + \"");
+        return $"new ValidationError(\"{EscapeString(propName)}\", \"{parts}\")";
+    }
+
+    private static void EmitRule(StringBuilder sb, PropertyValidationInfo prop, ValidationRule rule, string extraIndent = "", bool cascade = false)
     {
         var name = prop.PropertyName;
         var displayName = prop.PropertyName;
+        var indent = "        " + extraIndent;
+        var brk = cascade ? $" break;" : "";
 
         switch (rule.Kind)
         {
             case ValidationRuleKind.Required:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} is required.";
+                var err = ErrWithPlaceholders(name, msg, name);
                 if (prop.IsValueType)
                 {
                     if (prop.TypeName.EndsWith("?"))
-                        sb.AppendLine($"        if ({name} is null) errors.Add({Err(name, msg)});");
+                        sb.AppendLine($"{indent}if ({name} is null) {{ errors.Add({err});{brk} }}");
                 }
                 else
                 {
-                    sb.AppendLine($"        if ({name} is null) errors.Add({Err(name, msg)});");
-                    if (prop.TypeName == "string" || prop.TypeName == "string?")
-                        sb.AppendLine($"        else if (string.IsNullOrWhiteSpace({name})) errors.Add({Err(name, msg)});");
+                    if (cascade)
+                    {
+                        sb.AppendLine($"{indent}if ({name} is null || {(prop.TypeName == "string" || prop.TypeName == "string?" ? $"string.IsNullOrWhiteSpace({name})" : "false")}) {{ errors.Add({err});{brk} }}");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"{indent}if ({name} is null) errors.Add({err});");
+                        if (prop.TypeName == "string" || prop.TypeName == "string?")
+                            sb.AppendLine($"{indent}else if (string.IsNullOrWhiteSpace({name})) errors.Add({err});");
+                    }
                 }
                 break;
             }
@@ -130,7 +202,8 @@ public sealed partial class ValidationGenerator
             {
                 var len = (int)rule.MinValue;
                 var msg = rule.CustomMessage ?? $"{displayName} must be at least {len} characters.";
-                sb.AppendLine($"        if ({name} is not null && {name}.Length < {len}) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && {name}.Length < {len}) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
@@ -138,48 +211,54 @@ public sealed partial class ValidationGenerator
             {
                 var len = (int)rule.MaxValue;
                 var msg = rule.CustomMessage ?? $"{displayName} must be at most {len} characters.";
-                sb.AppendLine($"        if ({name} is not null && {name}.Length > {len}) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && {name}.Length > {len}) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
             case ValidationRuleKind.Range:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must be between {rule.MinValue} and {rule.MaxValue}.";
+                var err = ErrWithPlaceholders(name, msg, name);
                 if (prop.IsNullableRef || prop.TypeName.EndsWith("?"))
-                    sb.AppendLine($"        if ({name} is not null && ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue})) errors.Add({Err(name, msg)});");
+                    sb.AppendLine($"{indent}if ({name} is not null && ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue})) {{ errors.Add({err});{brk} }}");
                 else
-                    sb.AppendLine($"        if ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue}) errors.Add({Err(name, msg)});");
+                    sb.AppendLine($"{indent}if ((double){name} < {rule.MinValue} || (double){name} > {rule.MaxValue}) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
             case ValidationRuleKind.Email:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must be a valid email address.";
-                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$\")) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$\")) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
             case ValidationRuleKind.Url:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must be a valid URL.";
-                sb.AppendLine($"        if ({name} is not null && !System.Uri.TryCreate({name}, System.UriKind.Absolute, out _)) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && !System.Uri.TryCreate({name}, System.UriKind.Absolute, out _)) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
             case ValidationRuleKind.Match:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} does not match the required pattern.";
-                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"{rule.Pattern!.Replace("\"", "\"\"")}\")) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"{rule.Pattern!.Replace("\"", "\"\"")}\")) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
             case ValidationRuleKind.NotEmpty:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} must not be empty.";
+                var err = ErrWithPlaceholders(name, msg, name);
                 if (prop.TypeName == "string" || prop.TypeName == "string?")
-                    sb.AppendLine($"        if ({name} is not null && string.IsNullOrWhiteSpace({name})) errors.Add({Err(name, msg)});");
+                    sb.AppendLine($"{indent}if ({name} is not null && string.IsNullOrWhiteSpace({name})) {{ errors.Add({err});{brk} }}");
                 else
-                    sb.AppendLine($"        if ({name} is not null && ((System.Collections.ICollection){name}).Count == 0) errors.Add({Err(name, msg)});");
+                    sb.AppendLine($"{indent}if ({name} is not null && ((System.Collections.ICollection){name}).Count == 0) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
@@ -188,7 +267,8 @@ public sealed partial class ValidationGenerator
                 var values = rule.AllowedValues ?? System.Array.Empty<string>();
                 var valuesStr = string.Join(", ", values.Select(v => $"\"{EscapeString(v)}\""));
                 var msg = rule.CustomMessage ?? $"{displayName} must be one of: {string.Join(", ", values)}.";
-                sb.AppendLine($"        if ({name} is not null && !new[] {{ {valuesStr} }}.Contains({name})) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && !new[] {{ {valuesStr} }}.Contains({name})) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
@@ -197,43 +277,46 @@ public sealed partial class ValidationGenerator
                 var values = rule.AllowedValues ?? System.Array.Empty<string>();
                 var valuesStr = string.Join(", ", values.Select(v => $"\"{EscapeString(v)}\""));
                 var msg = rule.CustomMessage ?? $"{displayName} must not be one of: {string.Join(", ", values)}.";
-                sb.AppendLine($"        if ({name} is not null && new[] {{ {valuesStr} }}.Contains({name})) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && new[] {{ {valuesStr} }}.Contains({name})) {{ errors.Add({err});{brk} }}");
                 break;
             }
 
             case ValidationRuleKind.CreditCard:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} is not a valid credit card number.";
-                sb.AppendLine($"        if ({name} is not null)");
-                sb.AppendLine($"        {{");
-                sb.AppendLine($"            var __cc = {name}.Replace(\"-\", \"\").Replace(\" \", \"\");");
-                sb.AppendLine($"            var __ccValid = __cc.Length >= 13 && __cc.Length <= 19 && __cc.All(char.IsDigit);");
-                sb.AppendLine($"            if (__ccValid)");
-                sb.AppendLine($"            {{");
-                sb.AppendLine($"                var __sum = 0;");
-                sb.AppendLine($"                var __alt = false;");
-                sb.AppendLine($"                for (var __i = __cc.Length - 1; __i >= 0; __i--)");
-                sb.AppendLine($"                {{");
-                sb.AppendLine($"                    var __n = __cc[__i] - '0';");
-                sb.AppendLine($"                    if (__alt)");
-                sb.AppendLine($"                    {{");
-                sb.AppendLine($"                        __n *= 2;");
-                sb.AppendLine($"                        if (__n > 9) __n -= 9;");
-                sb.AppendLine($"                    }}");
-                sb.AppendLine($"                    __sum += __n;");
-                sb.AppendLine($"                    __alt = !__alt;");
-                sb.AppendLine($"                }}");
-                sb.AppendLine($"                __ccValid = __sum % 10 == 0;");
-                sb.AppendLine($"            }}");
-                sb.AppendLine($"            if (!__ccValid) errors.Add({Err(name, msg)});");
-                sb.AppendLine($"        }}");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null)");
+                sb.AppendLine($"{indent}{{");
+                sb.AppendLine($"{indent}    var __cc = {name}.Replace(\"-\", \"\").Replace(\" \", \"\");");
+                sb.AppendLine($"{indent}    var __ccValid = __cc.Length >= 13 && __cc.Length <= 19 && __cc.All(char.IsDigit);");
+                sb.AppendLine($"{indent}    if (__ccValid)");
+                sb.AppendLine($"{indent}    {{");
+                sb.AppendLine($"{indent}        var __sum = 0;");
+                sb.AppendLine($"{indent}        var __alt = false;");
+                sb.AppendLine($"{indent}        for (var __i = __cc.Length - 1; __i >= 0; __i--)");
+                sb.AppendLine($"{indent}        {{");
+                sb.AppendLine($"{indent}            var __n = __cc[__i] - '0';");
+                sb.AppendLine($"{indent}            if (__alt)");
+                sb.AppendLine($"{indent}            {{");
+                sb.AppendLine($"{indent}                __n *= 2;");
+                sb.AppendLine($"{indent}                if (__n > 9) __n -= 9;");
+                sb.AppendLine($"{indent}            }}");
+                sb.AppendLine($"{indent}            __sum += __n;");
+                sb.AppendLine($"{indent}            __alt = !__alt;");
+                sb.AppendLine($"{indent}        }}");
+                sb.AppendLine($"{indent}        __ccValid = __sum % 10 == 0;");
+                sb.AppendLine($"{indent}    }}");
+                sb.AppendLine($"{indent}    if (!__ccValid) {{ errors.Add({err});{brk} }}");
+                sb.AppendLine($"{indent}}}");
                 break;
             }
 
             case ValidationRuleKind.Phone:
             {
                 var msg = rule.CustomMessage ?? $"{displayName} is not a valid phone number.";
-                sb.AppendLine($"        if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"^\\+?[\\d\\s\\-\\(\\)]{{7,20}}$\")) errors.Add({Err(name, msg)});");
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null && !System.Text.RegularExpressions.Regex.IsMatch({name}, @\"^\\+?[\\d\\s\\-\\(\\)]{{7,20}}$\")) {{ errors.Add({err});{brk} }}");
                 break;
             }
         }

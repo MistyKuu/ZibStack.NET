@@ -28,6 +28,7 @@ public sealed partial class ValidationGenerator : IIncrementalGenerator
             ctx.AddSource("ZNotInAttribute.g.cs", ZNotInAttributeSource);
             ctx.AddSource("ZCreditCardAttribute.g.cs", ZCreditCardAttributeSource);
             ctx.AddSource("ZPhoneAttribute.g.cs", ZPhoneAttributeSource);
+            ctx.AddSource("ZCascadeAttribute.g.cs", ZCascadeAttributeSource);
             ctx.AddSource("IValidationConfigurator.g.cs", CrossFieldInterfacesSource);
         });
 
