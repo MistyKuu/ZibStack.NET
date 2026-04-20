@@ -20,9 +20,15 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- Async extensions need .NET 8+ -->
+  <!-- Async extensions + HTTP extensions need .NET 8+ -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <Compile Remove="ResultAsyncExtensions.cs" />
+    <Compile Remove="ResultHttpExtensions.cs" />
+  </ItemGroup>
+
+  <!-- ASP.NET Core types for ToHttpResult() — only on net8.0+ -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>
