@@ -297,13 +297,43 @@ public partial record ProductRequest
 
 ## ASP.NET Core Integration
 
+### Minimal API — endpoint filter (recommended)
+
+For Minimal APIs, use `.WithValidation()` — any `IValidatable` parameter is auto-validated before your handler runs:
+
+```csharp
+app.MapPost("/api/users", (CreateUserRequest req) =>
+{
+    // Only reached if req.Validate().IsValid == true
+    return Results.Ok(CreateUser(req));
+})
+.WithValidation();
+
+// Or apply to entire group:
+var api = app.MapGroup("/api").WithValidation();
+api.MapPost("/users", (CreateUserRequest req) => ...);
+api.MapPost("/orders", (OrderRequest req) => ...);
+```
+
+Returns `400 ValidationProblem` with structured errors matching RFC 7807:
+```json
+{
+  "errors": {
+    "Email": ["Email is required.", "Email must be a valid email address."],
+    "Age": ["Age must be between 18 and 120."]
+  }
+}
+```
+
+### Controllers — manual
+
 ```csharp
 [HttpPost]
 public IActionResult Create(CreateUserRequest request)
 {
     var validation = request.Validate();
     if (!validation.IsValid)
-        return BadRequest(new { Errors = validation.Errors });
+        return BadRequest(new { Errors = validation.ToDictionary() });
 
     // proceed...
 }

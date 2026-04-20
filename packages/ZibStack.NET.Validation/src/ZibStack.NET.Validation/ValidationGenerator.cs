@@ -31,6 +31,16 @@ public sealed partial class ValidationGenerator : IIncrementalGenerator
             ctx.AddSource("IValidationConfigurator.g.cs", CrossFieldInterfacesSource);
         });
 
+        // Emit ASP.NET endpoint filter only when Microsoft.AspNetCore.Http is referenced
+        context.RegisterSourceOutput(
+            context.CompilationProvider.Select(static (comp, _) =>
+                comp.GetTypeByMetadataName("Microsoft.AspNetCore.Http.Results") is not null),
+            static (spc, hasAspNet) =>
+            {
+                if (hasAspNet)
+                    spc.AddSource("ValidationEndpointFilter.g.cs", ValidationEndpointFilterSource);
+            });
+
         var targets = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 ZValidateAttributeFqn,
