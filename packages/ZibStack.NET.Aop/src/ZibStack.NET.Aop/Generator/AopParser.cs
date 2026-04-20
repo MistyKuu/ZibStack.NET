@@ -82,7 +82,10 @@ public static class AopParser
             ? ""
             : containingType.ContainingNamespace.ToDisplayString();
 
-        var paramSig = string.Join(",", methodSymbol.Parameters.Select(p =>
+        // Use OriginalDefinition so generic interface calls (IE2eCanHandle<E2eCreateOrder>.Handle)
+        // produce "TCommand" matching the open-generic proxy, not "E2eCreateOrder" which would mismatch.
+        var origMethod = methodSymbol.OriginalDefinition;
+        var paramSig = string.Join(",", origMethod.Parameters.Select(p =>
             p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
 
         return new CallSiteModel(
