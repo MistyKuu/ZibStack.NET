@@ -24,7 +24,7 @@ export default defineConfig({
 								{ label: 'Overview', slug: 'packages/log' },
 								{ label: 'Features', slug: 'packages/log/features' },
 								{ label: 'Internals (rewriter)', slug: 'packages/log/internals' },
-								{ label: '[Log] attribute & diagnostics', slug: 'packages/log/log-attribute' },
+								{ label: '[Log] attribute (→ AOP)', slug: 'packages/log/log-attribute' },
 								{ label: 'Attribute reference', slug: 'packages/log/attributes' },
 								{ label: 'Benchmarks', slug: 'packages/log/benchmarks' },
 								{ label: 'Alternatives', slug: 'packages/log/comparison' },
@@ -34,6 +34,7 @@ export default defineConfig({
 							label: 'AOP — Aspects & [Trace]',
 							items: [
 								{ label: 'Overview', slug: 'packages/aop' },
+								{ label: 'Log Attribute', slug: 'packages/aop/log-attribute' },
 								{ label: 'Built-in aspects', slug: 'packages/aop/built-in' },
 								{ label: 'Bulk Apply', slug: 'packages/aop/apply' },
 								{ label: 'Custom aspects & internals', slug: 'packages/aop/custom' },

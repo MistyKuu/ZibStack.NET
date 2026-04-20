@@ -1,142 +1,15 @@
 ---
 title: Features
-description: What the package automatically rewrites — interpolated logs, [Sensitive] masking, [NoLog], scopes, defaults, deferred string allocation.
+description: What the package automatically rewrites — interpolated logs, [Sensitive] masking, custom property names, structured exceptions.
 ---
 
 ## Features
-
-### Sensitive Data Masking
-
-```csharp
-[Log]
-public bool Authenticate(string username, [Sensitive] string password)
-{
-    // ...
-}
-// log: Entering AuthService.Authenticate(username: john, password: ***)
-```
-
-### Property-Level Masking
-
-`[Sensitive]` and `[NoLog]` work on class properties too — nested objects are handled recursively:
-
-```csharp
-public class Order
-{
-    public int Id { get; set; }
-    public string Product { get; set; }
-    [Sensitive] public string CreditCard { get; set; }  // → "***"
-    [NoLog] public byte[] RawPayload { get; set; }      // excluded
-    public CustomerInfo Customer { get; set; }           // nested
-}
-
-public class CustomerInfo
-{
-    public string Name { get; set; }
-    [Sensitive] public string Email { get; set; }        // → "***" (nested)
-}
-
-[Log]
-public Order PlaceOrder(Order order) { ... }
-// log: {"Id":1,"Product":"Widget","CreditCard":"***","Customer":{"Name":"John","Email":"***"}}
-```
-
-### Exclude Parameters
-
-```csharp
-[Log]
-public void Upload(string fileName, [NoLog] byte[] fileContent)
-{
-    // ...
-}
-// log: Entering StorageService.Upload(fileName: report.pdf)
-// fileContent is excluded entirely
-```
-
-### Custom Log Levels
-
-```csharp
-[Log(EntryExitLevel = ZibLogLevel.Debug, ExceptionLevel = ZibLogLevel.Critical)]
-public async Task<decimal> CalculateTotalAsync(int orderId)
-{
-    // ...
-}
-```
-
-### Minimal Logging (Hot Paths)
-
-```csharp
-[Log(LogParameters = false, MeasureElapsed = false)]
-[return: NoLog]
-public void Ping()
-{
-    // ...
-}
-// log: Entering HealthService.Ping()
-// log: Exited HealthService.Ping
-```
-
-### Custom Messages
-
-```csharp
-[Log(
-    EntryMessage = "Processing payment for order {orderId}, amount: {amount}",
-    ExitMessage = "Payment completed in {ElapsedMs}ms -> {Result}")]
-public Task<Receipt> ProcessPaymentAsync(int orderId, decimal amount)
-{
-    // ...
-}
-```
-
-**Available placeholders:**
-
-| Placeholder | Where | Description |
-|---|---|---|
-| `{paramName}` | `EntryMessage` | Method parameter by name (e.g. `{orderId}`, `{amount}`) |
-| `{ElapsedMs}` | `ExitMessage` | Elapsed time in ms (requires `MeasureElapsed = true`) |
-| `{Result}` | `ExitMessage` | Return value as string (excluded by `[return: NoLog]`) |
-
-Parameters marked `[Sensitive]` are logged as `***`. Parameters marked `[NoLog]` are excluded entirely. Use `[return: Sensitive]` / `[return: NoLog]` for return values.
-
-### Object Logging
-
-Controls how complex objects (classes, records, structs) appear in logs. Configurable per method via `ObjectLogMode`. Primitive types (`int`, `string`, `decimal`, etc.) are always logged directly regardless of the mode.
-
-**Destructure** (default) — Serilog-style `{@param}`. Structured logging providers (Serilog, Seq, Application Insights) capture object properties as structured data that you can filter and query by. Console provider falls back to `ToString()`:
-
-```csharp
-[Log] // ObjectLogMode.Destructure is the default
-public Order GetOrder(int id) { ... }
-
-// Serilog/Seq: captures Result.Id, Result.Product, Result.Total as structured fields
-// Console:     Exited GetOrder in 3ms -> SampleApi.Services.Order (ToString fallback)
-```
-
-**JSON** — serializes objects with `System.Text.Json`. Works with any logging provider:
-
-```csharp
-[Log(ObjectLogging = ObjectLogMode.Json)]
-public Order GetOrder(int id) { ... }
-
-// Any provider: Entering GetOrder(id: 1)
-//               Exited GetOrder in 3ms -> {"Id":1,"Product":"Widget","Total":29.97}
-```
-
-**ToString** — calls `object.ToString()`. Override `ToString()` for custom output:
-
-```csharp
-[Log(ObjectLogging = ObjectLogMode.ToString)]
-public Order GetOrder(int id) { ... }
-
-// log: Exited GetOrder in 3ms -> SampleApi.Services.Order
-// (unless Order overrides ToString())
-```
 
 ### Interpolated String Logging
 
 Use `$"..."` interpolated strings with structured logging — no more `"template {Param}", value` boilerplate. Variable names are automatically captured as property names via `CallerArgumentExpression`.
 
-Just call standard `LogXxx` methods — C# 10+ automatically prefers the structured overload for `$"..."` arguments, as long as `ZibStack.NET.Log` is in scope. Add `using ZibStack.NET.Log;` in the file, or enable the global using once via [`<ZibLogEmitGlobalUsing>true</ZibLogEmitGlobalUsing>`](#configuration):
+Just call standard `LogXxx` methods — C# 10+ automatically prefers the structured overload for `$"..."` arguments, as long as `ZibStack.NET.Log` is in scope. Add `using ZibStack.NET.Log;` in the file, or enable the global using once via [`<ZibLogEmitGlobalUsing>true</ZibLogEmitGlobalUsing>`](/ZibStack.NET/packages/log/#configuration):
 
 ```csharp
 using ZibStack.NET.Log;   // needed for the structured overload to be picked
@@ -190,7 +63,7 @@ Useful when:
 
 The `#` override is resolved at **compile time** by the source generator — zero runtime cost. Everything before `#` is the format specifier, everything after is the property name. No `#` = default `CallerArgumentExpression` behavior.
 
-**How it works (short):** see the [In-depth mechanism](#in-depth-how-loginformation-actually-works) section below. Two layers work together — the interpolated-string handler does the argument capture and lazy `IsEnabled` check, the source-generated interceptor rewrites the dispatch to use a cached `LoggerMessage.Define` delegate. Disabled log calls cost ~3.2 ns (one `IsEnabled` check via the handler's `out bool shouldAppend`), enabled calls are comparable to hand-written `LoggerMessage.Define`.
+**How it works (short):** Two layers work together — the interpolated-string handler does the argument capture and lazy `IsEnabled` check, the source-generated interceptor rewrites the dispatch to use a cached `LoggerMessage.Define` delegate. Disabled log calls cost ~3.2 ns (one `IsEnabled` check via the handler's `out bool shouldAppend`), enabled calls are comparable to hand-written `LoggerMessage.Define`.
 
 ### Structured Exceptions
 
@@ -226,16 +99,15 @@ throw new ZibException<OrderError>(OrderError.NotFound, $"Order {orderId} not fo
 // ex.Code == OrderError.NotFound
 ```
 
-### Async Support
+### `[Log]` Attribute Features
 
-Works with `Task`, `Task<T>`, `ValueTask`, and `ValueTask<T>` — the generator adds `async`/`await` automatically.
+The `[Log]` attribute (entry/exit/error logging, `[Sensitive]`/`[NoLog]` masking, `ObjectLogMode`, custom levels) is now part of the **AOP** package.
 
-```csharp
-[Log]
-public async Task<List<Order>> GetOrdersAsync(int customerId)
-{
-    return await _repo.GetByCustomerAsync(customerId);
-}
-```
-
-
+See: **[AOP — Log Attribute](/ZibStack.NET/packages/aop/log-attribute/)** for:
+- Sensitive data masking (`[Sensitive]`, `[NoLog]`)
+- Property-level masking (nested objects)
+- Custom log levels (`EntryExitLevel`, `ExceptionLevel`)
+- Minimal logging for hot paths
+- Custom messages with placeholders
+- Object logging modes (Destructure/Json/ToString)
+- Async support

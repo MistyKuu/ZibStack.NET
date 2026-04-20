@@ -1,44 +1,26 @@
 ---
-title: "[Log] attribute & diagnostics"
-description: How the method-level [Log] attribute generates entry/exit logs, plus diagnostic IDs the analyzer surfaces.
+title: "[Log] attribute"
+description: "The [Log] attribute is now part of ZibStack.NET.Aop. This page redirects to the AOP documentation."
 ---
 
-## `[Log]` attribute — how that works (different mechanism)
+## `[Log]` attribute has moved
 
-The `[Log]` attribute uses a **completely different** code generation path from the interpolated-string handler — don't mix them up.
+The `[Log]` attribute for method-level entry/exit/error logging is now handled by the **ZibStack.NET.Aop** package.
 
-ZibStack.NET.Log's `[Log]` generator runs at compile time:
+See the full documentation at: **[AOP — Log Attribute](/ZibStack.NET/packages/aop/log-attribute/)**
 
-1. Finds classes marked `[Log]` and methods marked `[Log]`
-2. For each decorated method, emits an interceptor that wraps the original call with entry/exit/exception logging
-3. The wrapper uses `LoggerMessage.Define` (zero-allocation) and resolves the `ILogger<T>` from DI (cached after first resolve)
+### Quick summary
 
-```
-Your code                          Generated interceptor
-──────────                         ─────────────────────
-service.PlaceOrder(42, "Widget")   →   PlaceOrder_ZibStack.Log(@this, 42, "Widget")
-                                       {
-                                           log entry (LoggerMessage.Define)
-                                           stopwatch.Start()
-                                           try {
-                                               result = @this.PlaceOrder(42, "Widget")
-                                               log exit + elapsed
-                                           } catch {
-                                               log error + elapsed
-                                               throw
-                                           }
-                                       }
+- Install `ZibStack.NET.Aop` (not `ZibStack.NET.Log`) to use `[Log]`
+- Call `app.Services.UseAop()` at startup
+- The `ZibStack.NET.Log` package provides only interpolated-string logging (`_logger.LogInformation($"...")`)
+
+### Migration
+
+If you previously installed `ZibStack.NET.Log` for the `[Log]` attribute, add `ZibStack.NET.Aop`:
+
+```bash
+dotnet add package ZibStack.NET.Aop
 ```
 
-**No reflection. No IL weaving. No runtime proxy. No virtual methods. No partial classes.** The generated code is identical to what you'd write by hand with `LoggerMessage.Define`.
-
-The `[Log]` attribute and interpolated-string logging are orthogonal — you can use either, both, or neither in the same project. They share only the `LoggerMessage.Define` machinery they both emit.
-
-## Diagnostics
-
-ZibStack.NET.Log reports clear compiler errors when something is misconfigured:
-
-| Code | Description |
-|---|---|
-| SL0005 | `[Log]` on static method (not supported) |
-
+No code changes needed — the attribute API is the same. The AOP package handles code generation for `[Log]`.

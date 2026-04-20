@@ -193,6 +193,77 @@ public class OrderService
 }
 ```
 
+## ASP.NET Integration
+
+`Result<T>` integrates naturally with ASP.NET minimal APIs and controllers. The library doesn't ship a built-in ASP.NET adapter (to avoid a dependency on `Microsoft.AspNetCore`), but a small extension method bridges the gap:
+
+### Extension method pattern
+
+```csharp
+using Microsoft.AspNetCore.Http;
+
+public static class ResultExtensions
+{
+    public static IResult ToResponse<T>(this Result<T> result) =>
+        result.Match(
+            value => Results.Ok(value),
+            error => error.Code switch
+            {
+                "NotFound"     => Results.NotFound(error.Message),
+                "Validation"   => Results.BadRequest(error.Message),
+                "Unauthorized" => Results.Unauthorized(),
+                "Forbidden"    => Results.Forbid(),
+                "Conflict"     => Results.Conflict(error.Message),
+                _              => Results.Problem(error.Message)
+            });
+}
+```
+
+### Usage in minimal APIs
+
+```csharp
+app.MapGet("/api/orders/{id}", (int id, OrderService svc) =>
+    svc.GetOrder(id).ToResponse());
+
+app.MapPost("/api/orders", async (CreateOrderRequest req, OrderService svc) =>
+    (await svc.PlaceOrderAsync(req)).ToResponse());
+```
+
+### Usage in controllers
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class OrdersController : ControllerBase
+{
+    private readonly OrderService _svc;
+
+    [HttpGet("{id}")]
+    public IActionResult Get(int id) =>
+        _svc.GetOrder(id).Match<IActionResult>(
+            value => Ok(value),
+            error => error.Code switch
+            {
+                "NotFound" => NotFound(error.Message),
+                "Validation" => BadRequest(error.Message),
+                _ => StatusCode(500, error.Message)
+            });
+}
+```
+
+### Async pipeline example
+
+```csharp
+app.MapPost("/api/orders/{id}/ship", async (int id, ShipmentService svc) =>
+    (await svc.GetOrder(id)
+        .BindAsync(order => svc.CreateShipment(order))
+        .TapAsync(shipment => svc.NotifyCustomer(shipment))
+        .MapAsync(shipment => new { shipment.TrackingNumber }))
+    .ToResponse());
+```
+
+> **Tip:** Place the `ToResponse()` extension in a shared project or `ServiceCollectionExtensions` file so all endpoints can use it consistently.
+
 ## Requirements
 
 - .NET 8.0+ (async extensions)
