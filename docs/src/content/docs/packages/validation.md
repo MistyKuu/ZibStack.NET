@@ -5,7 +5,7 @@ description: Source-generated validation for .NET — add validation attributes,
 
 [![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.Validation.svg)](https://www.nuget.org/packages/ZibStack.NET.Validation) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Validation)
 
-Source-generated validation for .NET. Add validation attributes, get a compile-time `Validate()` method — no reflection, no runtime overhead.
+Source-generated validation for .NET. Decorate your models with attributes, optionally add fluent rules, and the generator emits a compile-time `Validate()` method — **zero reflection, zero runtime overhead**.
 
 ## Install
 
@@ -38,7 +38,7 @@ public partial class CreateUserRequest
 }
 ```
 
-The generator creates a `Validate()` method at compile-time:
+Usage:
 
 ```csharp
 var request = new CreateUserRequest { Name = "", Email = "bad", Age = 10 };
@@ -46,125 +46,244 @@ var result = request.Validate();
 
 if (!result.IsValid)
 {
-    foreach (var error in result.Errors)
-        Console.WriteLine(error);
-    // "Name is required."
-    // "Email must be a valid email address."
-    // "Age must be between 18 and 120."
+    foreach (var error in result.ValidationErrors)
+        Console.WriteLine($"{error.Property}: {error.Message}");
 }
+// Output:
+// Name: Name is required.
+// Name: Name must be at least 2 characters.
+// Email: Email must be a valid email address.
+// Age: Age must be between 18 and 120.
 ```
 
 ## Validation Attributes
 
-| Attribute | Target | Description |
-|-----------|--------|-------------|
-| `[ZValidate]` | Class/Record | Marks the type for validation generation (must be `partial`) |
-| `[ZRequired]` | Property | Must not be null (or empty/whitespace for strings) |
-| `[ZMinLength(n)]` | Property | String/collection must have at least `n` characters/items |
-| `[ZMaxLength(n)]` | Property | String/collection must have at most `n` characters/items |
-| `[ZRange(min, max)]` | Property | Numeric value must be within range (inclusive) |
-| `[ZEmail]` | Property | Must be a valid email address |
-| `[ZUrl]` | Property | Must be a valid absolute URL |
-| `[ZMatch(pattern)]` | Property | Must match the regex pattern |
-| `[ZNotEmpty]` | Property | Collection must have items; string must not be whitespace |
-| `[ZIn("a", "b", "c")]` | Property | Value must be one of the specified allowed values |
-| `[ZNotIn("x", "y")]` | Property | Value must NOT be one of the specified values |
-| `[ZCreditCard]` | Property | Must pass Luhn algorithm check (credit card number) |
-| `[ZPhone]` | Property | Must be a valid phone number format |
+All attributes live in the `ZibStack.NET.Validation` namespace and are processed at compile time.
 
-All attributes support a `Message` property for custom error messages:
+| Attribute | Applies to | Description |
+|-----------|-----------|-------------|
+| `[ZValidate]` | class / record / struct | Marks the type for code generation (must be `partial`) |
+| `[ZRequired]` | property | Not null; for strings also not empty/whitespace |
+| `[ZMinLength(n)]` | property (string / collection) | Minimum length or item count |
+| `[ZMaxLength(n)]` | property (string / collection) | Maximum length or item count |
+| `[ZRange(min, max)]` | property (numeric) | Inclusive numeric range |
+| `[ZEmail]` | property (string) | Must match email regex |
+| `[ZUrl]` | property (string) | Must be a valid absolute URI (`Uri.TryCreate`) |
+| `[ZMatch(pattern)]` | property (string) | Must match the given regex pattern |
+| `[ZNotEmpty]` | property (collection / string) | Collection must have items; string must not be whitespace |
+| `[ZIn("a","b","c")]` | property | Value must be one of the allowed values |
+| `[ZNotIn("x","y")]` | property | Value must NOT be any of the specified values |
+| `[ZCreditCard]` | property (string) | Must pass the Luhn algorithm check |
+| `[ZPhone]` | property (string) | Must match phone number format regex |
+| `[ZCascade]` | property | Stop after first rule failure for this property |
+
+### Custom error messages
+
+All validation attributes accept a `Message` parameter:
 
 ```csharp
 [ZRequired(Message = "Please provide your name")]
 [ZMatch(@"^\d{3}-\d{4}$", Message = "Phone must be in format XXX-XXXX")]
+[ZRange(1, 100, Message = "{PropertyName} must be between 1 and 100, got {PropertyValue}")]
 ```
 
-## Cross-field Validation
+## Fluent Rules (IValidationConfigurator&lt;T&gt;)
 
-Implement `IValidationConfigurator<T>` to add rules that compare properties against each other. The generator parses `Configure()` at compile time — it's never invoked at runtime.
-
-### Free-form expressions
+For rules that go beyond single-property attributes, implement `IValidationConfigurator<T>`. The generator reads your `Configure()` method at compile time and inlines the logic into the generated `Validate()` — it is **never invoked at runtime**.
 
 ```csharp
 [ZValidate]
-public partial class DateRange : IValidationConfigurator<DateRange>
+public partial class OrderRequest : IValidationConfigurator<OrderRequest>
 {
-    [ZRequired] public DateTime StartDate { get; set; }
-    [ZRequired] public DateTime EndDate { get; set; }
+    // ... properties ...
 
-    public void Configure(IValidationBuilder<DateRange> b)
+    public void Configure(IValidationBuilder<OrderRequest> b)
     {
-        b.Rule(x => x.EndDate > x.StartDate, "EndDate must be after StartDate");
+        // rules go here
     }
 }
 ```
 
-### Per-property comparisons
+### Custom expressions
 
-```csharp
-[ZValidate]
-public partial class PasswordForm : IValidationConfigurator<PasswordForm>
-{
-    [ZRequired] [ZMinLength(8)]
-    public string Password { get; set; } = "";
-    [ZRequired]
-    public string ConfirmPassword { get; set; } = "";
-
-    public void Configure(IValidationBuilder<PasswordForm> b)
-    {
-        b.Property(x => x.ConfirmPassword).EqualTo(x => x.Password, "Passwords must match");
-    }
-}
-```
-
-Available comparisons: `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`, `EqualTo`, `NotEqualTo`. Cross-field rules combine with per-property attributes — both are checked in the generated `Validate()` method.
-
-### Complex expressions
-
-`b.Rule()` accepts any lambda that compiles as C# in the class context — nested members, arithmetic, null checks, `&&`/`||`:
+Use `b.Rule()` for free-form boolean expressions:
 
 ```csharp
 public void Configure(IValidationBuilder<OrderRequest> b)
 {
     b.Rule(x => x.Items.Count > 0, "Order must have at least one item");
-    b.Rule(x => x.Discount >= 0 && x.Discount <= x.Subtotal, "Discount cannot exceed subtotal");
-    b.Rule(x => x.Total == x.Subtotal - x.Discount, "Total must equal Subtotal minus Discount");
-    b.Rule(x => x.ShipBy == null || x.ShipBy > x.CreatedAt, "ShipBy must be after CreatedAt");
+    b.Rule(x => x.Discount >= 0 && x.Discount <= x.Subtotal,
+        "Discount cannot exceed subtotal");
+    b.Rule(x => x.Total == x.Subtotal - x.Discount,
+        "Total must equal Subtotal minus Discount");
+    b.Rule(x => x.ShipBy == null || x.ShipBy > x.CreatedAt,
+        "ShipBy must be after CreatedAt");
 }
 ```
 
-The generator inlines the lambda body directly into the `Validate()` method — no expression tree evaluation at runtime.
+Any expression that compiles as C# in the class context works — property access, arithmetic, null checks, `&&`/`||`, method calls.
 
-### Conditional validation
+### Per-property chains
+
+Use `b.Property()` to attach fluent rules to a specific property:
+
+```csharp
+public void Configure(IValidationBuilder<RegistrationForm> b)
+{
+    b.Property(x => x.Username)
+        .Required()
+        .MinLength(3)
+        .MaxLength(20)
+        .Match(@"^[a-zA-Z0-9_]+$", "Username can only contain letters, numbers, and underscores");
+
+    b.Property(x => x.Email)
+        .Required()
+        .Email();
+
+    b.Property(x => x.Password)
+        .Required()
+        .MinLength(8);
+}
+```
+
+This is equivalent to stacking attributes but allows dynamic composition.
+
+### Cross-field comparisons
+
+Use comparison methods on `b.Property()` to compare one property against another:
+
+```csharp
+public void Configure(IValidationBuilder<DateRange> b)
+{
+    b.Property(x => x.EndDate).GreaterThan(x => x.StartDate);
+    b.Property(x => x.Max).GreaterThanOrEqual(x => x.Min);
+    b.Property(x => x.ConfirmPassword).EqualTo(x => x.Password, "Passwords must match");
+}
+```
+
+Available comparisons:
+
+| Method | Description |
+|--------|-------------|
+| `.GreaterThan(x => x.Other)` | Property must be greater than another |
+| `.GreaterThanOrEqual(x => x.Other)` | Property must be greater than or equal to another |
+| `.LessThan(x => x.Other)` | Property must be less than another |
+| `.LessThanOrEqual(x => x.Other)` | Property must be less than or equal to another |
+| `.EqualTo(x => x.Other)` | Property must equal another |
+| `.NotEqualTo(x => x.Other)` | Property must not equal another |
+
+All accept an optional custom message as the second argument.
+
+### Conditional validation (When / Unless)
 
 Use `b.When()` to apply rules only when a condition is met:
 
 ```csharp
-[ZValidate]
-public partial class ShippingRequest : IValidationConfigurator<ShippingRequest>
+public void Configure(IValidationBuilder<ShippingRequest> b)
 {
-    public bool RequiresShipping { get; set; }
-    public string? ShippingAddress { get; set; }
-    public string? TrackingNumber { get; set; }
-
-    public void Configure(IValidationBuilder<ShippingRequest> b)
+    b.When(x => x.RequiresShipping, then =>
     {
-        b.When(x => x.RequiresShipping, then =>
+        then.Property(x => x.ShippingAddress).Required();
+        then.Property(x => x.PostalCode).Required().Match(@"^\d{5}$");
+        then.Rule(x => !string.IsNullOrEmpty(x.City), "City is required for shipping");
+    });
+}
+```
+
+When the condition is `false`, all inner rules are skipped entirely.
+
+Use `b.Unless()` for the inverse — rules apply when the condition is `false`:
+
+```csharp
+public void Configure(IValidationBuilder<PaymentRequest> b)
+{
+    b.Unless(x => x.IsFreeOrder, then =>
+    {
+        then.Property(x => x.CardNumber).Required().CreditCard();
+        then.Property(x => x.ExpiryDate).Required();
+    });
+}
+```
+
+### RuleSet
+
+Group rules under named sets and validate selectively:
+
+```csharp
+[ZValidate]
+public partial class UserDto : IValidationConfigurator<UserDto>
+{
+    [ZRequired] public string Name { get; set; } = "";
+    [ZRequired] [ZEmail] public string Email { get; set; } = "";
+    [ZMinLength(8)] public string Password { get; set; } = "";
+
+    public void Configure(IValidationBuilder<UserDto> b)
+    {
+        b.RuleSet("Create", set =>
         {
-            then.Rule(x => !string.IsNullOrEmpty(x.ShippingAddress),
-                "Shipping address is required when shipping is needed");
-            then.Rule(x => !string.IsNullOrEmpty(x.TrackingNumber),
-                "Tracking number is required when shipping is needed");
+            set.Property(x => x.Password).Required().MinLength(8);
+        });
+
+        b.RuleSet("Update", set =>
+        {
+            set.Rule(x => x.Name.Length > 0 || x.Email.Length > 0,
+                "At least one field must be provided for update");
         });
     }
 }
 ```
 
-When `RequiresShipping` is false, the inner rules are skipped entirely. When true, they are evaluated normally.
+Invoke a specific rule set:
+
+```csharp
+// Validates all attribute rules + "Create" rule set
+var result = user.Validate(context: null, ruleSet: "Create");
+
+// Validates only attribute rules (no rule sets)
+var result = user.Validate();
+```
+
+## CascadeMode
+
+By default, all rules for a property are evaluated and all failures are returned. Add `[ZCascade]` to stop after the first failure for that property:
+
+```csharp
+[ZValidate]
+public partial class LoginRequest
+{
+    [ZCascade]
+    [ZRequired]
+    [ZEmail]
+    [ZMaxLength(255)]
+    public string Email { get; set; } = "";
+}
+```
+
+If `Email` is empty, only `"Email is required."` is returned — the email format and max-length checks are skipped. This is useful when later rules only make sense if earlier ones pass.
+
+## Message Placeholders
+
+Custom error messages support these placeholders:
+
+| Placeholder | Replaced with |
+|-------------|---------------|
+| `{PropertyName}` | The name of the property being validated |
+| `{PropertyValue}` | The current value of the property |
+
+```csharp
+[ZRange(1, 100, Message = "{PropertyName} must be 1-100, but was {PropertyValue}")]
+public int Quantity { get; set; }
+
+// Error: "Quantity must be 1-100, but was 250"
+```
+
+Placeholders work in all attribute-based messages. For fluent `b.Rule()` messages, use string interpolation in the lambda message or hardcoded strings since the message is a compile-time constant.
 
 ## Nested Validation
 
-Properties whose type has `[ZValidate]` are automatically validated. Errors are prefixed with the property path:
+### Objects
+
+Properties whose type is also marked `[ZValidate]` are automatically validated. Errors include the full property path:
 
 ```csharp
 [ZValidate]
@@ -172,6 +291,7 @@ public partial class Address
 {
     [ZRequired] public string Street { get; set; } = "";
     [ZRequired] public string City { get; set; } = "";
+    [ZRequired] [ZMatch(@"^\d{5}$")] public string Zip { get; set; } = "";
 }
 
 [ZValidate]
@@ -183,123 +303,140 @@ public partial class CustomerForm
 }
 ```
 
-`form.Validate()` returns structured errors with property paths. Nullable properties are skipped when null. Context is auto-created — just call `form.Validate()`.
+```csharp
+var form = new CustomerForm
+{
+    Name = "Alice",
+    BillingAddress = new Address { Street = "", City = "NYC", Zip = "abc" },
+    ShippingAddress = null  // not validated
+};
+
+var result = form.Validate();
+// ValidationErrors:
+//   Property="BillingAddress.Street"  Message="Street is required."
+//   Property="BillingAddress.Zip"     Message="Zip must match pattern ^\d{5}$."
+```
+
+Nullable nested properties are skipped when `null`.
 
 ### Collections
 
-Collections of `[ZValidate]` types are validated element-by-element with index:
+Collections of `[ZValidate]` types are validated element-by-element. The error path includes the index:
 
 ```csharp
 [ZValidate]
+public partial class LineItem
+{
+    [ZRequired] public string Sku { get; set; } = "";
+    [ZRange(1, 9999)] public int Quantity { get; set; }
+}
+
+[ZValidate]
 public partial class Invoice
 {
+    [ZRequired] public string InvoiceNumber { get; set; } = "";
     public List<LineItem> Lines { get; set; } = new();
 }
 ```
 
-Errors: `"Lines[0].Sku is required."`, `"Lines[2].Quantity must be between 1 and 9999."`.
+```csharp
+var invoice = new Invoice
+{
+    InvoiceNumber = "INV-001",
+    Lines = new()
+    {
+        new LineItem { Sku = "", Quantity = 5 },
+        new LineItem { Sku = "ABC", Quantity = 0 },
+    }
+};
+
+var result = invoice.Validate();
+// "Lines[0].Sku"      → "Sku is required."
+// "Lines[1].Quantity"  → "Quantity must be between 1 and 9999."
+```
 
 ### ValidationContext
 
-Context is auto-created at the root and flows through nested validators automatically. You only pass it explicitly if you need custom data:
+A `ValidationContext` is automatically created at the root and flows through nested validators. You only pass one explicitly if you need custom data:
 
 ```csharp
 // Auto — context created internally with RootObject = form
 var result = form.Validate();
 
-// Optional — pass custom data via Items
+// Manual — pass custom data via Items
 var result = form.Validate(new ValidationContext
 {
-    Items = { ["source"] = "API", ["userId"] = 42 },
+    Items = { ["tenant"] = "acme", ["userId"] = currentUserId },
 });
 ```
 
 | Property | Description |
-|---|---|
-| `Parent` | The object that triggered this nested validation (auto-set) |
-| `Path` | Dot-separated path from root, e.g. `"BillingAddress"` (auto-set) |
-| `RootObject` | The top-level object that started the chain (auto-set) |
+|----------|-------------|
+| `Path` | Dot-separated path from root (e.g. `"BillingAddress"`, `"Lines[0]"`) — auto-set |
+| `Parent` | The object that triggered this nested validation — auto-set |
+| `RootObject` | The top-level object that started the chain — auto-set |
 | `Items` | `Dictionary<string, object?>` for custom user data |
 
-## IValidatable Interface
-
-All `[ZValidate]` types implement `IValidatable`:
-
-```csharp
-public interface IValidatable
-{
-    ValidationResult Validate(ValidationContext? context = null);
-}
-
-// Use in generic code
-void Process<T>(T request) where T : IValidatable
-{
-    var result = request.Validate();
-    if (!result.IsValid)
-        throw new ArgumentException(string.Join(", ", result.Errors));
-}
-```
-
-## ValidationResult
+## ValidationResult & ValidationError
 
 ```csharp
 public sealed class ValidationResult
 {
+    /// True if no errors
     public bool IsValid { get; }
 
-    // Structured errors with property path + message
+    /// Structured errors — each has Property path + Message
     public IReadOnlyList<ValidationError> ValidationErrors { get; }
 
-    // Flat error strings (backward compat)
+    /// Flat error messages (backward compat)
     public IReadOnlyList<string> Errors { get; }
 
-    // Group by property — matches ASP.NET ModelState shape
+    /// Group errors by property — matches ASP.NET ModelState shape
     public Dictionary<string, List<string>> ToDictionary();
 
+    /// Singleton success instance
     public static readonly ValidationResult Success;
 }
 
 public sealed class ValidationError
 {
-    public string Property { get; }    // "BillingAddress.Street"
-    public string Message { get; }     // "Street is required."
-    public string FullMessage { get; } // "BillingAddress.Street: Street is required."
+    /// Property path from root (e.g. "BillingAddress.Street", "Lines[0].Sku")
+    public string Property { get; }
+
+    /// Human-readable message (e.g. "Street is required.")
+    public string Message { get; }
+
+    /// Combined: "BillingAddress.Street: Street is required."
+    public string FullMessage { get; }
 }
 ```
+
+Usage patterns:
 
 ```csharp
 var result = form.Validate();
 
-// Structured access
-result.ValidationErrors[0].Property  // "Email"
-result.ValidationErrors[0].Message   // "Email is required."
+// Iterate structured errors
+foreach (var err in result.ValidationErrors)
+    Console.WriteLine($"[{err.Property}] {err.Message}");
 
-// ASP.NET ModelState style
+// Get ModelState-shaped dictionary for API responses
 var dict = result.ToDictionary();
-// { "Email": ["Email is required."], "BillingAddress.Street": ["Street is required."] }
-```
+// {
+//   "Email": ["Email is required."],
+//   "BillingAddress.Street": ["Street is required."]
+// }
 
-## Records
-
-Works with records too:
-
-```csharp
-[ZValidate]
-public partial record ProductRequest
-{
-    [ZRequired]
-    public string Sku { get; init; } = "";
-
-    [ZRange(0, 999999)]
-    public decimal Price { get; init; }
-}
+// Quick flat list
+foreach (var msg in result.Errors)
+    Console.WriteLine(msg);
 ```
 
 ## ASP.NET Core Integration
 
-### Minimal API — endpoint filter (recommended)
+### Minimal API — .WithValidation() endpoint filter
 
-For Minimal APIs, use `.WithValidation()` — any `IValidatable` parameter is auto-validated before your handler runs:
+The recommended approach for Minimal APIs. Any parameter implementing `IValidatable` is automatically validated before your handler executes:
 
 ```csharp
 app.MapPost("/api/users", (CreateUserRequest req) =>
@@ -308,16 +445,15 @@ app.MapPost("/api/users", (CreateUserRequest req) =>
     return Results.Ok(CreateUser(req));
 })
 .WithValidation();
-
-// Or apply to entire group:
-var api = app.MapGroup("/api").WithValidation();
-api.MapPost("/users", (CreateUserRequest req) => ...);
-api.MapPost("/orders", (OrderRequest req) => ...);
 ```
 
-Returns `400 ValidationProblem` with structured errors matching RFC 7807:
+On validation failure, returns HTTP 400 with an RFC 7807 `ValidationProblem` response:
+
 ```json
 {
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
   "errors": {
     "Email": ["Email is required.", "Email must be a valid email address."],
     "Age": ["Age must be between 18 and 120."]
@@ -325,24 +461,182 @@ Returns `400 ValidationProblem` with structured errors matching RFC 7807:
 }
 ```
 
-### Controllers — manual
+### Route groups
+
+Apply `.WithValidation()` to an entire route group — all endpoints in the group get automatic validation:
 
 ```csharp
-[HttpPost]
-public IActionResult Create(CreateUserRequest request)
-{
-    var validation = request.Validate();
-    if (!validation.IsValid)
-        return BadRequest(new { Errors = validation.ToDictionary() });
+var api = app.MapGroup("/api").WithValidation();
 
-    // proceed...
+api.MapPost("/users", (CreateUserRequest req) => /* ... */);
+api.MapPost("/orders", (OrderRequest req) => /* ... */);
+api.MapPut("/users/{id}", (UpdateUserRequest req) => /* ... */);
+// All three endpoints auto-validate their IValidatable parameters
+```
+
+### Controllers (manual)
+
+For MVC controllers, call `Validate()` manually:
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
+{
+    [HttpPost]
+    public IActionResult Create(CreateUserRequest request)
+    {
+        var validation = request.Validate();
+        if (!validation.IsValid)
+            return ValidationProblem(
+                new ValidationProblemDetails(validation.ToDictionary()));
+
+        return Ok(CreateUser(request));
+    }
 }
+```
+
+## What Gets Generated
+
+For a class like:
+
+```csharp
+[ZValidate]
+public partial class CreateUserRequest
+{
+    [ZRequired]
+    [ZMinLength(2)]
+    public string Name { get; set; } = "";
+
+    [ZRequired]
+    [ZEmail]
+    public string Email { get; set; } = "";
+
+    [ZRange(18, 120)]
+    public int Age { get; set; }
+}
+```
+
+The source generator emits approximately:
+
+```csharp
+// <auto-generated/>
+public partial class CreateUserRequest : IValidatable
+{
+    public ValidationResult Validate(ValidationContext? context = null)
+    {
+        context ??= new ValidationContext { RootObject = this };
+        var errors = new List<ValidationError>();
+
+        // Name: [ZRequired]
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            errors.Add(new ValidationError(
+                context.BuildPath("Name"), "Name is required."));
+        }
+
+        // Name: [ZMinLength(2)]
+        if (Name is not null && Name.Length < 2)
+        {
+            errors.Add(new ValidationError(
+                context.BuildPath("Name"), "Name must be at least 2 characters."));
+        }
+
+        // Email: [ZRequired]
+        if (string.IsNullOrWhiteSpace(Email))
+        {
+            errors.Add(new ValidationError(
+                context.BuildPath("Email"), "Email is required."));
+        }
+
+        // Email: [ZEmail]
+        if (Email is not null && !System.Text.RegularExpressions.Regex.IsMatch(
+            Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            errors.Add(new ValidationError(
+                context.BuildPath("Email"), "Email must be a valid email address."));
+        }
+
+        // Age: [ZRange(18, 120)]
+        if (Age < 18 || Age > 120)
+        {
+            errors.Add(new ValidationError(
+                context.BuildPath("Age"), "Age must be between 18 and 120."));
+        }
+
+        return errors.Count == 0
+            ? ValidationResult.Success
+            : new ValidationResult(errors);
+    }
+}
+```
+
+Key observations:
+- No reflection, no expression trees, no runtime code generation
+- Null checks guard length/format validators (null values pass unless `[ZRequired]` is also present)
+- Context path is built for nested validation support
+- Returns the singleton `ValidationResult.Success` on the happy path (zero allocations)
+
+## Comparison with FluentValidation
+
+| Feature | ZibStack.NET.Validation | FluentValidation |
+|---------|------------------------|------------------|
+| Approach | Source-generated at compile time | Runtime reflection |
+| Runtime overhead | None (zero reflection) | Expression compilation + reflection |
+| Startup cost | None | Validator discovery + registration |
+| AOT / trimming | Fully compatible | Partial (reflection issues) |
+| Attribute-based rules | Yes (primary API) | No |
+| Fluent rules | Yes (`IValidationConfigurator<T>`) | Yes (primary API) |
+| Cross-field validation | Yes | Yes |
+| Conditional rules | `When` / `Unless` | `When` / `Unless` |
+| Async rules | Not yet | Yes |
+| Custom validators | `b.Rule(x => ...)` | `Must()` / custom classes |
+| Nested validation | Auto-detected | Manual `.SetValidator()` |
+| Collection validation | Auto with index path | `RuleForEach` |
+| CascadeMode | Per-property `[ZCascade]` | Per-property / global |
+| RuleSet | Yes | Yes |
+| DI integration | Not needed (no validator classes) | Built-in |
+| ASP.NET integration | `.WithValidation()` filter | FluentValidation.AspNetCore |
+| NuGet size | Tiny (analyzer only) | ~300 KB runtime |
+
+## Records Support
+
+Works with `record` and `record struct` types — just add `partial`:
+
+```csharp
+[ZValidate]
+public partial record ProductRequest
+{
+    [ZRequired]
+    public string Sku { get; init; } = "";
+
+    [ZRange(0.01, 999999.99)]
+    public decimal Price { get; init; }
+
+    [ZMaxLength(500)]
+    public string? Description { get; init; }
+}
+
+[ZValidate]
+public partial record struct Coordinate
+{
+    [ZRange(-90, 90)] public double Latitude { get; init; }
+    [ZRange(-180, 180)] public double Longitude { get; init; }
+}
+```
+
+```csharp
+var product = new ProductRequest { Sku = "", Price = -5 };
+var result = product.Validate();
+// Sku: "Sku is required."
+// Price: "Price must be between 0.01 and 999999.99."
 ```
 
 ## Requirements
 
 - .NET 8.0+
-- Types must be `partial`
+- Types must be declared `partial` (required for source generators)
+- The package is an analyzer — it produces code at compile time and adds zero runtime DLLs to your output
 
 ## License
 
