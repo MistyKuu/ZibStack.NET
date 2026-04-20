@@ -24,6 +24,23 @@ public class Player
 app.MapPlayerEndpoints(); // full CRUD API — auto-generates DTOs + endpoints
 ```
 
+## Generated Integration Tests
+
+Add `[assembly: GenerateCrudTests]` in your test project — auto-generates xUnit tests for every `[CrudApi]` entity (CRUD, bulk, query DSL, nested relations).
+
+Generated test classes are `partial` with hooks for customization:
+
+```csharp
+public partial class PlayerCrudTests
+{
+    static partial void ConfigureWebHost(IWebHostBuilder builder)
+        => builder.ConfigureServices(s => s.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("test")));
+
+    static partial void ConfigureClient(HttpClient client)
+        => client.DefaultRequestHeaders.Authorization = new("Bearer", "test-token");
+}
+```
+
 ## Documentation
 
 Full documentation: [mistykuu.github.io/ZibStack.NET/packages/dto/](https://mistykuu.github.io/ZibStack.NET/packages/dto/)
