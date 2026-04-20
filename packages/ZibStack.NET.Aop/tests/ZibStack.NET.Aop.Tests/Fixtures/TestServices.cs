@@ -732,7 +732,7 @@ public interface IE2eHandler
     int Execute();
 }
 
-public interface IE2eHandler<T>
+public interface IE2eHandler<T> : IE2eHandler
 {
     T Execute(int id);
 }
@@ -746,5 +746,6 @@ public class E2eSimpleHandler : IE2eHandler
 public class E2eGenericHandler<T> : IE2eHandler<T> where T : class
 {
     public int CallCount;
+    public int Execute() { Interlocked.Increment(ref CallCount); return 2; }
     public T Execute(int id) { Interlocked.Increment(ref CallCount); return default!; }
 }
