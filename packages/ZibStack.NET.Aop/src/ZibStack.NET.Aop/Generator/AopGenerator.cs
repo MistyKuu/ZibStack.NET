@@ -201,7 +201,19 @@ public static class AopPipeline
                     }
                 }
 
-                return models;
+                // Deduplicate: if the same type has both a direct model (from explicit
+                // attributes) and a proxy model (from Apply rules on impl), keep only one.
+                // This prevents CS9153 when users combine explicit [Log] on interface +
+                // Apply<LogAttribute> matching the impl class.
+                var seen = new HashSet<string>();
+                var deduped = new List<InterceptedClassModel>(models.Count);
+                foreach (var m in models)
+                {
+                    var key = $"{m.Namespace}|{m.ClassName}|{m.TypeParameters.Count}";
+                    if (seen.Add(key))
+                        deduped.Add(m);
+                }
+                return deduped;
             });
 
         // Step 4: Combine and emit

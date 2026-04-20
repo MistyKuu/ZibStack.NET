@@ -257,6 +257,30 @@ public class GlobalAopE2eTests : IDisposable
             c.Phase == "Before" && c.Context.ClassName == "IE2eHandler");
     }
 
+    // ── Dual-source: explicit [Record] on interface + Apply rules on impl ─
+
+    [Fact]
+    public void DualSource_ExplicitOnInterface_PlusApplyOnImpl_NoDuplicate()
+    {
+        // IE2eDualSource has explicit [Record] AND E2eDualSourceImpl matches Apply rules
+        // (ClassesWhere "E2e" applies Trace/Metrics/Record). Deduplication prevents CS9153.
+        IE2eDualSource svc = new E2eDualSourceImpl();
+        svc.Process(42);
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Process");
+    }
+
+    [Fact]
+    public void DualSource_ConcreteCall_StillWorks()
+    {
+        var svc = new E2eDualSourceImpl();
+        svc.Process(7);
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Process");
+    }
+
     // ── Method overloads (same name, different params) ───────────────────
 
     [Fact]

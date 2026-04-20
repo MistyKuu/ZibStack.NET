@@ -6,7 +6,7 @@ namespace ZibStack.NET.Aop.Tests.Fixtures;
 // ── Before/After aspect ─────────────────────────────────────────────────────
 
 [AspectHandler(typeof(RecordingHandler))]
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = true)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Interface, Inherited = true)]
 public sealed class RecordAttribute : AspectAttribute { }
 
 public sealed class RecordingHandler : IAspectHandler

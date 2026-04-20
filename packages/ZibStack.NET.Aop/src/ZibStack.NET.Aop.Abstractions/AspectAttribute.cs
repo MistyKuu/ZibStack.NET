@@ -6,7 +6,7 @@ namespace ZibStack.NET.Aop;
 /// and generates interceptors for decorated methods.
 /// When applied to a class, all public instance methods are intercepted.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = true, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Interface, Inherited = true, AllowMultiple = true)]
 public abstract class AspectAttribute : Attribute
 {
     /// <summary>

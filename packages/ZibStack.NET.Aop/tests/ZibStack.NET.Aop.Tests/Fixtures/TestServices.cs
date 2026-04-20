@@ -756,3 +756,18 @@ public class E2eGenericHandler<T> : IE2eHandler<T> where T : class
     public T Fetch(int id) { Interlocked.Increment(ref CallCount); return default!; }
 }
 
+// ── Dual-source: explicit attribute on interface + Apply rule on impl ────────
+// Both produce a model for the same interface — deduplication prevents CS9153.
+
+[Record]
+public interface IE2eDualSource
+{
+    string Process(int id);
+}
+
+public class E2eDualSourceImpl : IE2eDualSource
+{
+    public int CallCount;
+    public string Process(int id) { Interlocked.Increment(ref CallCount); return $"result-{id}"; }
+}
+
