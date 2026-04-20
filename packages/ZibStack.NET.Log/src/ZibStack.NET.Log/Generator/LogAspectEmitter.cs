@@ -82,12 +82,16 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         if (UseInlinePath(method, loggable.Count, cls))
             return;
 
+        // Discriminator for overloaded methods — uses sanitized param types to ensure uniqueness
+        var disc = method.Parameters.Count == 0 ? "0"
+            : string.Join("_", method.Parameters.Select(p => SanitizeIdentifier(p.Type)));
+
         // --- Entry delegate ---
         var entryMsg = PStr(aspect, "EntryMessage") ?? BuildEntryMessage(cls, method, loggable, objectLogging);
         if (loggable.Count <= 6)
         {
             var types = loggable.Select(p => GetParamLogType(p, objectLogging)).ToList();
-            EmitDelegate(sb, indent, method.MethodName, "Entry", types, level, ref _eventId, entryMsg, method.Parameters.Count);
+            EmitDelegate(sb, indent, method.MethodName, "Entry", types, level, ref _eventId, entryMsg, disc);
         }
         else _eventId++;
 
@@ -104,12 +108,12 @@ internal sealed class LogAspectEmitter : IAspectEmitter
                 exitTypes.Add("string?");
         }
         var exitMsg = PStr(aspect, "ExitMessage") ?? BuildExitMessage(cls, method, measureElapsed, logReturn, objectLogging);
-        EmitDelegate(sb, indent, method.MethodName, "Exit", exitTypes, level, ref _eventId, exitMsg, method.Parameters.Count);
+        EmitDelegate(sb, indent, method.MethodName, "Exit", exitTypes, level, ref _eventId, exitMsg, disc);
 
         // --- Error delegate ---
         var errTypes = measureElapsed ? new List<string> { "long" } : new List<string>();
         var errMsg = PStr(aspect, "ExceptionMessage") ?? BuildErrorMessage(cls, method, measureElapsed);
-        EmitDelegate(sb, indent, method.MethodName, "Error", errTypes, exLevel, ref _eventId, errMsg, method.Parameters.Count);
+        EmitDelegate(sb, indent, method.MethodName, "Error", errTypes, exLevel, ref _eventId, errMsg, disc);
     }
 
     /// <summary>
@@ -331,15 +335,14 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     // === Shared emit helper ===
 
     private static void EmitDelegate(StringBuilder sb, string indent, string methodName,
-        string suffix, List<string> typeArgs, int level, ref int eventId, string message, int paramCount)
+        string suffix, List<string> typeArgs, int level, ref int eventId, string message, string discriminator)
     {
         var typeArgsStr = typeArgs.Count > 0 ? $"<{string.Join(", ", typeArgs)}>" : "";
         var all = new List<string> { "global::Microsoft.Extensions.Logging.ILogger" };
         all.AddRange(typeArgs);
         all.Add("global::System.Exception?");
 
-        // Use paramCount in the field name to disambiguate overloaded methods (Equals(object), Equals(T), etc.)
-        var fieldName = $"__log{methodName}_{paramCount}{suffix}";
+        var fieldName = $"__log{methodName}_{discriminator}{suffix}";
         sb.AppendLine($"{indent}private static readonly global::System.Action<{string.Join(", ", all)}> {fieldName} =");
         sb.AppendLine($"{indent}    global::Microsoft.Extensions.Logging.LoggerMessage.Define{typeArgsStr}(");
         sb.AppendLine($"{indent}        global::Microsoft.Extensions.Logging.LogLevel.{LogLevelNames[level]},");
@@ -350,11 +353,22 @@ internal sealed class LogAspectEmitter : IAspectEmitter
 
     /// <summary>
     /// Returns the field name for a LoggerMessage.Define delegate, disambiguated by parameter
-    /// count so overloaded methods (Equals(object), Equals(T)) get unique field names.
+    /// type signature so overloaded methods (Equals(object), Equals(MyType)) get unique names.
     /// </summary>
     private static string LogField(InterceptedMethodModel method, string suffix)
     {
-        return $"__log{method.MethodName}_{method.Parameters.Count}{suffix}";
+        var sig = string.Join("_", method.Parameters.Select(p =>
+            SanitizeIdentifier(p.Type)));
+        var discriminator = method.Parameters.Count == 0 ? "0" : sig;
+        return $"__log{method.MethodName}_{discriminator}{suffix}";
+    }
+
+    private static string SanitizeIdentifier(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        foreach (var c in s)
+            if (char.IsLetterOrDigit(c)) sb.Append(c);
+        return sb.ToString();
     }
 
     private static object? ClassData(InterceptedClassModel cls, string key)
