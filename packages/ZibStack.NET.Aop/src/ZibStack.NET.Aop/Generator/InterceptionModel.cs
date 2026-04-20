@@ -277,14 +277,22 @@ public sealed class CallSiteModel : IEquatable<CallSiteModel>
     /// <summary>Number of type parameters on the containing type (0 for non-generic).</summary>
     public int ContainingTypeArity { get; }
 
+    /// <summary>
+    /// Comma-joined FQN parameter types for overload disambiguation.
+    /// E.g. "System.Int32,System.String" for (int, string).
+    /// </summary>
+    public string ParameterSignature { get; }
+
     public CallSiteModel(string interceptsLocationAttributeSyntax, string methodName,
-        string containingClassNamespace, string containingClassName, int containingTypeArity = 0)
+        string containingClassNamespace, string containingClassName,
+        int containingTypeArity = 0, string parameterSignature = "")
     {
         InterceptsLocationAttributeSyntax = interceptsLocationAttributeSyntax;
         MethodName = methodName;
         ContainingClassNamespace = containingClassNamespace;
         ContainingClassName = containingClassName;
         ContainingTypeArity = containingTypeArity;
+        ParameterSignature = parameterSignature ?? "";
     }
 
     public bool Equals(CallSiteModel? other)

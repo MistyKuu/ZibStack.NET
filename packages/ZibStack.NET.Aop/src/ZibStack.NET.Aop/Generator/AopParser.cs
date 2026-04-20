@@ -82,12 +82,16 @@ public static class AopParser
             ? ""
             : containingType.ContainingNamespace.ToDisplayString();
 
+        var paramSig = string.Join(",", methodSymbol.Parameters.Select(p =>
+            p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+
         return new CallSiteModel(
             interceptableLocation.GetInterceptsLocationAttributeSyntax(),
             methodSymbol.Name,
             containingNs,
             containingType.Name,
-            containingType.TypeParameters.Length);
+            containingType.TypeParameters.Length,
+            paramSig);
     }
 
     /// <summary>

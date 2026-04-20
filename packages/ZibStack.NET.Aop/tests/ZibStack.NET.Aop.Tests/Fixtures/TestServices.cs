@@ -730,22 +730,29 @@ public class ControlGroupService
 public interface IE2eHandler
 {
     int Execute();
+    int Execute(int id);
+    int Execute(string name, int count);
 }
 
 public interface IE2eHandler<T> : IE2eHandler
 {
-    T Execute(int id);
+    T Fetch(int id);
 }
 
 public class E2eSimpleHandler : IE2eHandler
 {
     public int CallCount;
     public int Execute() { Interlocked.Increment(ref CallCount); return 1; }
+    public int Execute(int id) { Interlocked.Increment(ref CallCount); return id; }
+    public int Execute(string name, int count) { Interlocked.Increment(ref CallCount); return count; }
 }
 
 public class E2eGenericHandler<T> : IE2eHandler<T> where T : class
 {
     public int CallCount;
     public int Execute() { Interlocked.Increment(ref CallCount); return 2; }
-    public T Execute(int id) { Interlocked.Increment(ref CallCount); return default!; }
+    public int Execute(int id) { Interlocked.Increment(ref CallCount); return id; }
+    public int Execute(string name, int count) { Interlocked.Increment(ref CallCount); return count; }
+    public T Fetch(int id) { Interlocked.Increment(ref CallCount); return default!; }
 }
+

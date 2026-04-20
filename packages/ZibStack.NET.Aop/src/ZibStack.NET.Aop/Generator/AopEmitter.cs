@@ -96,9 +96,11 @@ public static class AopEmitter
         // Per-method: interceptor methods
         foreach (var method in classModel.Methods)
         {
+            var methodParamSig = string.Join(",", method.Parameters.Select(p => p.FullyQualifiedType));
             var methodCallSites = callSites
                 .Where(cs => cs.MethodName == method.MethodName
-                    && cs.ContainingClassName == classModel.ClassName)
+                    && cs.ContainingClassName == classModel.ClassName
+                    && cs.ParameterSignature == methodParamSig)
                 .ToList();
 
             if (methodCallSites.Count == 0)

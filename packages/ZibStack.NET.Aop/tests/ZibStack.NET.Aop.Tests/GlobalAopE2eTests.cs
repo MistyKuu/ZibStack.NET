@@ -257,6 +257,42 @@ public class GlobalAopE2eTests : IDisposable
             c.Phase == "Before" && c.Context.ClassName == "IE2eHandler");
     }
 
+    // ── Method overloads (same name, different params) ───────────────────
+
+    [Fact]
+    public void GlobalApply_Overloads_AllIntercepted()
+    {
+        IE2eHandler svc = new E2eSimpleHandler();
+        svc.Execute();
+        svc.Execute(42);
+        svc.Execute("test", 3);
+
+        var beforeCalls = _handler.Calls
+            .Where(c => c.Phase == "Before" && c.Context.MethodName == "Execute")
+            .ToList();
+        Assert.Equal(3, beforeCalls.Count);
+    }
+
+    [Fact]
+    public void GlobalApply_Overloads_ParametersCorrect()
+    {
+        IE2eHandler svc = new E2eSimpleHandler();
+        svc.Execute(42);
+        svc.Execute("hello", 7);
+
+        var call1 = _handler.Calls.First(c =>
+            c.Phase == "Before" && c.Context.Parameters.Count == 1);
+        Assert.Equal("id", call1.Context.Parameters[0].Name);
+        Assert.Equal(42, call1.Context.Parameters[0].Value);
+
+        var call2 = _handler.Calls.First(c =>
+            c.Phase == "Before" && c.Context.Parameters.Count == 2);
+        Assert.Equal("name", call2.Context.Parameters[0].Name);
+        Assert.Equal("hello", call2.Context.Parameters[0].Value);
+        Assert.Equal("count", call2.Context.Parameters[1].Name);
+        Assert.Equal(7, call2.Context.Parameters[1].Value);
+    }
+
     // ── Generic arity collision: IHandler and IHandler<T> ──────────────────
 
     [Fact]
@@ -274,10 +310,10 @@ public class GlobalAopE2eTests : IDisposable
     public void GlobalApply_GenericInterface_RecordFires()
     {
         IE2eHandler<string> svc = new E2eGenericHandler<string>();
-        svc.Execute(42);
+        svc.Fetch(42);
 
         Assert.Contains(_handler.Calls, c =>
-            c.Phase == "Before" && c.Context.MethodName == "Execute"
+            c.Phase == "Before" && c.Context.MethodName == "Fetch"
             && c.Context.ClassName == "IE2eHandler");
     }
 
@@ -300,7 +336,7 @@ public class GlobalAopE2eTests : IDisposable
         IE2eHandler<string> generic = new E2eGenericHandler<string>();
 
         simple.Execute();
-        generic.Execute(1);
+        generic.Fetch(1);
 
         // Both should fire — proves no duplicate class name collision
         var beforeCalls = _handler.Calls.Where(c => c.Phase == "Before").ToList();
