@@ -215,4 +215,42 @@ public class GlobalAopE2eTests : IDisposable
         // Metrics counter
         Assert.Equal(1, metricsCalls);
     }
+
+    // ── Generic arity collision: IHandler and IHandler<T> ──────────────────
+
+    [Fact]
+    public void GlobalApply_NonGenericInterface_RecordFires()
+    {
+        IE2eHandler svc = new E2eSimpleHandler();
+        svc.Execute();
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Execute"
+            && c.Context.ClassName == "IE2eHandler");
+    }
+
+    [Fact]
+    public void GlobalApply_GenericInterface_RecordFires()
+    {
+        IE2eHandler<string> svc = new E2eGenericHandler<string>();
+        svc.Execute(42);
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Execute"
+            && c.Context.ClassName == "IE2eHandler");
+    }
+
+    [Fact]
+    public void GlobalApply_BothArities_CoexistWithoutCollision()
+    {
+        IE2eHandler simple = new E2eSimpleHandler();
+        IE2eHandler<string> generic = new E2eGenericHandler<string>();
+
+        simple.Execute();
+        generic.Execute(1);
+
+        // Both should fire — proves no duplicate class name collision
+        var beforeCalls = _handler.Calls.Where(c => c.Phase == "Before").ToList();
+        Assert.True(beforeCalls.Count >= 2);
+    }
 }

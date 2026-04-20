@@ -274,13 +274,17 @@ public sealed class CallSiteModel : IEquatable<CallSiteModel>
     public string ContainingClassNamespace { get; }
     public string ContainingClassName { get; }
 
+    /// <summary>Number of type parameters on the containing type (0 for non-generic).</summary>
+    public int ContainingTypeArity { get; }
+
     public CallSiteModel(string interceptsLocationAttributeSyntax, string methodName,
-        string containingClassNamespace, string containingClassName)
+        string containingClassNamespace, string containingClassName, int containingTypeArity = 0)
     {
         InterceptsLocationAttributeSyntax = interceptsLocationAttributeSyntax;
         MethodName = methodName;
         ContainingClassNamespace = containingClassNamespace;
         ContainingClassName = containingClassName;
+        ContainingTypeArity = containingTypeArity;
     }
 
     public bool Equals(CallSiteModel? other)

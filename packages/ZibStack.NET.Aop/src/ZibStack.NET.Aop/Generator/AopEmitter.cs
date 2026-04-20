@@ -65,9 +65,12 @@ public static class AopEmitter
         // Wrapper name includes a hash segment for interface proxies so that a real class
         // named the same as the interface can coexist with its interface-proxy in the same
         // namespace without producing duplicate static-class definitions.
+        var arityTag = classModel.TypeParameters.Count > 0
+            ? $"_{classModel.TypeParameters.Count}"
+            : "";
         var wrapperName = classModel.IsInterfaceProxy
-            ? $"__{classModel.ClassName}_IfaceAop"
-            : $"__{classModel.ClassName}_Aop";
+            ? $"__{classModel.ClassName}{arityTag}_IfaceAop"
+            : $"__{classModel.ClassName}{arityTag}_Aop";
         sb.AppendLine($"    internal static class {wrapperName}");
         sb.AppendLine("    {");
 

@@ -86,7 +86,8 @@ public static class AopParser
             interceptableLocation.GetInterceptsLocationAttributeSyntax(),
             methodSymbol.Name,
             containingNs,
-            containingType.Name);
+            containingType.Name,
+            containingType.TypeParameters.Length);
     }
 
     /// <summary>

@@ -723,3 +723,28 @@ public class ControlGroupService
     public int CallCount;
     public int DoWork(int x) { Interlocked.Increment(ref CallCount); return x; }
 }
+
+// ── Generic arity collision: IHandler and IHandler<T> ──────────────────────
+// Both share the name "IHandler" — wrapper class and hint name must disambiguate.
+
+public interface IE2eHandler
+{
+    int Execute();
+}
+
+public interface IE2eHandler<T>
+{
+    T Execute(int id);
+}
+
+public class E2eSimpleHandler : IE2eHandler
+{
+    public int CallCount;
+    public int Execute() { Interlocked.Increment(ref CallCount); return 1; }
+}
+
+public class E2eGenericHandler<T> : IE2eHandler<T> where T : class
+{
+    public int CallCount;
+    public T Execute(int id) { Interlocked.Increment(ref CallCount); return default!; }
+}

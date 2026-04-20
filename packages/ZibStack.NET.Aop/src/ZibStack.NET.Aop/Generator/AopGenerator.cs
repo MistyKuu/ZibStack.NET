@@ -213,7 +213,8 @@ public static class AopPipeline
 
             var relevantCallSites = allCallSites
                 .Where(cs => cs.ContainingClassName == classModel.ClassName
-                    && cs.ContainingClassNamespace == classModel.Namespace)
+                    && cs.ContainingClassNamespace == classModel.Namespace
+                    && cs.ContainingTypeArity == classModel.TypeParameters.Count)
                 .ToList();
 
             if (relevantCallSites.Count == 0)
@@ -236,7 +237,10 @@ public static class AopPipeline
             if (classModel.IsPartial && !classModel.IsInterfaceProxy)
             {
                 var codeMap = GenerateAopCodeMap(classModel);
-                spc.AddSource($"{classModel.ClassName}.Aop.CodeMap.g.cs", codeMap);
+                var codeMapArity = classModel.TypeParameters.Count > 0
+                    ? $"_{classModel.TypeParameters.Count}"
+                    : "";
+                spc.AddSource($"{classModel.ClassName}{codeMapArity}.Aop.CodeMap.g.cs", codeMap);
             }
         });
     }
@@ -257,7 +261,10 @@ public static class AopPipeline
         sb.AppendLine("/// <summary>");
         sb.AppendLine($"/// Generated code map for <c>{classModel.ClassName}</c> (AOP):");
         sb.AppendLine("/// <list type=\"bullet\">");
-        sb.AppendLine($"/// <item><description>AOP wrapper: <see cref=\"ZibStack.Generated.__{classModel.ClassName}_Aop\"/> — interceptor extension methods</description></item>");
+        var codeMapArityTag = classModel.TypeParameters.Count > 0
+            ? $"_{classModel.TypeParameters.Count}"
+            : "";
+        sb.AppendLine($"/// <item><description>AOP wrapper: <see cref=\"ZibStack.Generated.__{classModel.ClassName}{codeMapArityTag}_Aop\"/> — interceptor extension methods</description></item>");
         foreach (var method in classModel.Methods)
         {
             var aspectNames = string.Join(", ", method.Aspects.Select(a =>
