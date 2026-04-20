@@ -51,6 +51,11 @@ export default defineConfig({
 							label: 'Validation — Compile-Time Rules',
 							items: [
 								{ label: 'Overview', slug: 'packages/validation' },
+								{ label: 'Attributes', slug: 'packages/validation/attributes' },
+								{ label: 'Fluent Rules', slug: 'packages/validation/fluent' },
+								{ label: 'Conditional & RuleSet', slug: 'packages/validation/conditional' },
+								{ label: 'Nested & Collections', slug: 'packages/validation/nested' },
+								{ label: 'ASP.NET Integration', slug: 'packages/validation/aspnet' },
 								{ label: 'Alternatives', slug: 'packages/validation/comparison' },
 							],
 						},
