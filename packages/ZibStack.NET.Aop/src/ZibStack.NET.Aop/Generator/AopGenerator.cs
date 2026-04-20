@@ -112,6 +112,7 @@ public static class AopPipeline
         // Step 3: Parse classes with class-level data from providers, plus synthesize
         // interface proxies so calls dispatched through interfaces (typical DI shape) hit
         // the aspect even when [Log] is applied at class level on the implementation.
+        var emittersCopy = emitters;
         var classModels = classSymbols
             .Collect()
             .SelectMany((symbols, ct) =>
@@ -141,6 +142,7 @@ public static class AopPipeline
                     }
 
                     var model = AopParser.ParseClass(classSymbol, classData.Count > 0 ? classData : null, ct);
+                    model = FilterModelForGenerator(model, emittersCopy);
                     if (model != null)
                         models.Add(model);
 
@@ -178,6 +180,7 @@ public static class AopPipeline
                             ifaceOpen, iface, classSymbol,
                             classData.Count > 0 ? classData : null,
                             ct);
+                        proxy = FilterModelForGenerator(proxy, emittersCopy);
                         if (proxy != null)
                         {
                             models.Add(proxy);
@@ -192,7 +195,6 @@ public static class AopPipeline
         // Step 4: Combine and emit
         var combined = classModels.Combine(callSiteCollection);
 
-        var emittersCopy = emitters;
         context.RegisterSourceOutput(combined, (spc, pair) =>
         {
             var (classModel, allCallSites) = pair;
@@ -265,6 +267,53 @@ public static class AopPipeline
         sb.AppendLine($"partial class {classNameWithTypeParams} {{ }}");
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Filters a class model to only include aspects the current generator can handle:
+    /// aspects with a registered emitter OR aspects with a runtime handler. Returns null
+    /// if no methods remain after filtering.
+    /// This prevents two generators (e.g. AOP standalone + Log) from emitting duplicate
+    /// wrapper classes for the same target class.
+    /// </summary>
+    private static InterceptedClassModel? FilterModelForGenerator(
+        InterceptedClassModel? model,
+        IReadOnlyDictionary<string, IAspectEmitter> emitters)
+    {
+        if (model is null) return null;
+
+        var filteredMethods = new List<InterceptedMethodModel>(model.Methods.Count);
+        bool anyChanged = false;
+
+        foreach (var method in model.Methods)
+        {
+            var kept = method.Aspects
+                .Where(a => emitters.ContainsKey(a.AttributeFullName) || a.HandlerTypeName != null)
+                .ToList();
+
+            if (kept.Count == 0) { anyChanged = true; continue; }
+
+            if (kept.Count != method.Aspects.Count)
+            {
+                anyChanged = true;
+                filteredMethods.Add(new InterceptedMethodModel(
+                    method.MethodName, method.ReturnType, method.IsAsync, method.ReturnsVoid,
+                    method.Accessibility, method.Parameters, kept,
+                    method.HasComplexReturnType, method.SanitizedReturnType,
+                    method.MethodTypeParameters, method.CancellationTokenParameterIndex));
+            }
+            else
+            {
+                filteredMethods.Add(method);
+            }
+        }
+
+        if (filteredMethods.Count == 0) return null;
+        if (!anyChanged) return model;
+
+        return new InterceptedClassModel(
+            model.Namespace, model.ClassName, filteredMethods,
+            model.AspectClassData, model.IsPartial, model.TypeParameters, model.IsInterfaceProxy);
     }
 
     private static bool DerivesFromAspectAttribute(INamedTypeSymbol? type)
