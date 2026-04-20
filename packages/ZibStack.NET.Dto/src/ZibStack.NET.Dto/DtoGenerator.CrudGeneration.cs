@@ -876,18 +876,44 @@ public partial class DtoGenerator
         sb.AppendLine("using System.Net;");
         sb.AppendLine("using System.Net.Http.Json;");
         sb.AppendLine("using Bogus;");
+        sb.AppendLine("using Microsoft.AspNetCore.Hosting;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Testing;");
         sb.AppendLine("using Xunit;");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
-        sb.AppendLine($"public class {entity}CrudTests : IClassFixture<WebApplicationFactory<Program>>");
+        sb.AppendLine($"/// <summary>");
+        sb.AppendLine($"/// Auto-generated CRUD tests for <c>{entity}</c>.");
+        sb.AppendLine($"/// To customize, create a partial class in a separate file:");
+        sb.AppendLine($"/// <code>");
+        sb.AppendLine($"/// public partial class {entity}CrudTests");
+        sb.AppendLine($"/// {{");
+        sb.AppendLine($"///     static partial void ConfigureWebHost(IWebHostBuilder builder)");
+        sb.AppendLine($"///         => builder.ConfigureServices(s => s.AddDbContext&lt;...&gt;(...));");
+        sb.AppendLine($"///     static partial void ConfigureClient(HttpClient client)");
+        sb.AppendLine($"///         => client.DefaultRequestHeaders.Authorization = new(\"Bearer\", \"test-token\");");
+        sb.AppendLine($"/// }}");
+        sb.AppendLine($"/// </code>");
+        sb.AppendLine($"/// </summary>");
+        sb.AppendLine($"public partial class {entity}CrudTests : IClassFixture<WebApplicationFactory<Program>>");
         sb.AppendLine("{");
         sb.AppendLine("    private readonly HttpClient _client;");
         sb.AppendLine("    private readonly Faker _faker = new(\"en\");");
         sb.AppendLine();
         sb.AppendLine($"    public {entity}CrudTests(WebApplicationFactory<Program> factory)");
-        sb.AppendLine("        => _client = factory.CreateClient();");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var f = factory.WithWebHostBuilder(builder =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            ConfigureWebHost(builder);");
+        sb.AppendLine("        });");
+        sb.AppendLine("        _client = f.CreateClient();");
+        sb.AppendLine("        ConfigureClient(_client);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Override in a partial class to configure DI, database, auth, etc.</summary>");
+        sb.AppendLine("    static partial void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder);");
+        sb.AppendLine("    /// <summary>Override in a partial class to add headers, tokens, etc.</summary>");
+        sb.AppendLine("    static partial void ConfigureClient(HttpClient client);");
 
         // GET list — verify returns items array
         if ((info.Operations & OpGetList) != 0)
