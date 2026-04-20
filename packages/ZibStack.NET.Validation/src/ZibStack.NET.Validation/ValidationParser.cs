@@ -205,10 +205,10 @@ public sealed partial class ValidationGenerator
             // Unwrap the call chain
             var expr = es.Expression;
 
-            // Try b.When(x => condition, then => { ... })
+            // Try b.When(x => condition, then => { ... }) or b.Unless(x => condition, then => { ... })
             if (expr is InvocationExpressionSyntax whenInv
                 && whenInv.Expression is MemberAccessExpressionSyntax whenMae
-                && whenMae.Name.Identifier.Text == "When"
+                && whenMae.Name.Identifier.Text is "When" or "Unless"
                 && whenInv.ArgumentList.Arguments.Count == 2
                 && conditionalRules != null)
             {
@@ -217,10 +217,14 @@ public sealed partial class ValidationGenerator
 
                 if (condArg is SimpleLambdaExpressionSyntax condLambda && thenArg is SimpleLambdaExpressionSyntax thenLambda)
                 {
+                    var isUnless = whenMae.Name.Identifier.Text == "Unless";
                     var paramName = condLambda.Parameter.Identifier.Text;
                     var condText = condLambda.Body.ToString();
                     condText = System.Text.RegularExpressions.Regex.Replace(
                         condText, $@"\b{paramName}\.", "");
+                    // Unless = negate the condition
+                    if (isUnless)
+                        condText = $"!({condText})";
 
                     var innerRules = new List<CrossFieldRule>();
 
@@ -346,6 +350,10 @@ public sealed partial class ValidationGenerator
                             minValue: System.Convert.ToDouble(minV), maxValue: System.Convert.ToDouble(maxV)),
                     "Match" when args.Count >= 1 && sm.GetConstantValue(args[0].Expression) is { HasValue: true, Value: string pattern }
                         => new ValidationRule(ValidationRuleKind.Match, GetOptionalMessage(args, 1, sm), pattern: pattern),
+                    "CreditCard" => new ValidationRule(ValidationRuleKind.CreditCard, GetOptionalMessage(args, 0, sm)),
+                    "Phone" => new ValidationRule(ValidationRuleKind.Phone, GetOptionalMessage(args, 0, sm)),
+                    "In" when args.Count >= 1 => new ValidationRule(ValidationRuleKind.In, null, allowedValues: ExtractStringArgs(args, sm)),
+                    "NotIn" when args.Count >= 1 => new ValidationRule(ValidationRuleKind.NotIn, null, allowedValues: ExtractStringArgs(args, sm)),
                     _ => null,
                 };
 
@@ -378,7 +386,20 @@ public sealed partial class ValidationGenerator
     }
 
     private static bool IsFluentValidationMethod(string name)
-        => name is "Required" or "Email" or "Url" or "NotEmpty" or "MinLength" or "MaxLength" or "Range" or "Match";
+        => name is "Required" or "Email" or "Url" or "NotEmpty" or "MinLength" or "MaxLength" or "Range" or "Match"
+            or "CreditCard" or "Phone" or "In" or "NotIn";
+
+    private static string[]? ExtractStringArgs(SeparatedSyntaxList<ArgumentSyntax> args, SemanticModel sm)
+    {
+        var values = new List<string>();
+        foreach (var arg in args)
+        {
+            var cv = sm.GetConstantValue(arg.Expression);
+            if (cv.HasValue && cv.Value is string s)
+                values.Add(s);
+        }
+        return values.Count > 0 ? values.ToArray() : null;
+    }
 
     private static string? ExtractPropertyName(ExpressionSyntax expr)
     {

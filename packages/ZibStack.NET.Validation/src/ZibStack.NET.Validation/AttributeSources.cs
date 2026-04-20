@@ -357,6 +357,12 @@ namespace ZibStack.NET.Validation
         /// <code>b.When(x => x.RequiresShipping, then => { then.Rule(...); });</code>
         /// </summary>
         IValidationBuilder<T> When(System.Linq.Expressions.Expression<System.Func<T, bool>> condition, System.Action<IValidationBuilder<T>> then);
+
+        /// <summary>
+        /// Inverse conditional. Rules inside are only applied when the condition is FALSE.
+        /// <code>b.Unless(x => x.IsAdmin, then => { then.Rule(...); });</code>
+        /// </summary>
+        IValidationBuilder<T> Unless(System.Linq.Expressions.Expression<System.Func<T, bool>> condition, System.Action<IValidationBuilder<T>> then);
     }
 
     /// <summary>
@@ -389,6 +395,18 @@ namespace ZibStack.NET.Validation
 
         /// <summary>Collection must have items; string must not be whitespace. Equivalent to <c>[ZNotEmpty]</c>.</summary>
         IPropertyValidationBuilder<T> NotEmpty(string? message = null);
+
+        /// <summary>Value must be one of the specified allowed values. Equivalent to <c>[ZIn]</c>.</summary>
+        IPropertyValidationBuilder<T> In(params string[] values);
+
+        /// <summary>Value must NOT be one of the specified values. Equivalent to <c>[ZNotIn]</c>.</summary>
+        IPropertyValidationBuilder<T> NotIn(params string[] values);
+
+        /// <summary>Must pass Luhn algorithm (credit card number). Equivalent to <c>[ZCreditCard]</c>.</summary>
+        IPropertyValidationBuilder<T> CreditCard(string? message = null);
+
+        /// <summary>Must be a valid phone number format. Equivalent to <c>[ZPhone]</c>.</summary>
+        IPropertyValidationBuilder<T> Phone(string? message = null);
 
         // ── Cross-field comparisons ─────────────────────────────────────
 
