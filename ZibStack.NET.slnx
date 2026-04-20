@@ -20,18 +20,14 @@
   <Folder Name="/packages/ZibStack.NET.Core/src/">
     <Project Path="packages/ZibStack.NET.Core/src/ZibStack.NET.Core/ZibStack.NET.Core.csproj" />
   </Folder>
-  <Folder Name="/packages/ZibStack.NET.EntityFramework/" />
-  <Folder Name="/packages/ZibStack.NET.EntityFramework/src/">
-    <Project Path="packages/ZibStack.NET.EntityFramework/src/ZibStack.NET.EntityFramework/ZibStack.NET.EntityFramework.csproj" />
-  </Folder>
   <Folder Name="/packages/ZibStack.NET.Dapper/" />
   <Folder Name="/packages/ZibStack.NET.Dapper/src/">
     <Project Path="packages/ZibStack.NET.Dapper/src/ZibStack.NET.Dapper/ZibStack.NET.Dapper.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Dto/" />
   <Folder Name="/packages/ZibStack.NET.Dto/sample/">
-    <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />
     <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi.Tests/SampleApi.Tests.csproj" />
+    <Project Path="packages/ZibStack.NET.Dto/sample/SampleApi/SampleApi.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Dto/src/">
     <Project Path="packages/ZibStack.NET.Dto/src/ZibStack.NET.Dto/ZibStack.NET.Dto.csproj" />
@@ -39,37 +35,23 @@
   <Folder Name="/packages/ZibStack.NET.Dto/tests/">
     <Project Path="packages/ZibStack.NET.Dto/tests/ZibStack.NET.Dto.Tests/ZibStack.NET.Dto.Tests.csproj" />
   </Folder>
+  <Folder Name="/packages/ZibStack.NET.EntityFramework/" />
+  <Folder Name="/packages/ZibStack.NET.EntityFramework/src/">
+    <Project Path="packages/ZibStack.NET.EntityFramework/src/ZibStack.NET.EntityFramework/ZibStack.NET.EntityFramework.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.Log/" />
   <Folder Name="/packages/ZibStack.NET.Log/sample/">
     <Project Path="packages/ZibStack.NET.Log/sample/SampleApi/SampleApi.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Log/src/">
     <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log.Abstractions/ZibStack.NET.Log.Abstractions.csproj" />
-    <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log/ZibStack.NET.Log.csproj" />
     <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log.Analyzers/ZibStack.NET.Log.Analyzers.csproj" />
+    <Project Path="packages/ZibStack.NET.Log/src/ZibStack.NET.Log/ZibStack.NET.Log.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Log/tests/">
+    <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Analyzers.Tests/ZibStack.NET.Log.Analyzers.Tests.csproj" />
     <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Benchmarks/ZibStack.NET.Log.Benchmarks.csproj" />
     <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Tests/ZibStack.NET.Log.Tests.csproj" />
-    <Project Path="packages/ZibStack.NET.Log/tests/ZibStack.NET.Log.Analyzers.Tests/ZibStack.NET.Log.Analyzers.Tests.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.Validation/" />
-  <Folder Name="/packages/ZibStack.NET.Validation/src/">
-    <Project Path="packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.Validation/tests/">
-    <Project Path="packages/ZibStack.NET.Validation/tests/ZibStack.NET.Validation.Tests/ZibStack.NET.Validation.Tests.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.UI/" />
-  <Folder Name="/packages/ZibStack.NET.UI/src/">
-    <Project Path="packages/ZibStack.NET.UI/src/ZibStack.NET.UI/ZibStack.NET.UI.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.UI/tests/">
-    <Project Path="packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj" />
-  </Folder>
-  <Folder Name="/packages/ZibStack.NET.UI/sample/">
-    <Project Path="packages/ZibStack.NET.UI/sample/SampleApi/SampleApi.csproj" />
-    <Project Path="packages/ZibStack.NET.UI/sample/SampleBlazor/SampleBlazor.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.Query/" />
   <Folder Name="/packages/ZibStack.NET.Query/src/">
@@ -86,6 +68,9 @@
     <Project Path="packages/ZibStack.NET.Result/tests/ZibStack.NET.Result.Tests/ZibStack.NET.Result.Tests.csproj" />
   </Folder>
   <Folder Name="/packages/ZibStack.NET.TypeGen/" />
+  <Folder Name="/packages/ZibStack.NET.TypeGen/sample/">
+    <Project Path="packages/ZibStack.NET.TypeGen/sample/SampleApi/SampleApi.csproj" />
+  </Folder>
   <Folder Name="/packages/ZibStack.NET.TypeGen/src/">
     <Project Path="packages/ZibStack.NET.TypeGen/src/ZibStack.NET.TypeGen.Abstractions/ZibStack.NET.TypeGen.Abstractions.csproj" />
     <Project Path="packages/ZibStack.NET.TypeGen/src/ZibStack.NET.TypeGen/ZibStack.NET.TypeGen.csproj" />
@@ -93,7 +78,25 @@
   <Folder Name="/packages/ZibStack.NET.TypeGen/tests/">
     <Project Path="packages/ZibStack.NET.TypeGen/tests/ZibStack.NET.TypeGen.Tests/ZibStack.NET.TypeGen.Tests.csproj" />
   </Folder>
-  <Folder Name="/packages/ZibStack.NET.TypeGen/sample/">
-    <Project Path="packages/ZibStack.NET.TypeGen/sample/SampleApi/SampleApi.csproj" />
+  <Folder Name="/packages/ZibStack.NET.UI/" />
+  <Folder Name="/packages/ZibStack.NET.UI/sample/">
+    <Project Path="packages/ZibStack.NET.UI/sample/SampleApi/SampleApi.csproj" />
+    <Project Path="packages/ZibStack.NET.UI/sample/SampleBlazor/SampleBlazor.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.UI/src/">
+    <Project Path="packages/ZibStack.NET.UI/src/ZibStack.NET.UI/ZibStack.NET.UI.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.UI/tests/">
+    <Project Path="packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Validation/" />
+  <Folder Name="/packages/ZibStack.NET.Validation/src/">
+    <Project Path="packages/ZibStack.NET.Validation/src/ZibStack.NET.Validation/ZibStack.NET.Validation.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Validation/tests/">
+    <Project Path="packages/ZibStack.NET.Validation/tests/ZibStack.NET.Validation.Tests/ZibStack.NET.Validation.Tests.csproj" />
+  </Folder>
+  <Folder Name="/packages/ZibStack.NET.Validation/sample/">
+    <Project Path="packages/ZibStack.NET.Validation/sample/SampleApi/SampleApi.csproj" />
   </Folder>
 </Solution>
