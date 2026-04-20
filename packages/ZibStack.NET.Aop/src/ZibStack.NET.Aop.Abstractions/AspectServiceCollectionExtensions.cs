@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -54,9 +55,10 @@ public static class AspectServiceCollectionExtensions
         services.TryAddSingleton<ThrottleHandler>();
 
         // AuthorizeHandler requires IAuthorizationProvider — only register if
-        // the provider is already in DI (otherwise users get a clear DI error
-        // when they first use [Authorize]).
-        services.TryAddSingleton<AuthorizeHandler>();
+        // the provider is already in DI, otherwise ValidateOnBuild (default in
+        // ASP.NET Core) throws even when nobody uses [Authorize].
+        if (services.Any(d => d.ServiceType == typeof(IAuthorizationProvider)))
+            services.TryAddSingleton<AuthorizeHandler>();
 
         return services;
     }
