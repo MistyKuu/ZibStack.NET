@@ -107,7 +107,13 @@ public class DerivedLogService : BaseLogService { }
 // ── Apply() bulk [Log] test services ────────────────────────────────────────
 // NO [Log] attributes — logging applied via IAopConfigurator.Apply()
 
-public class E2ePaymentService
+public interface IE2ePaymentService
+{
+    string Charge(string customer, decimal amount);
+    int GetBalance(int accountId);
+}
+
+public class E2ePaymentService : IE2ePaymentService
 {
     public int CallCount;
 

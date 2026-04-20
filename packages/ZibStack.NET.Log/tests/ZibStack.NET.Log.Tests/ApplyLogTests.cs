@@ -111,4 +111,31 @@ public class ApplyLogTests
         var exitLog = entries.First(e => e.Message.Contains("Exited") && e.Message.Contains("Charge"));
         Assert.Matches(@"\d+ms", exitLog.Message);
     }
+
+    // ── Interface dispatch (the real DI shape) ─────────────────────────────
+    // Apply rule uses ClassesWhere(c => c.Name.StartsWith("E2e")) which matches
+    // E2ePaymentService but NOT IE2ePaymentService. The generator must synthesize
+    // an interface proxy so calls through the interface are still intercepted.
+
+    [Fact]
+    public void ApplyLog_InterfaceDispatch_StillLogged()
+    {
+        IE2ePaymentService svc = new E2ePaymentService();
+        svc.Charge("Dave", 77m);
+
+        var entries = _logProvider.AllEntries;
+        Assert.Contains(entries, e => e.Message.Contains("Entering") && e.Message.Contains("Charge"));
+        Assert.Contains(entries, e => e.Message.Contains("Exited") && e.Message.Contains("Charge"));
+    }
+
+    [Fact]
+    public void ApplyLog_InterfaceDispatch_ReturnValueLogged()
+    {
+        IE2ePaymentService svc = new E2ePaymentService();
+        svc.GetBalance(3);
+
+        var entries = _logProvider.AllEntries;
+        var exitLog = entries.First(e => e.Message.Contains("Exited") && e.Message.Contains("GetBalance"));
+        Assert.Contains("300", exitLog.Message);
+    }
 }

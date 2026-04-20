@@ -146,16 +146,28 @@ public static class AopPipeline
                     if (model != null)
                         models.Add(model);
 
-                    // Propagate to interfaces whenever the class has ANY aspect — class-level
-                    // or method-level. A method-level [Log] on an impl must also intercept
-                    // calls made through an interface reference, otherwise the aspect
-                    // silently no-ops in DI scenarios.
-                    bool hasClassLevelAspect = classSymbol.GetAttributes()
+                    // Propagate to interfaces whenever the class has ANY aspect — class-level,
+                    // method-level, or via Apply() rules. Without this, calls dispatched
+                    // through an interface reference silently bypass the aspect in DI scenarios.
+                    if (classSymbol.TypeKind != TypeKind.Class)
+                        continue;
+
+                    bool hasAnyAspect = classSymbol.GetAttributes()
                         .Any(a => DerivesFromAspectAttribute(a.AttributeClass));
-                    bool hasMethodLevelAspect = classSymbol.GetMembers()
-                        .OfType<IMethodSymbol>()
-                        .Any(m => m.GetAttributes().Any(a => DerivesFromAspectAttribute(a.AttributeClass)));
-                    if ((!hasClassLevelAspect && !hasMethodLevelAspect) || classSymbol.TypeKind != TypeKind.Class)
+                    if (!hasAnyAspect)
+                        hasAnyAspect = classSymbol.GetMembers()
+                            .OfType<IMethodSymbol>()
+                            .Any(m => m.GetAttributes().Any(a => DerivesFromAspectAttribute(a.AttributeClass)));
+                    if (!hasAnyAspect)
+                    {
+                        if ((classSymbol.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } comp)
+                        {
+                            var rules = AopConfiguratorParser.ReadAll(comp).ApplyRules;
+                            hasAnyAspect = classSymbol.GetMembers().OfType<IMethodSymbol>()
+                                .Any(m => rules.Any(r => AopParser.MatchesApplyRule(r, m)));
+                        }
+                    }
+                    if (!hasAnyAspect)
                         continue;
 
                     var classFqn = classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);

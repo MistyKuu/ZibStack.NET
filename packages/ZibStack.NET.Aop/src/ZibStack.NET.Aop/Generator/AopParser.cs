@@ -384,6 +384,20 @@ public static class AopParser
             if (classLevelAspectAttrs.Length > 0)
                 CollectAspects(classLevelAspectAttrs, openMethod, aspects, seenAspectTypes);
 
+            // Apply() rules from IAopConfigurator — match against the IMPL method so that
+            // selectors like ClassesWhere(c => c.Name.StartsWith("Order")) resolve against
+            // the concrete class, not the interface.
+            if (implClassSymbol.FindImplementationForInterfaceMember(closedMethod) is IMethodSymbol implMethodForApply
+                && (implClassSymbol.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } compilation)
+            {
+                var config = AopConfiguratorParser.ReadAll(compilation);
+                foreach (var rule in config.ApplyRules)
+                {
+                    if (!seenAspectTypes.Contains(rule.AspectFqn) && MatchesApplyRule(rule, implMethodForApply))
+                        CollectVirtualAspect(rule, openMethod, aspects, seenAspectTypes, compilation);
+                }
+            }
+
             if (aspects.Count == 0)
                 continue;
 
