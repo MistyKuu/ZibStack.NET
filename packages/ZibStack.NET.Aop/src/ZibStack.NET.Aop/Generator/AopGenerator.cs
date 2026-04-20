@@ -292,11 +292,12 @@ public static class AopPipeline
     }
 
     /// <summary>
-    /// Filters a class model to only include aspects the current generator can handle:
-    /// aspects with a registered emitter OR aspects with a runtime handler. Returns null
-    /// if no methods remain after filtering.
-    /// This prevents two generators (e.g. AOP standalone + Log) from emitting duplicate
-    /// wrapper classes for the same target class.
+    /// Filters a class model to only include aspects the current generator can handle.
+    /// <list type="bullet">
+    /// <item>Generator WITH emitters (e.g. Log): keeps ONLY aspects it has emitters for.</item>
+    /// <item>Generator WITHOUT emitters (AOP standalone): keeps ONLY handler-based aspects.</item>
+    /// </list>
+    /// This prevents two generators from emitting duplicate wrapper classes.
     /// </summary>
     private static InterceptedClassModel? FilterModelForGenerator(
         InterceptedClassModel? model,
@@ -304,13 +305,19 @@ public static class AopPipeline
     {
         if (model is null) return null;
 
+        // If this generator has emitters, it only processes those specific aspects.
+        // If it has NO emitters (standalone), it processes handler-based aspects only.
+        bool isStandalone = emitters.Count == 0;
+
         var filteredMethods = new List<InterceptedMethodModel>(model.Methods.Count);
         bool anyChanged = false;
 
         foreach (var method in model.Methods)
         {
             var kept = method.Aspects
-                .Where(a => emitters.ContainsKey(a.AttributeFullName) || a.HandlerTypeName != null)
+                .Where(a => isStandalone
+                    ? a.HandlerTypeName != null
+                    : emitters.ContainsKey(a.AttributeFullName))
                 .ToList();
 
             if (kept.Count == 0) { anyChanged = true; continue; }
