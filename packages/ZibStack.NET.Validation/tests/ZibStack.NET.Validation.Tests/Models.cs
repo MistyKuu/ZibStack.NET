@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using ZibStack.NET.Validation;
 
+// ReSharper disable UnusedAutoPropertyAccessor.Global
+
 namespace ZibStack.NET.Validation.Tests;
 
 [ZValidate]
@@ -172,4 +174,47 @@ public partial class Invoice
     public string InvoiceNumber { get; set; } = "";
 
     public List<LineItem> Lines { get; set; } = new();
+}
+
+// ── [ZIn] / [ZNotIn] test ────────────────────────────────────────────────────
+
+[ZValidate]
+public partial class StatusRequest : IValidationConfigurator<StatusRequest>
+{
+    [ZIn("draft", "active", "archived")]
+    public string Status { get; set; } = "";
+
+    [ZNotIn("admin", "root")]
+    public string Username { get; set; } = "";
+
+    public void Configure(IValidationBuilder<StatusRequest> b) { }
+}
+
+// ── [ZCreditCard] / [ZPhone] test ────────────────────────────────────────────
+
+[ZValidate]
+public partial class PaymentRequest
+{
+    [ZRequired] [ZCreditCard]
+    public string CardNumber { get; set; } = "";
+
+    [ZPhone]
+    public string? Phone { get; set; }
+}
+
+// ── Conditional validation test ──────────────────────────────────────────────
+
+[ZValidate]
+public partial class ShippingRequest : IValidationConfigurator<ShippingRequest>
+{
+    public bool RequiresShipping { get; set; }
+    public string? ShippingAddress { get; set; }
+
+    public void Configure(IValidationBuilder<ShippingRequest> b)
+    {
+        b.When(x => x.RequiresShipping, then =>
+        {
+            then.Rule(x => !string.IsNullOrEmpty(x.ShippingAddress), "Shipping address is required when shipping is needed");
+        });
+    }
 }

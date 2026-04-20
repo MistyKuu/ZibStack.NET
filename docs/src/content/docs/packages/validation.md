@@ -67,6 +67,10 @@ if (!result.IsValid)
 | `[ZUrl]` | Property | Must be a valid absolute URL |
 | `[ZMatch(pattern)]` | Property | Must match the regex pattern |
 | `[ZNotEmpty]` | Property | Collection must have items; string must not be whitespace |
+| `[ZIn("a", "b", "c")]` | Property | Value must be one of the specified allowed values |
+| `[ZNotIn("x", "y")]` | Property | Value must NOT be one of the specified values |
+| `[ZCreditCard]` | Property | Must pass Luhn algorithm check (credit card number) |
+| `[ZPhone]` | Property | Must be a valid phone number format |
 
 All attributes support a `Message` property for custom error messages:
 
@@ -130,6 +134,33 @@ public void Configure(IValidationBuilder<OrderRequest> b)
 ```
 
 The generator inlines the lambda body directly into the `Validate()` method — no expression tree evaluation at runtime.
+
+### Conditional validation
+
+Use `b.When()` to apply rules only when a condition is met:
+
+```csharp
+[ZValidate]
+public partial class ShippingRequest : IValidationConfigurator<ShippingRequest>
+{
+    public bool RequiresShipping { get; set; }
+    public string? ShippingAddress { get; set; }
+    public string? TrackingNumber { get; set; }
+
+    public void Configure(IValidationBuilder<ShippingRequest> b)
+    {
+        b.When(x => x.RequiresShipping, then =>
+        {
+            then.Rule(x => !string.IsNullOrEmpty(x.ShippingAddress),
+                "Shipping address is required when shipping is needed");
+            then.Rule(x => !string.IsNullOrEmpty(x.TrackingNumber),
+                "Tracking number is required when shipping is needed");
+        });
+    }
+}
+```
+
+When `RequiresShipping` is false, the inner rules are skipped entirely. When true, they are evaluated normally.
 
 ## Nested Validation
 

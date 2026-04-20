@@ -493,4 +493,101 @@ public class ValidationTests
         // Errors are prefixed with path
         Assert.Contains(result.Errors, e => e.Contains("BillingAddress."));
     }
+
+    // ── ZIn ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ZIn_ValidValue_NoError()
+    {
+        var req = new StatusRequest { Status = "draft", Username = "john" };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void ZIn_InvalidValue_ReturnsError()
+    {
+        var req = new StatusRequest { Status = "deleted", Username = "john" };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Status"));
+    }
+
+    // ── ZNotIn ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void ZNotIn_ValidValue_NoError()
+    {
+        var req = new StatusRequest { Status = "active", Username = "john" };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void ZNotIn_InvalidValue_ReturnsError()
+    {
+        var req = new StatusRequest { Status = "active", Username = "admin" };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Username"));
+    }
+
+    // ── ZCreditCard ──────────────────────────────────────────────────
+
+    [Fact]
+    public void ZCreditCard_ValidNumber_NoError()
+    {
+        var req = new PaymentRequest { CardNumber = "4111111111111111" };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void ZCreditCard_InvalidNumber_ReturnsError()
+    {
+        var req = new PaymentRequest { CardNumber = "1234567890" };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("CardNumber"));
+    }
+
+    // ── ZPhone ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void ZPhone_ValidNumber_NoError()
+    {
+        var req = new PaymentRequest { CardNumber = "4111111111111111", Phone = "+1-555-1234" };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void ZPhone_InvalidNumber_ReturnsError()
+    {
+        var req = new PaymentRequest { CardNumber = "4111111111111111", Phone = "abc" };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Phone"));
+    }
+
+    // ── Conditional validation ───────────────────────────────────────
+
+    [Fact]
+    public void Conditional_WhenTrue_Validates()
+    {
+        var req = new ShippingRequest { RequiresShipping = true, ShippingAddress = null };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Shipping address is required"));
+    }
+
+    [Fact]
+    public void Conditional_WhenFalse_Skips()
+    {
+        var req = new ShippingRequest { RequiresShipping = false, ShippingAddress = null };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void Conditional_WhenTrue_ValidData_NoError()
+    {
+        var req = new ShippingRequest { RequiresShipping = true, ShippingAddress = "123 Main St" };
+        Assert.True(req.Validate().IsValid);
+    }
 }

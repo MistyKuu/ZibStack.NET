@@ -133,9 +133,48 @@ Additional tests verify that `DELETE` sets flags instead of removing the row, an
 
 `Player` gets bulk tests (entity has `CrudOperations.AllWithBulk`) and nested-nav tests (has `[OneToOne] Team`). `Team` gets collection any/all tests (has `[OneToMany] Players`). Both get Query DSL and complex filter tests because the project references `ZibStack.NET.Query`.
 
-## Extending generated tests
+## Configuring the test factory
 
-Generated test classes are `partial`, so you can add custom test methods alongside the generated ones in a separate file:
+Generated test classes are `partial` with two hook methods you can override to configure DI, database, auth, and HTTP headers:
+
+```csharp
+// PlayerCrudTests.Config.cs — your file, never regenerated:
+public partial class PlayerCrudTests
+{
+    /// <summary>Configure services, database, auth middleware, etc.</summary>
+    static partial void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureServices(services =>
+        {
+            // Replace real DB with in-memory for tests
+            services.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("test"));
+            
+            // Add fake auth
+            services.AddAuthentication("Test")
+                .AddScheme<TestAuthHandler>("Test", _ => { });
+        });
+    }
+
+    /// <summary>Add headers, tokens, base URL config, etc.</summary>
+    static partial void ConfigureClient(HttpClient client)
+    {
+        client.DefaultRequestHeaders.Authorization = new("Bearer", "test-token");
+    }
+}
+```
+
+Both hooks are optional — if you don't implement them, the defaults (no-op) apply. The factory creates the test server with your configuration, then all generated tests use that configured client.
+
+### Available hooks
+
+| Hook | When called | Use for |
+|------|-------------|---------|
+| `ConfigureWebHost(IWebHostBuilder)` | Before server starts | DI overrides, in-memory DB, fake auth, custom middleware |
+| `ConfigureClient(HttpClient)` | After client created | Auth headers, API keys, custom base address |
+
+## Extending with custom tests
+
+You can also add custom test methods alongside the generated ones:
 
 ```csharp
 public partial class PlayerCrudTests
@@ -143,7 +182,7 @@ public partial class PlayerCrudTests
     [Fact]
     public async Task GetList_FiltersByLevel()
     {
-        // custom test using the same WebApplicationFactory
+        // Uses the same configured _client
         var response = await _client.GetAsync("/api/players?filter=Level>=5");
         response.EnsureSuccessStatusCode();
     }
