@@ -14,7 +14,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 - **`[Log]`** — compile-time structured logging with zero boilerplate. Interpolated strings (`LogInformation($"...")`) just work.
 - **`[Trace]`** — OpenTelemetry spans on any method, with one attribute. Compatible with Jaeger / Zipkin / OTLP.
-- **ZibStack.NET.Aop** — built-in `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Audit]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]` aspects. Write your own with `IAspectHandler` — a few lines each.
+- **ZibStack.NET.Aop** — built-in `[Trace]`, `[Log]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Audit]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]` aspects. Write your own with `IAspectHandler` — a few lines each. Global `Apply<>()` rules to instrument entire namespaces without any attributes.
 
 **Tier 2 — Ergonomics. Opt-in per file.** TypeScript-inspired utility types and helpers you reach for when you want them. No framework, no configuration.
 
@@ -49,8 +49,8 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 | Package | NuGet | Description |
 |---|---|---|
-| [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Compile-time logging via C# interceptors. Add `[Log]` to any method for automatic entry/exit/exception logging with zero allocation. Also provides structured interpolated string logging — `LogInformation($"...")` just works. |
-| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in: `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]`. Custom aspects via `IAspectHandler`. |
+| [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in: `[Log]`, `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]`. Custom aspects via `IAspectHandler`. Global `Apply<>()` rules. |
+| [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Interpolated-string logging optimization — rewrites `LogInformation($"...")` into zero-allocation `LoggerMessage.Define` at compile time. |
 | [**ZibStack.NET.Aop.Polly**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/) | `dotnet add package ZibStack.NET.Aop.Polly` | Polly-based resilience aspects: `[PollyRetry]` (named pipelines, backoff, exception filtering) and `[PollyHttpRetry]` (transient HTTP errors). |
 | [**ZibStack.NET.Aop.HybridCache**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/) | `dotnet add package ZibStack.NET.Aop.HybridCache` | `[HybridCache]` — L1/L2 caching (memory + Redis) via `Microsoft.Extensions.Caching.Hybrid`. |
 | [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable<TSource>` → shape-record + `Split(src)` factory + nested `Rest`). |
@@ -331,9 +331,9 @@ The capstone. One attribute on your model generates: CRUD API + DTOs + validatio
 ```
 ZibStack.NET/
 ├── packages/
-│   ├── ZibStack.NET.Aop/              → AOP framework (aspects, interceptors, built-in [Trace]/[Retry]/[Cache]/[Metrics]/...)
+│   ├── ZibStack.NET.Aop/              → AOP framework (all aspects: [Log]/[Trace]/[Retry]/[Cache]/[Metrics]/... + Apply<>())
 │   │   └── ZibStack.NET.Aop.Polly/   → Polly-based resilience ([PollyRetry], [HttpRetry])
-│   ├── ZibStack.NET.Log/              → Logging source generator
+│   ├── ZibStack.NET.Log/              → Interpolated-string logging optimization
 │   ├── ZibStack.NET.Core/             → Shared attributes (relations, utility types)
 │   ├── ZibStack.NET.Dto/              → DTO + CRUD API source generator
 │   ├── ZibStack.NET.Query/            → Filter/sort DSL for REST APIs

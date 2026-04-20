@@ -68,6 +68,17 @@ b.Apply<RetryAttribute>(to => to
 
 ## Examples
 
+### Log all services globally (no `[Log]` on any class)
+
+```csharp
+b.Apply<LogAttribute>(to => to
+    .Namespace("MyApp.Services")
+    .PublicMethods()
+);
+```
+
+Works through interfaces, generics, overloads, diamond inheritance, and DI dispatch.
+
 ### Cache all repository methods
 
 ```csharp

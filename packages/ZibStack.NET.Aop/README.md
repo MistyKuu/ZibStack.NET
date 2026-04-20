@@ -15,6 +15,7 @@ All registered automatically by `AddAop()`:
 | Attribute | What it does |
 |---|---|
 | `[Trace]` | OpenTelemetry `Activity` spans with parameter tags, timing, status |
+| `[Log]` | Structured entry/exit/error logging via `ILoggerFactory` (from `ZibStack.NET.Log.Abstractions`) |
 | `[Retry]` | Retry with backoff + exception filtering (`Handle`/`Ignore` as `Type[]`) |
 | `[Cache]` | In-memory cache with TTL and compile-time `KeyTemplate` |
 | `[Metrics]` | `System.Diagnostics.Metrics` — call count, duration histogram, error count |
@@ -32,31 +33,40 @@ public sealed class AopConfig : IAopConfigurator
 {
     public void Configure(IAopBuilder b)
     {
+        // Log every public method in a namespace — zero attributes on classes
+        b.Apply<LogAttribute>(to => to
+            .Namespace("MyApp.Services")
+            .PublicMethods()
+        );
+
+        b.Apply<TraceAttribute>(to => to
+            .Namespace("MyApp.Services")
+            .PublicMethods()
+        );
+
         b.Apply<CacheAttribute>(to => to
             .Implementing<IRepository>()
             .PublicMethods()
         , c => c.DurationSeconds = 120);
 
         b.Apply<RetryAttribute>(to => to
-            .Namespace("MyApp.Services")
+            .Namespace("MyApp.External")
             .MethodsWhere(m => m.IsAsync)
         , r => r.MaxAttempts = 5);
-
-        b.Apply<TraceAttribute>(to => to
-            .DerivedFrom<BaseService>()
-            .Except<HealthCheck>()
-        );
     }
 }
 ```
 
 Selectors: `.Namespace()`, `.Implementing<T>()`, `.DerivedFrom<T>()`, `.ClassesWhere()`, `.MethodsWhere()`, `.PublicMethods()`, `.Except<T>()`.
 
+Works with interfaces, generics, overloads, diamond inheritance, and DI dispatch.
+
 Optional (require external packages): `[PollyRetry]` (Polly.Core), `[HybridCache]` (Microsoft.Extensions.Caching.Hybrid).
 
 ```csharp
 // One attribute per concern:
 [Trace]
+[Log]
 [Retry(MaxAttempts = 3, Handle = new[] { typeof(HttpRequestException) })]
 [Cache(KeyTemplate = "order:{id}", DurationSeconds = 60)]
 [Metrics]

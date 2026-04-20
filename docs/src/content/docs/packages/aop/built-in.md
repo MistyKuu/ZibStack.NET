@@ -9,6 +9,7 @@ description: Reference for the aspects that ship in ZibStack.NET.Aop — Trace, 
 
 | Attribute | Handler | Description |
 |---|---|---|
+| `[Log]` | *(inline emitter)* | Structured entry/exit/error logging via `ILoggerFactory` (from `ZibStack.NET.Log.Abstractions`) |
 | `[Trace]` | `TraceHandler` | OpenTelemetry `Activity` spans with parameter tags, timing, status |
 | `[Retry]` | `RetryHandler` | Retry with backoff, exception filtering (`Handle`/`Ignore`) |
 | `[Cache]` | `CacheHandler` | In-memory cache with TTL and `KeyTemplate` support |
