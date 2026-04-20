@@ -216,6 +216,47 @@ public class GlobalAopE2eTests : IDisposable
         Assert.Equal(1, metricsCalls);
     }
 
+    // ── Concrete class call + interface call on the same type ────────────
+
+    [Fact]
+    public void GlobalApply_ConcreteCall_RecordFires()
+    {
+        var svc = new E2eSimpleHandler();
+        svc.Execute();
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Execute"
+            && c.Context.ClassName == "E2eSimpleHandler");
+    }
+
+    [Fact]
+    public void GlobalApply_InterfaceCall_RecordFires()
+    {
+        IE2eHandler svc = new E2eSimpleHandler();
+        svc.Execute();
+
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.MethodName == "Execute"
+            && c.Context.ClassName == "IE2eHandler");
+    }
+
+    [Fact]
+    public void GlobalApply_BothConcreteAndInterface_CoexistWithoutCollision()
+    {
+        var concrete = new E2eSimpleHandler();
+        IE2eHandler iface = new E2eSimpleHandler();
+
+        concrete.Execute();
+        iface.Execute();
+
+        // Concrete call → ClassName == "E2eSimpleHandler"
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.ClassName == "E2eSimpleHandler");
+        // Interface call → ClassName == "IE2eHandler"
+        Assert.Contains(_handler.Calls, c =>
+            c.Phase == "Before" && c.Context.ClassName == "IE2eHandler");
+    }
+
     // ── Generic arity collision: IHandler and IHandler<T> ──────────────────
 
     [Fact]
