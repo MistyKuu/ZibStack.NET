@@ -87,7 +87,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         if (loggable.Count <= 6)
         {
             var types = loggable.Select(p => GetParamLogType(p, objectLogging)).ToList();
-            EmitDelegate(sb, indent, method.MethodName, "Entry", types, level, ref _eventId, entryMsg);
+            EmitDelegate(sb, indent, method.MethodName, "Entry", types, level, ref _eventId, entryMsg, method.Parameters.Count);
         }
         else _eventId++;
 
@@ -104,12 +104,12 @@ internal sealed class LogAspectEmitter : IAspectEmitter
                 exitTypes.Add("string?");
         }
         var exitMsg = PStr(aspect, "ExitMessage") ?? BuildExitMessage(cls, method, measureElapsed, logReturn, objectLogging);
-        EmitDelegate(sb, indent, method.MethodName, "Exit", exitTypes, level, ref _eventId, exitMsg);
+        EmitDelegate(sb, indent, method.MethodName, "Exit", exitTypes, level, ref _eventId, exitMsg, method.Parameters.Count);
 
         // --- Error delegate ---
         var errTypes = measureElapsed ? new List<string> { "long" } : new List<string>();
         var errMsg = PStr(aspect, "ExceptionMessage") ?? BuildErrorMessage(cls, method, measureElapsed);
-        EmitDelegate(sb, indent, method.MethodName, "Error", errTypes, exLevel, ref _eventId, errMsg);
+        EmitDelegate(sb, indent, method.MethodName, "Error", errTypes, exLevel, ref _eventId, errMsg, method.Parameters.Count);
     }
 
     /// <summary>
@@ -154,7 +154,7 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         if (!UseInlinePath(method, loggable.Count, cls))
         {
             var args = string.Join("", loggable.Select(p => FormatEntryArg(p, objectLogging)));
-            sb.AppendLine($"{indent}__log{method.MethodName}Entry(__logger{args}, null);");
+            sb.AppendLine($"{indent}{LogField(method, "Entry")}(__logger{args}, null);");
         }
         else
         {
@@ -203,9 +203,9 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         if (method.ReturnsVoid)
         {
             if (measureElapsed)
-                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, __sw.ElapsedMilliseconds, null);");
+                sb.AppendLine($"{indent}{LogField(method, "Exit")}(__logger, __sw.ElapsedMilliseconds, null);");
             else
-                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, null);");
+                sb.AppendLine($"{indent}{LogField(method, "Exit")}(__logger, null);");
         }
         else
         {
@@ -214,9 +214,9 @@ internal sealed class LogAspectEmitter : IAspectEmitter
             if (logReturn) args.Add(FormatReturnValue(method, aspect, objectLogging));
 
             if (args.Count > 0)
-                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, {string.Join(", ", args)}, null);");
+                sb.AppendLine($"{indent}{LogField(method, "Exit")}(__logger, {string.Join(", ", args)}, null);");
             else
-                sb.AppendLine($"{indent}__log{method.MethodName}Exit(__logger, null);");
+                sb.AppendLine($"{indent}{LogField(method, "Exit")}(__logger, null);");
         }
     }
 
@@ -239,9 +239,9 @@ internal sealed class LogAspectEmitter : IAspectEmitter
         }
 
         if (measureElapsed)
-            sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __sw.ElapsedMilliseconds, __ex);");
+            sb.AppendLine($"{indent}{LogField(method, "Error")}(__logger, __sw.ElapsedMilliseconds, __ex);");
         else
-            sb.AppendLine($"{indent}__log{method.MethodName}Error(__logger, __ex);");
+            sb.AppendLine($"{indent}{LogField(method, "Error")}(__logger, __ex);");
     }
 
     // === Format helpers ===
@@ -331,18 +331,30 @@ internal sealed class LogAspectEmitter : IAspectEmitter
     // === Shared emit helper ===
 
     private static void EmitDelegate(StringBuilder sb, string indent, string methodName,
-        string suffix, List<string> typeArgs, int level, ref int eventId, string message)
+        string suffix, List<string> typeArgs, int level, ref int eventId, string message, int paramCount)
     {
         var typeArgsStr = typeArgs.Count > 0 ? $"<{string.Join(", ", typeArgs)}>" : "";
         var all = new List<string> { "global::Microsoft.Extensions.Logging.ILogger" };
         all.AddRange(typeArgs);
         all.Add("global::System.Exception?");
 
-        sb.AppendLine($"{indent}private static readonly global::System.Action<{string.Join(", ", all)}> __log{methodName}{suffix} =");
+        // Use paramCount in the field name to disambiguate overloaded methods (Equals(object), Equals(T), etc.)
+        var fieldName = $"__log{methodName}_{paramCount}{suffix}";
+        sb.AppendLine($"{indent}private static readonly global::System.Action<{string.Join(", ", all)}> {fieldName} =");
         sb.AppendLine($"{indent}    global::Microsoft.Extensions.Logging.LoggerMessage.Define{typeArgsStr}(");
         sb.AppendLine($"{indent}        global::Microsoft.Extensions.Logging.LogLevel.{LogLevelNames[level]},");
-        sb.AppendLine($"{indent}        new global::Microsoft.Extensions.Logging.EventId({eventId++}, \"{methodName}_{suffix}\"),");
+        sb.AppendLine($"{indent}        new global::Microsoft.Extensions.Logging.EventId({eventId}, \"{methodName}_{suffix}\"),");
         sb.AppendLine($"{indent}        \"{Esc(message)}\");");
+        eventId++;
+    }
+
+    /// <summary>
+    /// Returns the field name for a LoggerMessage.Define delegate, disambiguated by parameter
+    /// count so overloaded methods (Equals(object), Equals(T)) get unique field names.
+    /// </summary>
+    private static string LogField(InterceptedMethodModel method, string suffix)
+    {
+        return $"__log{method.MethodName}_{method.Parameters.Count}{suffix}";
     }
 
     private static object? ClassData(InterceptedClassModel cls, string key)

@@ -111,6 +111,10 @@ public static class AopParser
         if (method.MethodKind != MethodKind.Ordinary)
             return null;
 
+        // Skip compiler-generated methods (record <Clone>$, anonymous types, etc.)
+        if (method.Name.Contains("<") || method.Name.Contains(">"))
+            return null;
+
         var aspects = new List<AspectInfo>();
         var seenAspectTypes = new HashSet<string>();
 
