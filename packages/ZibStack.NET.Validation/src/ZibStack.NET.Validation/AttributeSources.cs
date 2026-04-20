@@ -101,11 +101,17 @@ namespace ZibStack.NET.Validation
     }
 
     /// <summary>
-    /// Runtime context passed through the validation chain. Carries parent reference,
-    /// property path, root object, and a user-data bag.
+    /// Runtime context passed through the validation chain. Carries DI service provider,
+    /// parent reference, property path, root object, and a user-data bag.
     /// </summary>
     public sealed class ValidationContext
     {
+        /// <summary>
+        /// DI service provider for resolving services like <see cref=""IValidationLocalizer""/>.
+        /// Auto-populated by <see cref=""ValidationServiceProvider.ConfigureValidation""/>.
+        /// </summary>
+        public System.IServiceProvider? ServiceProvider { get; set; }
+
         /// <summary>The object that triggered this nested validation.</summary>
         public object? Parent { get; set; }
 
@@ -118,16 +124,54 @@ namespace ZibStack.NET.Validation
         /// <summary>User-defined key-value bag for custom data.</summary>
         public System.Collections.Generic.Dictionary<string, object?> Items { get; } = new();
 
+        /// <summary>Resolve a service from DI. Returns null if not registered or no provider.</summary>
+        public T? GetService<T>() where T : class
+            => ServiceProvider?.GetService(typeof(T)) as T;
+
         internal ValidationContext ForNested(object parent, string propertyName)
         {
             var ctx = new ValidationContext
             {
+                ServiceProvider = ServiceProvider,
                 Parent = parent,
                 Path = string.IsNullOrEmpty(Path) ? propertyName : Path + ""."" + propertyName,
                 RootObject = RootObject ?? parent,
             };
             foreach (var kv in Items) ctx.Items[kv.Key] = kv.Value;
             return ctx;
+        }
+    }
+
+    /// <summary>
+    /// Implement to provide localized validation error messages.
+    /// Register in DI: <c>builder.Services.AddSingleton&lt;IValidationLocalizer, MyLocalizer&gt;();</c>
+    /// </summary>
+    public interface IValidationLocalizer
+    {
+        /// <summary>
+        /// Return a localized message for the given property and default message.
+        /// Return null to use the default (English) message.
+        /// </summary>
+        string? GetMessage(string property, string defaultMessage);
+    }
+
+    /// <summary>
+    /// Static bridge between DI and the validation runtime. Call
+    /// <c>app.Services.ConfigureValidation();</c> once at startup.
+    /// </summary>
+    public static class ValidationServiceProvider
+    {
+        /// <summary>The application's service provider. Set by <see cref=""ConfigureValidation""/>.</summary>
+        public static System.IServiceProvider? ServiceProvider { get; set; }
+
+        /// <summary>
+        /// Bridges DI into the validation runtime. Call once at startup:
+        /// <code>app.Services.ConfigureValidation();</code>
+        /// </summary>
+        public static System.IServiceProvider ConfigureValidation(this System.IServiceProvider services)
+        {
+            ServiceProvider = services ?? throw new System.ArgumentNullException(nameof(services));
+            return services;
         }
     }
 }
@@ -478,11 +522,12 @@ namespace ZibStack.NET.Validation
         {
             return builder.AddEndpointFilter(async (context, next) =>
             {
+                var ctx = new ValidationContext { ServiceProvider = ValidationServiceProvider.ServiceProvider };
                 foreach (var arg in context.Arguments)
                 {
                     if (arg is IValidatable validatable)
                     {
-                        var result = validatable.Validate();
+                        var result = validatable.Validate(ctx);
                         if (!result.IsValid)
                         {
                             return Microsoft.AspNetCore.Http.Results.ValidationProblem(
@@ -505,11 +550,12 @@ namespace ZibStack.NET.Validation
         {
             group.AddEndpointFilter(async (context, next) =>
             {
+                var ctx = new ValidationContext { ServiceProvider = ValidationServiceProvider.ServiceProvider };
                 foreach (var arg in context.Arguments)
                 {
                     if (arg is IValidatable validatable)
                     {
-                        var result = validatable.Validate();
+                        var result = validatable.Validate(ctx);
                         if (!result.IsValid)
                         {
                             return Microsoft.AspNetCore.Http.Results.ValidationProblem(
