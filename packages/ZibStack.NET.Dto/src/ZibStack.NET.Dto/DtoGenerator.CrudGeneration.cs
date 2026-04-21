@@ -669,16 +669,23 @@ public partial class DtoGenerator
     {
         foreach (var type in ns.GetTypeMembers())
         {
-            foreach (var attr in type.GetAttributes())
+            // [CrudApi] is the primary source; [ImTiredOfCrud] (from ZibStack.NET.UI) is the
+            // bridge alias that emits the same endpoints. Tests must cover both or they
+            // silently miss every [ImTiredOfCrud]-decorated entity.
+            AttributeData? attr = null;
+            foreach (var a in type.GetAttributes())
             {
-                var attrName = attr.AttributeClass?.Name;
-                if (attrName != "CrudApiAttribute") continue;
+                var attrName = a.AttributeClass?.Name;
+                if (attrName == "CrudApiAttribute") { attr = a; break; }
+                if (attrName == "ImTiredOfCrudAttribute" && attr is null) attr = a;
+            }
+            if (attr is null) continue;
 
-                var info = new CrudTestInfo
-                {
-                    ClassName = type.Name,
-                    Namespace = type.ContainingNamespace.IsGlobalNamespace ? null : type.ContainingNamespace.ToDisplayString(),
-                };
+            var info = new CrudTestInfo
+            {
+                ClassName = type.Name,
+                Namespace = type.ContainingNamespace.IsGlobalNamespace ? null : type.ContainingNamespace.ToDisplayString(),
+            };
 
                 foreach (var arg in attr.NamedArguments)
                 {
@@ -840,11 +847,10 @@ public partial class DtoGenerator
                         }
                     }
 
-                    info.Properties.Add(propInfo);
-                }
-
-                results.Add(info);
+                info.Properties.Add(propInfo);
             }
+
+            results.Add(info);
         }
         foreach (var sub in ns.GetNamespaceMembers())
             ScanForCrudApi(sub, results);
@@ -1019,6 +1025,95 @@ public partial class DtoGenerator
             sb.AppendLine("    }");
         }
 
+        // Standalone per-endpoint tests — emitted IN ADDITION to FullCrudCycle so the
+        // test runner reports one failure per broken endpoint instead of a single
+        // opaque "combined cycle failed". Also covers Operations combinations that
+        // exclude one of the four so FullCrudCycle never emits (e.g. Write-only).
+
+        // Update — PATCH then verify value actually changed via GET
+        if ((info.Operations & OpUpdate) != 0 && (info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0)
+        {
+            var verifyProp = updateProps.FirstOrDefault(p => !IsUnsupportedTestType(p.CSharpType) && p.CSharpType is "string" or "System.String");
+
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task Update_ModifiesEntity()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var createResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);");
+            sb.AppendLine("        var location = createResponse.Headers.Location!.ToString();");
+            sb.AppendLine("        var before = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(location);");
+            sb.AppendLine();
+            sb.AppendLine($"        var patchContent = JsonContent.Create({updateBody});");
+            sb.AppendLine("        var updateResponse = await _client.PatchAsync(location, patchContent);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);");
+
+            if (verifyProp is not null)
+            {
+                var jsonName = char.ToLowerInvariant(verifyProp.Name[0]) + verifyProp.Name.Substring(1);
+                sb.AppendLine();
+                sb.AppendLine("        var after = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>(location);");
+                sb.AppendLine($"        Assert.NotEqual(before.GetProperty(\"{jsonName}\").GetString(), after.GetProperty(\"{jsonName}\").GetString());");
+            }
+
+            sb.AppendLine("    }");
+        }
+        else if ((info.Operations & OpUpdate) != 0 && (info.Operations & OpCreate) != 0)
+        {
+            // No GetById to verify: PATCH by id extracted from POST body.
+            var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
+            var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
+
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task Update_ReturnsOk()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var createResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);");
+            sb.AppendLine($"        var body = await createResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+            sb.AppendLine($"        var id = body.GetProperty(\"{keyJsonName}\").{keyGetter}();");
+            sb.AppendLine($"        var patchContent = JsonContent.Create({updateBody});");
+            sb.AppendLine($"        var updateResponse = await _client.PatchAsync($\"/{route}/{{id}}\", patchContent);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);");
+            sb.AppendLine("    }");
+        }
+
+        // Delete — DELETE then verify 404 via GET
+        if ((info.Operations & OpDelete) != 0 && (info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task Delete_RemovesEntity()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var createResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);");
+            sb.AppendLine("        var location = createResponse.Headers.Location!.ToString();");
+            sb.AppendLine();
+            sb.AppendLine("        var deleteResponse = await _client.DeleteAsync(location);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);");
+            sb.AppendLine();
+            sb.AppendLine("        var afterDelete = await _client.GetAsync(location);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);");
+            sb.AppendLine("    }");
+        }
+        else if ((info.Operations & OpDelete) != 0 && (info.Operations & OpCreate) != 0)
+        {
+            var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
+            var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
+
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task Delete_ReturnsNoContent()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var createResponse = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);");
+            sb.AppendLine($"        var body = await createResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+            sb.AppendLine($"        var id = body.GetProperty(\"{keyJsonName}\").{keyGetter}();");
+            sb.AppendLine($"        var deleteResponse = await _client.DeleteAsync($\"/{route}/{{id}}\");");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);");
+            sb.AppendLine("    }");
+        }
+
         // Bulk create — verify items actually got created
         if ((info.Operations & OpBulkCreate) != 0 && (info.Operations & OpGetList) != 0)
         {
@@ -1050,7 +1145,31 @@ public partial class DtoGenerator
         }
 
         // Bulk delete — verify items actually got deleted (GetById → 404)
-        if ((info.Operations & OpBulkDelete) != 0 && (info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0)
+        // Two fallbacks: one when GetById is disabled (status-only) and one when
+        // even Create is disabled — in the latter case there's nothing to delete
+        // so we can't sensibly test it; the endpoint exists but not testable here.
+        if ((info.Operations & OpBulkDelete) != 0 && (info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) == 0)
+        {
+            var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
+            var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
+
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine($"    public async Task BulkDelete_ReturnsOk()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var ids = new List<{info.KeyType}>();");
+            sb.AppendLine("        for (var i = 0; i < 3; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var r = await _client.PostAsJsonAsync(\"/{route}\", {createBody});");
+            sb.AppendLine("            Assert.Equal(HttpStatusCode.Created, r.StatusCode);");
+            sb.AppendLine($"            var body = await r.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();");
+            sb.AppendLine($"            ids.Add(body.GetProperty(\"{keyJsonName}\").{keyGetter}());");
+            sb.AppendLine("        }");
+            sb.AppendLine($"        var response = await _client.PostAsJsonAsync(\"/{route}/bulk-delete\", ids);");
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.OK, response.StatusCode);");
+            sb.AppendLine("    }");
+        }
+        else if ((info.Operations & OpBulkDelete) != 0 && (info.Operations & OpCreate) != 0 && (info.Operations & OpGetById) != 0)
         {
             var keyJsonName = char.ToLowerInvariant(info.KeyPropertyName[0]) + info.KeyPropertyName.Substring(1);
             var keyGetter = info.KeyType is "int" or "System.Int32" ? "GetInt32" : "GetInt64";
@@ -1247,9 +1366,10 @@ public partial class DtoGenerator
             }
 
             // Complex filter tests: AND, OR, grouped (AND + OR)
+            // These POST to seed known values — skip when Create isn't enabled.
             var intProp2 = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && !p.IsNavigation && p.CSharpType is "int" or "System.Int32");
             var stringProp2 = info.Properties.FirstOrDefault(p => !p.IsKey && !p.IsComputed && !p.IsNavigation && p.CSharpType is "string" or "System.String" && !p.IsNullable);
-            if (intProp2 is not null && stringProp2 is not null)
+            if (intProp2 is not null && stringProp2 is not null && (info.Operations & OpCreate) != 0)
             {
                 var intName = intProp2.Name;
                 var strName = stringProp2.Name;
@@ -1330,8 +1450,11 @@ public partial class DtoGenerator
             }
 
             // Collection navigation with [OneToMany]: Team.Players → create parent + child, then any/all
+            // Needs Create on the parent route to seed (child route is assumed to
+            // accept POST too — if it doesn't, the test will still flag the actual
+            // endpoint mismatch rather than hiding it).
             var collectionNav = info.Properties.FirstOrDefault(p => p.IsCollection && p.HasOneToMany && p.NavigationProperties?.Count > 0 && p.ChildRoute is not null);
-            if (collectionNav is not null)
+            if (collectionNav is not null && (info.Operations & OpCreate) != 0)
             {
                 var colName = collectionNav.Name;
                 var childRoute = collectionNav.ChildRoute!;
