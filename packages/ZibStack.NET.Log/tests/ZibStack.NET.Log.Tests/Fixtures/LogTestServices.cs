@@ -168,5 +168,47 @@ public sealed class LogApplyTestConfig : ZibStack.NET.Aop.IAopConfigurator
             .ClassesWhere(c => c.Name.StartsWith("E2e"))
             .PublicMethods()
         );
+
+        // Same class-matcher style but with a configure lambda — exercises the
+        // "Apply(selector, configure)" overload and verifies that the aspect
+        // property (LogParameters=false) flows down into the generated interceptor.
+        b.Apply<LogAttribute>(
+            to => to.ClassesWhere(c => c.Name.StartsWith("NoParams")),
+            a => a.LogParameters = false
+        );
     }
+}
+
+// Service whose params should NOT appear in the entry log, because the Apply rule
+// carries `a => a.LogParameters = false`. Covers hierarchy level 3 (Apply-config).
+public class NoParamsService
+{
+    public string Charge(string customer, decimal amount) => $"charged-{customer}-{amount}";
+}
+
+// ── [NoLog] on parameters via interface dispatch ────────────────────────────
+// Two shapes: [NoLog] declared on the interface parameter only, and [NoLog]
+// declared on the impl parameter only. Both should redact the value when the
+// call is made through the interface (i.e. goes through the synthesized proxy).
+
+public interface INoLogIfaceParamService
+{
+    string DoThing(string visible, [NoLog] string secret);
+}
+
+public class NoLogIfaceParamServiceImpl : INoLogIfaceParamService
+{
+    [Log]
+    public string DoThing(string visible, string secret) => $"{visible}-{secret}";
+}
+
+public interface INoLogImplParamService
+{
+    string DoThing(string visible, string secret);
+}
+
+public class NoLogImplParamServiceImpl : INoLogImplParamService
+{
+    [Log]
+    public string DoThing(string visible, [NoLog] string secret) => $"{visible}-{secret}";
 }
