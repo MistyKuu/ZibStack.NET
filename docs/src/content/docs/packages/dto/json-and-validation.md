@@ -1,6 +1,6 @@
 ---
 title: JSON serializer & custom validation
-description: PatchField JSON converter registration (System.Text.Json + Newtonsoft) and how to plug in your own validator (manual or FluentValidation).
+description: PatchField JSON converter registration (System.Text.Json + Newtonsoft) and how to plug in your own validator via IDtoValidator<T>.
 ---
 
 ## JSON serializer support
@@ -37,43 +37,6 @@ public class Player { ... }
 ```
 
 When a validator is set, `Validate()` delegates entirely to it -- the default generated rules are replaced.
-
-### FluentValidation
-
-When FluentValidation is installed, the generator additionally produces:
-
-- `FluentDtoValidator<T>` -- base class bridging FluentValidation with `IDtoValidator<T>`
-- `{RequestName}CreateBaseValidator` -- contains the generated required/null rules
-- `{RequestName}UpdateBaseValidator` -- contains the generated null rules
-
-Inherit to extend:
-
-```csharp
-public class MyCreateValidator : CreatePlayerRequestCreateBaseValidator
-{
-    public MyCreateValidator()
-    {
-        RuleFor(x => x.Name)
-            .Must(f => !f.HasValue || f.Value.Length >= 3)
-            .WithMessage("Name must be at least 3 characters.");
-    }
-}
-
-[CreateDto(Validator = typeof(MyCreateValidator))]
-public class Player { ... }
-```
-
-Or start from scratch:
-
-```csharp
-public class MyCreateValidator : FluentDtoValidator<CreatePlayerRequest>
-{
-    public MyCreateValidator()
-    {
-        // your rules only
-    }
-}
-```
 
 ## Related guides
 

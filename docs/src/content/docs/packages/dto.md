@@ -230,7 +230,7 @@ This page covers the core mode + generated shape. Detailed reference and feature
 - [`PaginatedResponse<T>`](/ZibStack.NET/packages/dto/paginated/) — the standard list wrapper.
 - [CRUD API (`[CrudApi]`)](/ZibStack.NET/packages/dto/crud-api/) — full endpoint generation.
 - [Response DTOs, mapping, `ApplyWithChanges`](/ZibStack.NET/packages/dto/response-mapping/) — `FromEntity` / `ProjectFrom`, nested + flatten, Diff, DtoMapper, Swagger.
-- [JSON serializer & custom validation](/ZibStack.NET/packages/dto/json-and-validation/) — `PatchField` JSON registration + FluentValidation.
+- [JSON serializer & custom validation](/ZibStack.NET/packages/dto/json-and-validation/) — `PatchField` JSON registration + `IDtoValidator<T>`.
 
 ## Related guides
 
