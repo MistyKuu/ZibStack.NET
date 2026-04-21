@@ -32,10 +32,23 @@ public sealed partial class ValidationGenerator : IIncrementalGenerator
             ctx.AddSource("IValidationConfigurator.g.cs", CrossFieldInterfacesSource);
         });
 
-        // Emit ASP.NET endpoint filter only when Microsoft.AspNetCore.Http is referenced
+        // Emit the ASP.NET Core endpoint filter only when EVERY type the generated
+        // source references is actually resolvable in this compilation. Previously the
+        // gate only checked `Microsoft.AspNetCore.Http.Results`, so any project that
+        // happened to transitively pull that assembly in (e.g. tests referencing an
+        // ASP.NET Core web project for WebApplicationFactory, but not wiring the full
+        // minimal-API extension surface) hit a compile error:
+        //   `RouteHandlerBuilder does not contain a definition for AddEndpointFilter`.
+        // The three types below live in three separate assemblies — RouteHandlerBuilder
+        // in Microsoft.AspNetCore.Routing, Results in Microsoft.AspNetCore.Http.Results,
+        // EndpointFilterExtensions (which supplies AddEndpointFilter) in
+        // Microsoft.AspNetCore.Http.Extensions — so all three must be present before
+        // the filter source can compile.
         context.RegisterSourceOutput(
             context.CompilationProvider.Select(static (comp, _) =>
-                comp.GetTypeByMetadataName("Microsoft.AspNetCore.Http.Results") is not null),
+                comp.GetTypeByMetadataName("Microsoft.AspNetCore.Http.EndpointFilterExtensions") is not null
+                && comp.GetTypeByMetadataName("Microsoft.AspNetCore.Http.Results") is not null
+                && comp.GetTypeByMetadataName("Microsoft.AspNetCore.Builder.RouteHandlerBuilder") is not null),
             static (spc, hasAspNet) =>
             {
                 if (hasAspNet)
