@@ -1080,7 +1080,7 @@ public partial class DtoGenerator
             return $"new[] {{ {string.Join(", ", items)} }}";
         }
         if (tc.Value is string s)
-            return $"\"{s}\"";
+            return "@\"" + s.Replace("\"", "\"\"") + "\"";
         if (tc.Value is bool b)
             return b ? "true" : "false";
         return tc.Value?.ToString() ?? "null";

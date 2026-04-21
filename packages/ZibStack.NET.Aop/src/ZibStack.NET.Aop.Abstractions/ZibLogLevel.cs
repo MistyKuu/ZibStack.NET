@@ -1,4 +1,4 @@
-namespace ZibStack.NET.Log;
+namespace ZibStack.NET.Aop;
 
 /// <summary>
 /// Log level constants matching Microsoft.Extensions.Logging.LogLevel values.

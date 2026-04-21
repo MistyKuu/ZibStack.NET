@@ -112,12 +112,16 @@ ZibStack.NET.Log is designed to be a **quiet guest** in consumer projects — no
 
 Project-wide interpolation settings go through a fluent `ILogConfigurator` implementation:
 
+> **Note:** `ILogConfigurator` has moved to the `ZibStack.NET.Aop` namespace. Use `using ZibStack.NET.Aop;` to access it.
+
 | Property | Default | Effect |
 |---|---|---|
 | `PropertyNameCasing` | `PascalCase` (0) | `$"{userId}"` → template `{UserId}`. Matches Serilog/Seq/Elastic convention. |
 | | `CamelCase` (1) | `$"{userId}"` → template `{userId}`. Keeps the variable name as-is. |
 
 ```csharp
+using ZibStack.NET.Aop;  // ILogConfigurator is in the Aop namespace
+
 // Default (PascalCase — no configurator needed):
 _logger.LogInformation($"User {userId} bought {product}");
 // Template: "User {UserId} bought {Product}"

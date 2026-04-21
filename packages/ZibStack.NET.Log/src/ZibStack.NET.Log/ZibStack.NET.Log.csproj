@@ -10,7 +10,7 @@
 
     <!-- NuGet metadata -->
     <PackageId>ZibStack.NET.Log</PackageId>
-    <Description>Lightweight compile-time logging via C# interceptors. Add [Log] to any method and ZibStack.NET.Log generates zero-allocation logging wrappers using LoggerMessage.Define.</Description>
+    <Description>Compile-time interpolated-string logging interceptors. Rewrites logger.LogInformation($"...") into zero-allocation structured logging calls. The [Log] aspect attribute has moved to ZibStack.NET.Aop.</Description>
     <Authors>$(Authors)</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MistyKuu/ZibStack.NET</PackageProjectUrl>

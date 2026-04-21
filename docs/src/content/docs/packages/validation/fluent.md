@@ -37,6 +37,21 @@ b.Rule(x => x.ShipBy == null || x.ShipBy > DateTime.UtcNow, "Ship date must be i
 b.Rule(x => x.Tags.All(t => t.Length <= 20), "Each tag must be at most 20 chars");
 ```
 
+### Statement-body rules
+
+For complex rules that need local variables or multiple statements, use a block body:
+
+```csharp
+b.Rule(x => {
+    var allIds = new List<string>();
+    allIds.AddRange(x.Items.Select(i => i.Id));
+    allIds.AddRange(x.SubItems.Select(s => s.Id));
+    return allIds.Distinct().Count() == allIds.Count;
+}, "All IDs must be unique across Items and SubItems");
+```
+
+The generator emits these as local functions in the generated `Validate()` method.
+
 ## Per-Property Chains — `b.Property()`
 
 Fluent equivalent of stacking attributes:

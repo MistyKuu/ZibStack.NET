@@ -1,4 +1,4 @@
-namespace ZibStack.NET.Log;
+namespace ZibStack.NET.Aop;
 
 /// <summary>
 /// Casing convention for structured property names in interpolated log messages.

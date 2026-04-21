@@ -110,6 +110,8 @@ internal sealed class CrossFieldRule
     public string Message { get; set; } = "";
     /// <summary>For Expression kind: the raw C# expression text (e.g. "EndDate > StartDate").</summary>
     public string? ExpressionText { get; set; }
+    /// <summary>True when the rule lambda was a statement body (block), requiring local-function emission.</summary>
+    public bool IsBlockBody { get; set; }
     /// <summary>For comparison kinds: left property name.</summary>
     public string? LeftProperty { get; set; }
     /// <summary>For comparison kinds: right property name.</summary>

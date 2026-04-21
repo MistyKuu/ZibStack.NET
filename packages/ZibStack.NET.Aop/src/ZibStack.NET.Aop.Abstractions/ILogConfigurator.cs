@@ -1,13 +1,12 @@
 using System;
 
-namespace ZibStack.NET.Log;
+namespace ZibStack.NET.Aop;
 
 /// <summary>
-/// Project-wide fluent configuration for ZibStack.NET.Log.
-/// Replaces the old <c>[assembly: ZibLogDefaults(...)]</c> attribute.
+/// Project-wide fluent configuration for the [Log] aspect.
 ///
 /// <para>
-/// Implement this interface in a sealed class; the ZibStack.NET.Log source
+/// Implement this interface in a sealed class; the AOP source
 /// generator discovers implementations in your compilation and parses the
 /// <see cref="Configure"/> method body as a compile-time DSL. The method is
 /// <b>never invoked at runtime</b> — only its syntax is read. All arguments

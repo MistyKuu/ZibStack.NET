@@ -7,6 +7,8 @@ description: AOP (Aspect-Oriented Programming) framework for .NET 8+ using C# in
 
 AOP (Aspect-Oriented Programming) framework for .NET 8+ using **C# interceptors**. Define aspects that run before, after, or on exception of any method — at compile time, no runtime proxy or reflection.
 
+> **`[Log]` attribute is here.** The `[Log]`, `[Sensitive]`, `[NoLog]` attributes and `ILogConfigurator` now live in this package (`ZibStack.NET.Aop`). Use `using ZibStack.NET.Aop;` to access them. See **[Log Attribute](/ZibStack.NET/packages/aop/log-attribute/)** for full docs.
+
 > **See the working sample:** [SampleApi on GitHub](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.Aop/sample/SampleApi)
 
 > **Compile-time diagnostics:** every aspect placement in this guide is also validated by 15 Roslyn analyzers shipped in the same package — `AOP0001` through `AOP0021`. Bad placements (`[Cache]` on a `void` method, `[Retry(MaxAttempts = 0)]`, `[Log]` on a `private` method, …) light up in the IDE before you can build, and 7 of them have an Alt+Enter code fix. See **[AOP Analyzers — Compile-Time Diagnostics](./aop-analyzers/)** for the full reference.
@@ -127,6 +129,7 @@ For hot paths, use an **inline emitter** (`[Log]` does this) — see [Inline Emi
 
 ## Read more
 
+- [`[Log]` attribute](/ZibStack.NET/packages/aop/log-attribute/) — method-level entry/exit/error logging with `[Sensitive]`/`[NoLog]` masking.
 - [Built-in aspects](/ZibStack.NET/packages/aop/built-in/) — `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]` + Polly / HybridCache.
 - [Custom aspects & internals](/ZibStack.NET/packages/aop/custom/) — write your own handlers (sync / around / async), class-level + multi-aspect application, `AspectContext` API, inline emitters.
 - [AOP Analyzers — compile-time diagnostics](/ZibStack.NET/packages/aop-analyzers/) — the diagnostic IDs and code fixes you'll see in your IDE.

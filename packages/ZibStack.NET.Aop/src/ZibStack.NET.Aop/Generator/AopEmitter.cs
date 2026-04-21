@@ -82,18 +82,7 @@ public static class AopEmitter
         foreach (var emitter in emitters.Values)
             emitter.BeginClass(classModel);
 
-        // Per-method: class members from emitters
-        foreach (var method in classModel.Methods)
-        {
-            foreach (var aspect in method.Aspects)
-            {
-                if (emitters.TryGetValue(aspect.AttributeFullName, out var emitter))
-                    emitter.EmitClassMembers(sb, classModel, method, aspect, "        ");
-            }
-            sb.AppendLine();
-        }
-
-        // Per-method: interceptor methods
+        // Per-method: class members + interceptor methods (only for methods with call sites)
         foreach (var method in classModel.Methods)
         {
             var methodParamSig = string.Join(",", method.Parameters.Select(p => p.FullyQualifiedType));
@@ -105,6 +94,14 @@ public static class AopEmitter
 
             if (methodCallSites.Count == 0)
                 continue;
+
+            // Emit class-level members (cached logger, LoggerMessage.Define delegates, etc.)
+            foreach (var aspect in method.Aspects)
+            {
+                if (emitters.TryGetValue(aspect.AttributeFullName, out var emitter))
+                    emitter.EmitClassMembers(sb, classModel, method, aspect, "        ");
+            }
+            sb.AppendLine();
 
             EmitInterceptorMethod(sb, classModel, method, methodCallSites, emitters);
             sb.AppendLine();

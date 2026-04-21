@@ -12,8 +12,10 @@ public static class AopParser
 {
     private const string AspectAttributeFullName = "ZibStack.NET.Aop.AspectAttribute";
     private const string AspectHandlerAttributeFullName = "ZibStack.NET.Aop.AspectHandlerAttribute";
-    private const string SensitiveAttributeName = "ZibStack.NET.Log.SensitiveAttribute";
-    private const string NoLogAttributeName = "ZibStack.NET.Log.NoLogAttribute";
+    private const string SensitiveAttributeName = "ZibStack.NET.Aop.SensitiveAttribute";
+    private const string LegacySensitiveAttributeName = "ZibStack.NET.Log.SensitiveAttribute";
+    private const string NoLogAttributeName = "ZibStack.NET.Aop.NoLogAttribute";
+    private const string LegacyNoLogAttributeName = "ZibStack.NET.Log.NoLogAttribute";
 
     /// <summary>FullyQualifiedFormat + nullable annotations (shows ? on type args, arrays, etc.)</summary>
     private static readonly SymbolDisplayFormat NullableFullyQualifiedFormat =
@@ -186,10 +188,10 @@ public static class AopParser
                 ? attributeOverlay.Parameters[pi]
                 : null;
 
-            bool isSensitive = HasAttr(param, SensitiveAttributeName)
-                || (overlayParam is not null && HasAttr(overlayParam, SensitiveAttributeName));
-            bool isNoLog = HasAttr(param, NoLogAttributeName)
-                || (overlayParam is not null && HasAttr(overlayParam, NoLogAttributeName));
+            bool isSensitive = HasAttr(param, SensitiveAttributeName) || HasAttr(param, LegacySensitiveAttributeName)
+                || (overlayParam is not null && (HasAttr(overlayParam, SensitiveAttributeName) || HasAttr(overlayParam, LegacySensitiveAttributeName)));
+            bool isNoLog = HasAttr(param, NoLogAttributeName) || HasAttr(param, LegacyNoLogAttributeName)
+                || (overlayParam is not null && (HasAttr(overlayParam, NoLogAttributeName) || HasAttr(overlayParam, LegacyNoLogAttributeName)));
             bool isComplex = IsComplexType(param.Type);
 
             SanitizedTypeModel? sanitizedType = null;
@@ -540,8 +542,8 @@ public static class AopParser
             if (prop.GetMethod is null) continue;
 
             var attrs = prop.GetAttributes();
-            bool isSensitive = attrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
-            bool isNoLog = attrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+            bool isSensitive = attrs.Any(a => a.AttributeClass?.ToDisplayString() is SensitiveAttributeName or LegacySensitiveAttributeName);
+            bool isNoLog = attrs.Any(a => a.AttributeClass?.ToDisplayString() is NoLogAttributeName or LegacyNoLogAttributeName);
             bool isComplex = IsComplexType(prop.Type);
 
             IReadOnlyList<TypePropertyModel>? nestedProps = null;
@@ -706,8 +708,8 @@ public static class AopParser
         var returnAttrs = method.GetReturnTypeAttributes();
         if (attributeOverlay is not null)
             returnAttrs = returnAttrs.AddRange(attributeOverlay.GetReturnTypeAttributes());
-        bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
-        bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+        bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() is SensitiveAttributeName or LegacySensitiveAttributeName);
+        bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() is NoLogAttributeName or LegacyNoLogAttributeName);
 
         aspects.Add(new AspectInfo(
             rule.AspectFqn,
@@ -832,8 +834,8 @@ public static class AopParser
             var returnAttrs = method.GetReturnTypeAttributes();
             if (attributeOverlay is not null)
                 returnAttrs = returnAttrs.AddRange(attributeOverlay.GetReturnTypeAttributes());
-            bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
-            bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+            bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() is SensitiveAttributeName or LegacySensitiveAttributeName);
+            bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() is NoLogAttributeName or LegacyNoLogAttributeName);
 
             aspects.Add(new AspectInfo(typeName, order, props, handlerTypeName, isAsyncHandler,
                 isAroundHandler || isAsyncAroundHandler, isAsyncAroundHandler, sensitiveReturn, noLogReturn,

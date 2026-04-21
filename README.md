@@ -50,7 +50,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 | Package | NuGet | Description |
 |---|---|---|
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in: `[Log]`, `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]`. Custom aspects via `IAspectHandler`. Global `Apply<>()` rules. |
-| [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Interpolated-string logging optimization — rewrites `LogInformation($"...")` into zero-allocation `LoggerMessage.Define` at compile time. |
+| [**ZibStack.NET.Log**](packages/ZibStack.NET.Log/) | `dotnet add package ZibStack.NET.Log` | Interpolated-string logging optimization — rewrites `LogInformation($"...")` into zero-allocation `LoggerMessage.Define` at compile time. Note: `[Log]` attribute has moved to ZibStack.NET.Aop. |
 | [**ZibStack.NET.Aop.Polly**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.Polly/) | `dotnet add package ZibStack.NET.Aop.Polly` | Polly-based resilience aspects: `[PollyRetry]` (named pipelines, backoff, exception filtering) and `[PollyHttpRetry]` (transient HTTP errors). |
 | [**ZibStack.NET.Aop.HybridCache**](packages/ZibStack.NET.Aop/src/ZibStack.NET.Aop.HybridCache/) | `dotnet add package ZibStack.NET.Aop.HybridCache` | `[HybridCache]` — L1/L2 caching (memory + Redis) via `Microsoft.Extensions.Caching.Hybrid`. |
 | [**ZibStack.NET.Core**](packages/ZibStack.NET.Core/) | `dotnet add package ZibStack.NET.Core` | Source generator for shared attributes: relationships (`OneToMany`, `OneToOne`, `Entity`), TypeScript-style utility types (`PartialFrom`, `IntersectFrom`, `PickFrom`, `OmitFrom`), JS-style destructuring (`Destructurable<TSource>` → shape-record + `Split(src)` factory + nested `Rest`). |
@@ -67,9 +67,11 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 ## Tier 1 — Drop-in
 
-### ZibStack.NET.Log
+### ZibStack.NET.Aop — `[Log]`
 
 ```csharp
+using ZibStack.NET.Aop;
+
 // On a method:
 [Log]
 public Order PlaceOrder(int customerId, [Sensitive] string creditCard) { ... }
@@ -79,7 +81,11 @@ public Order PlaceOrder(int customerId, [Sensitive] string creditCard) { ... }
 // On a class — logs ALL public methods:
 [Log]
 public class OrderService { ... }
+```
 
+### ZibStack.NET.Log — Interpolated-string logging
+
+```csharp
 // Interpolated string logging — just add the using:
 using ZibStack.NET.Log;
 

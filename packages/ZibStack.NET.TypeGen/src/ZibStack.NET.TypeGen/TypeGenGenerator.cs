@@ -164,6 +164,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     if (kvp.Value.FluentTargets is not int fluentTargets) continue;
                     // Skip if the type was already discovered via attribute.
                     if (model.Classes.Any(c => c.CSharpFullName == kvp.Key)) continue;
+                    if (model.Enums.Any(e => e.CSharpFullName == kvp.Key)) continue;
 
                     var sym = compilation.GetTypeByMetadataName(kvp.Key);
                     if (sym is null)
@@ -215,6 +216,18 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     var dir = !string.IsNullOrEmpty(kvp.Value.OutputDir) ? kvp.Value.OutputDir!
                             : !string.IsNullOrEmpty(config.Settings.TypeScript.OutputDir) ? config.Settings.TypeScript.OutputDir!
                             : ".";
+
+                    // Enums must go through the enum pipeline, not ParseAuxiliaryClass
+                    // which would emit an empty interface instead of a union/enum.
+                    if (sym.TypeKind == TypeKind.Enum)
+                    {
+                        var auxEnum = SchemaParser.ParseAuxiliaryEnum(sym, (TypeTarget)fluentTargets, dir);
+                        if (auxEnum is null) continue;
+                        ApplyFluentToEnum(auxEnum, config);
+                        model.Enums.Add(auxEnum);
+                        continue;
+                    }
+
                     var aux = SchemaParser.ParseAuxiliaryClass(sym, (TypeTarget)fluentTargets, dir);
                     if (aux is null) continue;
                     ApplyFluentToClass(aux, config);

@@ -1,6 +1,4 @@
-using ZibStack.NET.Aop;
-
-namespace ZibStack.NET.Log;
+namespace ZibStack.NET.Aop;
 
 /// <summary>
 /// Marks a method or class for automatic logging. When applied to a class, all public

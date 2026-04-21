@@ -101,7 +101,9 @@ throw new ZibException<OrderError>(OrderError.NotFound, $"Order {orderId} not fo
 
 ### `[Log]` Attribute Features
 
-The `[Log]` attribute (entry/exit/error logging, `[Sensitive]`/`[NoLog]` masking, `ObjectLogMode`, custom levels) is now part of the **AOP** package.
+The `[Log]`, `[Sensitive]`, and `[NoLog]` attributes are now part of the **ZibStack.NET.Aop** package. Use `using ZibStack.NET.Aop;` (not `using ZibStack.NET.Log;`) to access them.
+
+> **Note:** `[Sensitive]` and `[NoLog]` still resolve from the old `ZibStack.NET.Log` namespace for backward compatibility, but new code should use `ZibStack.NET.Aop`.
 
 See: **[AOP — Log Attribute](/ZibStack.NET/packages/aop/log-attribute/)** for:
 - Sensitive data masking (`[Sensitive]`, `[NoLog]`)

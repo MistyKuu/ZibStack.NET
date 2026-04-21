@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ZibStack.NET.Log.Generator;
+namespace ZibStack.NET.Aop.Generator;
 
 /// <summary>
 /// Extracts project-wide defaults from <c>ILogConfigurator.Configure(ILogBuilder b)</c>
@@ -52,9 +52,7 @@ internal sealed class LogFluentDefaults
 
 internal static class LogConfiguratorParser
 {
-    // Look for both old (ZibStack.NET.Log) and new (ZibStack.NET.Aop) configurator interface
     private const string ConfiguratorInterfaceFqn = "ZibStack.NET.Aop.ILogConfigurator";
-    private const string LegacyConfiguratorInterfaceFqn = "ZibStack.NET.Log.ILogConfigurator";
 
     // Cache per Compilation — LogClassDataProvider.ExtractClassData runs once per class
     // annotated with [Log], so without caching we'd re-scan every type in the compilation
@@ -73,8 +71,7 @@ internal static class LogConfiguratorParser
     private static LogFluentDefaults ReadUncached(Compilation compilation)
     {
         var result = new LogFluentDefaults();
-        var iface = compilation.GetTypeByMetadataName(ConfiguratorInterfaceFqn)
-                    ?? compilation.GetTypeByMetadataName(LegacyConfiguratorInterfaceFqn);
+        var iface = compilation.GetTypeByMetadataName(ConfiguratorInterfaceFqn);
         if (iface is null) return result;
 
         foreach (var t in EnumerateAllTypes(compilation.Assembly.GlobalNamespace))

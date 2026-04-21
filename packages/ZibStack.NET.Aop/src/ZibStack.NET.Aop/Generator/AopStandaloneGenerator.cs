@@ -16,12 +16,12 @@ public sealed class AopStandaloneGenerator : IIncrementalGenerator
     {
         var emitters = new Dictionary<string, IAspectEmitter>
         {
-            { "ZibStack.NET.Log.LogAttribute", new ZibStack.NET.Log.Generator.LogAspectEmitter() }
+            { "ZibStack.NET.Aop.LogAttribute", new LogAspectEmitter() }
         };
 
         var classDataProviders = new List<IClassDataProvider>
         {
-            new ZibStack.NET.Log.Generator.LogClassDataProvider()
+            new LogClassDataProvider()
         };
 
         AopPipeline.Register(context, emitters, classDataProviders);

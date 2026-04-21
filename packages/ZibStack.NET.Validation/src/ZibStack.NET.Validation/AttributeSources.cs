@@ -398,28 +398,30 @@ namespace ZibStack.NET.Validation
     public interface IValidationBuilder<T>
     {
         /// <summary>
-        /// Add a cross-field rule with a predicate expression. Any valid C# expression works.
+        /// Add a cross-field rule with a predicate. Any valid C# expression or statement body works.
+        /// The predicate is parsed at compile time by the source generator — it is never executed.
         /// <code>b.Rule(x => x.EndDate > x.StartDate, ""EndDate must be after StartDate"");</code>
+        /// <code>b.Rule(x => { var total = x.Items.Sum(i => i.Price); return total > 0; }, ""msg"");</code>
         /// </summary>
-        IValidationBuilder<T> Rule(System.Linq.Expressions.Expression<System.Func<T, bool>> predicate, string message);
+        IValidationBuilder<T> Rule(System.Func<T, bool> predicate, string message);
 
         /// <summary>
         /// Begin a per-property rule chain. Supports both single-property rules and cross-field comparisons.
         /// <code>b.Property(x => x.Email).Required().Email();</code>
         /// </summary>
-        IPropertyValidationBuilder<T> Property(System.Linq.Expressions.Expression<System.Func<T, object?>> selector);
+        IPropertyValidationBuilder<T> Property(System.Func<T, object?> selector);
 
         /// <summary>
         /// Conditional validation block. Rules inside are only applied when the condition is true.
         /// <code>b.When(x => x.RequiresShipping, then => { then.Rule(...); });</code>
         /// </summary>
-        IValidationBuilder<T> When(System.Linq.Expressions.Expression<System.Func<T, bool>> condition, System.Action<IValidationBuilder<T>> then);
+        IValidationBuilder<T> When(System.Func<T, bool> condition, System.Action<IValidationBuilder<T>> then);
 
         /// <summary>
         /// Inverse conditional. Rules inside are only applied when the condition is FALSE.
         /// <code>b.Unless(x => x.IsAdmin, then => { then.Rule(...); });</code>
         /// </summary>
-        IValidationBuilder<T> Unless(System.Linq.Expressions.Expression<System.Func<T, bool>> condition, System.Action<IValidationBuilder<T>> then);
+        IValidationBuilder<T> Unless(System.Func<T, bool> condition, System.Action<IValidationBuilder<T>> then);
 
         /// <summary>
         /// Named rule set. Rules inside are only executed when the set is explicitly requested
@@ -475,25 +477,25 @@ namespace ZibStack.NET.Validation
         // ── Cross-field comparisons ─────────────────────────────────────
 
         /// <summary>This property must be greater than <paramref name=""other""/>.</summary>
-        IPropertyValidationBuilder<T> GreaterThan(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+        IPropertyValidationBuilder<T> GreaterThan(System.Func<T, object?> other, string? message = null);
 
         /// <summary>This property must be greater than or equal to <paramref name=""other""/>.</summary>
-        IPropertyValidationBuilder<T> GreaterThanOrEqual(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+        IPropertyValidationBuilder<T> GreaterThanOrEqual(System.Func<T, object?> other, string? message = null);
 
         /// <summary>This property must be less than <paramref name=""other""/>.</summary>
-        IPropertyValidationBuilder<T> LessThan(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+        IPropertyValidationBuilder<T> LessThan(System.Func<T, object?> other, string? message = null);
 
         /// <summary>This property must be less than or equal to <paramref name=""other""/>.</summary>
-        IPropertyValidationBuilder<T> LessThanOrEqual(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+        IPropertyValidationBuilder<T> LessThanOrEqual(System.Func<T, object?> other, string? message = null);
 
         /// <summary>This property must equal <paramref name=""other""/>.</summary>
-        IPropertyValidationBuilder<T> EqualTo(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+        IPropertyValidationBuilder<T> EqualTo(System.Func<T, object?> other, string? message = null);
 
         /// <summary>This property must not equal <paramref name=""other""/>.</summary>
-        IPropertyValidationBuilder<T> NotEqualTo(System.Linq.Expressions.Expression<System.Func<T, object?>> other, string? message = null);
+        IPropertyValidationBuilder<T> NotEqualTo(System.Func<T, object?> other, string? message = null);
 
         /// <summary>Start a new property chain.</summary>
-        IPropertyValidationBuilder<T> Property(System.Linq.Expressions.Expression<System.Func<T, object?>> selector);
+        IPropertyValidationBuilder<T> Property(System.Func<T, object?> selector);
     }
 }
 ";

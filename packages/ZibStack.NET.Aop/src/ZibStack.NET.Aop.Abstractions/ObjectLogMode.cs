@@ -1,4 +1,4 @@
-namespace ZibStack.NET.Log;
+namespace ZibStack.NET.Aop;
 
 /// <summary>
 /// Controls how complex objects are serialized in log output.

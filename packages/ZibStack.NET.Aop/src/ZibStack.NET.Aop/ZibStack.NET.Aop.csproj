@@ -50,14 +50,6 @@
                       PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- [Log] aspect emitter linked from the Log package — the AOP generator
-       handles all aspects (including [Log]) in a single pass. -->
-  <ItemGroup>
-    <Compile Include="..\..\..\ZibStack.NET.Log\src\ZibStack.NET.Log\Generator\LogAspectEmitter.cs" Link="LogEmitter\LogAspectEmitter.cs" />
-    <Compile Include="..\..\..\ZibStack.NET.Log\src\ZibStack.NET.Log\Generator\LogConfiguratorParser.cs" Link="LogEmitter\LogConfiguratorParser.cs" />
-    <Compile Include="..\..\..\ZibStack.NET.Log\src\ZibStack.NET.Log\Generator\DiagnosticDescriptors.cs" Link="LogEmitter\DiagnosticDescriptors.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <!-- Bundle the analyzer DLL so installing ZibStack.NET.Aop also turns on

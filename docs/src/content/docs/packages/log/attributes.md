@@ -13,9 +13,11 @@ The `[Log]` attribute and its properties (`[Sensitive]`, `[NoLog]`, `EntryExitLe
 
 ### Interpolation configuration (`ILogConfigurator`)
 
-Settings for `logger.LogXxx($"...")` interpolated-string logging go through `ILogConfigurator`:
+Settings for `logger.LogXxx($"...")` interpolated-string logging go through `ILogConfigurator`. This interface has moved to the `ZibStack.NET.Aop` namespace:
 
 ```csharp
+using ZibStack.NET.Aop;  // ILogConfigurator is in the Aop namespace
+
 public sealed class LogConfig : ILogConfigurator
 {
     public void Configure(ILogBuilder b)

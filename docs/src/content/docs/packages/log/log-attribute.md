@@ -23,4 +23,14 @@ If you previously installed `ZibStack.NET.Log` for the `[Log]` attribute, add `Z
 dotnet add package ZibStack.NET.Aop
 ```
 
-No code changes needed — the attribute API is the same. The AOP package handles code generation for `[Log]`.
+Update your `using` directives:
+
+```csharp
+// Before:
+using ZibStack.NET.Log;
+
+// After:
+using ZibStack.NET.Aop;
+```
+
+The `[Log]`, `[Sensitive]`, `[NoLog]` attributes and `ILogConfigurator` are now in the `ZibStack.NET.Aop` namespace. The old `ZibStack.NET.Log` namespace still works for `[Sensitive]` and `[NoLog]` (backward compatibility), but `using ZibStack.NET.Aop;` is the canonical import going forward.

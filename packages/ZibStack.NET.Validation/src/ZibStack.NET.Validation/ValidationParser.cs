@@ -297,6 +297,7 @@ public sealed partial class ValidationGenerator
                 if (msgVal.HasValue && msgVal.Value is string msg && lambdaArg is SimpleLambdaExpressionSyntax lambda)
                 {
                     var paramName = lambda.Parameter.Identifier.Text;
+                    var isBlockBody = lambda.Body is BlockSyntax;
                     var exprText = lambda.Body.ToString();
                     // Replace parameter references (x.Prop -> Prop) for use inside the class
                     exprText = System.Text.RegularExpressions.Regex.Replace(
@@ -305,6 +306,7 @@ public sealed partial class ValidationGenerator
                     {
                         Kind = CrossFieldRuleKind.Expression,
                         ExpressionText = exprText,
+                        IsBlockBody = isBlockBody,
                         Message = msg,
                     });
                 }

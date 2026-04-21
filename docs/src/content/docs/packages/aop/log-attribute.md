@@ -277,6 +277,8 @@ See [Bulk Apply](/ZibStack.NET/packages/aop/apply/) for full details on `Apply<T
 Set defaults for all `[Log]` methods in the project. Per-method `[Log(...)]` properties still win. One class per project — the generator discovers it automatically:
 
 ```csharp
+using ZibStack.NET.Aop;  // ILogConfigurator is in the Aop namespace
+
 public sealed class LogConfig : ILogConfigurator
 {
     public void Configure(ILogBuilder b)

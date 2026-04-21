@@ -35,6 +35,7 @@ public static class AopConfiguratorParser
         ["Trace"] = "ZibStack.NET.Aop.TraceAttribute",
         ["Cache"] = "ZibStack.NET.Aop.CacheAttribute",
         ["Metrics"] = "ZibStack.NET.Aop.MetricsAttribute",
+        ["Log"] = "ZibStack.NET.Aop.LogAttribute",
     };
 
     /// <summary>
