@@ -294,7 +294,7 @@ public partial class DtoGenerator
     /// <summary>Non-nullable reference types need null validation.</summary>
     private static void EmitAutoNestedDto(StringBuilder sb, DtoClassInfo nested)
     {
-        var nestedSource = GenerateSource(nested, false);
+        var nestedSource = GenerateSource(nested);
         var lines = nestedSource.Split('\n');
         var skip = true;
         foreach (var line in lines)
