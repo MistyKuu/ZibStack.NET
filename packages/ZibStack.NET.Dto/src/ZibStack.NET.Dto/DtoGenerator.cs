@@ -82,10 +82,6 @@ public partial class DtoGenerator : IIncrementalGenerator
                 spc.AddSource("PatchFieldSchemaFilter.g.cs", PatchFieldSchemaFilterV10Source);
         });
 
-        // Detect FluentValidation and emit adapter
-        var hasFluentValidation = context.CompilationProvider.Select(static (compilation, _) =>
-            compilation.GetTypeByMetadataName("FluentValidation.AbstractValidator`1") is not null);
-
         // Parse fluent IDtoConfigurator once and feed it into every downstream pipeline.
         // CrudImplied / CrudApi / allDtoClasses callbacks combine with this so per-property
         // overrides + CrudApi options can mix with attribute markers in either direction.
@@ -106,12 +102,6 @@ public partial class DtoGenerator : IIncrementalGenerator
         // Detect EF Core for Include generation in select
         var hasEfCore = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions") is not null);
-
-        context.RegisterSourceOutput(hasFluentValidation, static (spc, hasFluent) =>
-        {
-            if (hasFluent)
-                spc.AddSource("FluentDtoValidator.g.cs", FluentDtoValidatorSource);
-        });
 
         // Run diagnostics on all types with ZibStack.Dto attributes
         var diagnosticsTargets = context.SyntaxProvider
@@ -264,34 +254,34 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Combine(updateDtoClasses.Collect())
             .Combine(combinedDtoClasses.Collect());
 
-        context.RegisterSourceOutput(allDtoClasses.Combine(hasFluentValidation).Combine(hasTypeGen).Combine(fluentConfig), static (spc, pair) =>
+        context.RegisterSourceOutput(allDtoClasses.Combine(hasTypeGen).Combine(fluentConfig), static (spc, pair) =>
         {
-            var (((((createInfos, updateInfos), combinedInfos), hasFluent), hasTg), fluent) = pair;
+            var ((((createInfos, updateInfos), combinedInfos), hasTg), fluent) = pair;
             var nestedSeen = new HashSet<string>();
 
             foreach (var classInfo in createInfos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Create, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Create.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
             foreach (var classInfo in updateInfos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Update, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Update.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
             foreach (var classInfo in combinedInfos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Combined, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Combined.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
         });
 
@@ -376,26 +366,26 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen).Combine(fluentConfig), static (spc, pair) =>
+        context.RegisterSourceOutput(crudImpliedDtos.Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen).Combine(fluentConfig), static (spc, pair) =>
         {
-            var (((((implied, hasFluent), hasDsl), hasEf), hasTg), fluent) = pair;
+            var ((((implied, hasDsl), hasEf), hasTg), fluent) = pair;
             var nestedSeen = new HashSet<string>();
 
             foreach (var classInfo in implied.CreateDtos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Create, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Create.CrudImplied.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
             foreach (var classInfo in implied.UpdateDtos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Update, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Update.CrudImplied.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
             foreach (var responseInfo in implied.ResponseDtos)
             {
@@ -436,25 +426,25 @@ public partial class DtoGenerator : IIncrementalGenerator
             .Where(static info => info is not null)
             .Select(static (info, _) => info!);
 
-        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen).Combine(fluentConfig), static (spc, pair) =>
+        context.RegisterSourceOutput(modelImpliedDtos.Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen).Combine(fluentConfig), static (spc, pair) =>
         {
-            var (((((implied, hasFluent), hasDsl), hasEf), hasTg), fluent) = pair;
+            var ((((implied, hasDsl), hasEf), hasTg), fluent) = pair;
             var nestedSeen = new HashSet<string>();
             foreach (var classInfo in implied.CreateDtos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Create, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Create.Model.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
             foreach (var classInfo in implied.UpdateDtos)
             {
                 classInfo.HasTypeGen = hasTg;
                 ApplyFluentOverridesByClassName(classInfo, DtoKind.Update, fluent);
-                var source = GenerateSource(classInfo, hasFluent);
+                var source = GenerateSource(classInfo);
                 spc.AddSource($"{classInfo.FullyQualifiedName}.Update.Model.g.cs", source);
-                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen, hasFluent);
+                EmitDeduplicatedNested(spc, classInfo.AutoNestedDtos, nestedSeen);
             }
             foreach (var responseInfo in implied.ResponseDtos)
             {
@@ -485,10 +475,10 @@ public partial class DtoGenerator : IIncrementalGenerator
         // fluent is the sole source of truth. For classes with markers, this pipeline
         // is a no-op — those go through the attribute pipelines above (which themselves
         // pick up fluent overrides via ApplyFluentOverridesByClassName).
-        context.RegisterSourceOutput(fluentConfig.Combine(hasFluentValidation).Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen),
+        context.RegisterSourceOutput(fluentConfig.Combine(hasQueryDsl).Combine(hasEfCore).Combine(hasTypeGen),
             static (spc, pair) =>
         {
-            var ((((parsed, hasFluent), hasDsl), hasEf), hasTg) = pair;
+            var (((parsed, hasDsl), hasEf), hasTg) = pair;
             if (parsed is null) return;
 
             var nestedSeen = new HashSet<string>();
@@ -502,8 +492,8 @@ public partial class DtoGenerator : IIncrementalGenerator
                     if (info is not null)
                     {
                         info.HasTypeGen = hasTg;
-                        spc.AddSource($"{info.FullyQualifiedName}.Create.Fluent.g.cs", GenerateSource(info, hasFluent));
-                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
+                        spc.AddSource($"{info.FullyQualifiedName}.Create.Fluent.g.cs", GenerateSource(info));
+                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen);
                     }
                 }
                 if (tc.Update)
@@ -512,8 +502,8 @@ public partial class DtoGenerator : IIncrementalGenerator
                     if (info is not null)
                     {
                         info.HasTypeGen = hasTg;
-                        spc.AddSource($"{info.FullyQualifiedName}.Update.Fluent.g.cs", GenerateSource(info, hasFluent));
-                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
+                        spc.AddSource($"{info.FullyQualifiedName}.Update.Fluent.g.cs", GenerateSource(info));
+                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen);
                     }
                 }
                 if (tc.CreateOrUpdate)
@@ -522,8 +512,8 @@ public partial class DtoGenerator : IIncrementalGenerator
                     if (info is not null)
                     {
                         info.HasTypeGen = hasTg;
-                        spc.AddSource($"{info.FullyQualifiedName}.Combined.Fluent.g.cs", GenerateSource(info, hasFluent));
-                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen, hasFluent);
+                        spc.AddSource($"{info.FullyQualifiedName}.Combined.Fluent.g.cs", GenerateSource(info));
+                        EmitDeduplicatedNested(spc, info.AutoNestedDtos, nestedSeen);
                     }
                 }
                 if (tc.Response)
@@ -668,17 +658,17 @@ public partial class DtoGenerator : IIncrementalGenerator
         });
     }
 
-    private static void EmitDeduplicatedNested(SourceProductionContext spc, List<DtoClassInfo> nested, HashSet<string> seen, bool hasFluent)
+    private static void EmitDeduplicatedNested(SourceProductionContext spc, List<DtoClassInfo> nested, HashSet<string> seen)
     {
         foreach (var n in nested)
         {
             var key = $"{n.RequestName}:{n.Kind}";
             if (!seen.Add(key)) continue;
-            var source = GenerateSource(n, hasFluent);
+            var source = GenerateSource(n);
             var hintName = n.FullyQualifiedName.Replace("?", "_").Replace("<", "_").Replace(">", "_");
             spc.AddSource($"{hintName}.{n.Kind}.AutoNested.g.cs", source);
             // Recurse for deeply nested
-            EmitDeduplicatedNested(spc, n.AutoNestedDtos, seen, hasFluent);
+            EmitDeduplicatedNested(spc, n.AutoNestedDtos, seen);
         }
     }
 
