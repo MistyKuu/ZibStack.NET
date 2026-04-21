@@ -461,25 +461,57 @@ internal sealed class LogAspectEmitter : IAspectEmitter
 /// </summary>
 internal sealed class LogClassDataProvider : IClassDataProvider
 {
-    public string AttributeFullName => "ZibStack.NET.Log.LogAttribute";
+    private const string LogAttributeFqn = "ZibStack.NET.Log.LogAttribute";
+
+    public string AttributeFullName => LogAttributeFqn;
 
     // Compilation isn't plumbed through the IClassDataProvider contract, but the
     // containing assembly's compilation is reachable via the first syntax reference's
     // semantic model on the class symbol. Close enough for parser discovery.
     public IReadOnlyDictionary<string, object?>? ExtractClassData(INamedTypeSymbol classSymbol)
     {
-        // Check if class has any [Log] methods
-        bool hasLog = classSymbol.GetMembers().OfType<IMethodSymbol>()
-            .Any(m => m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "ZibStack.NET.Log.LogAttribute"));
-        if (!hasLog) return null;
-
         var compilation = GetCompilation(classSymbol);
         if (compilation is null) return null;
+
+        // [Log] reaches a class through three paths — method-level attribute,
+        // class-level attribute, or an IAopConfigurator.Apply<LogAttribute>(...) rule
+        // matching any of its methods. Historically we only checked the first one, so
+        // global ILogConfigurator defaults (LogParameters=false etc.) silently dropped
+        // on the floor for the other two paths — the emitter then fell back to the
+        // hardcoded `true` and kept logging parameters anyway.
+        if (!HasAnyLogAspect(classSymbol, compilation)) return null;
 
         var defaults = LogConfiguratorParser.Read(compilation);
         var data = defaults.ToDefaultsDictionary();
         return data.Count > 0 ? data : null;
     }
+
+    private static bool HasAnyLogAspect(INamedTypeSymbol classSymbol, Compilation compilation)
+    {
+        if (classSymbol.GetAttributes().Any(IsLogAttr))
+            return true;
+
+        foreach (var member in classSymbol.GetMembers())
+        {
+            if (member is IMethodSymbol m && m.GetAttributes().Any(IsLogAttr))
+                return true;
+        }
+
+        var logRules = AopConfiguratorParser.ReadAll(compilation).ApplyRules
+            .Where(r => r.AspectFqn == LogAttributeFqn)
+            .ToList();
+        if (logRules.Count == 0) return false;
+
+        foreach (var member in classSymbol.GetMembers())
+        {
+            if (member is not IMethodSymbol m) continue;
+            if (logRules.Any(r => AopParser.MatchesApplyRule(r, m))) return true;
+        }
+        return false;
+    }
+
+    private static bool IsLogAttr(AttributeData a) =>
+        a.AttributeClass?.ToDisplayString() == LogAttributeFqn;
 
     private static Compilation? GetCompilation(INamedTypeSymbol classSymbol)
     {

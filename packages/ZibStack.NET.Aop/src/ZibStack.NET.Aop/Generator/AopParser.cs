@@ -164,16 +164,32 @@ public static class AopParser
     /// Builds the parameter/return-type parts of the method model given a pre-resolved
     /// set of aspects. Factored out so <see cref="ParseInterfaceProxy"/> can reuse it.
     /// </summary>
-    private static InterceptedMethodModel? BuildMethodModel(IMethodSymbol method, List<AspectInfo> aspects)
+    /// <param name="attributeOverlay">
+    /// When non-null, parameter and return-type attributes from this method are merged
+    /// with <paramref name="method"/>'s own. Used by <see cref="ParseInterfaceProxy"/>:
+    /// the emitted signature has to use the interface's parameter list, but [NoLog] /
+    /// [Sensitive] / [return: NoLog] are typically declared on the concrete impl — so
+    /// we need to see attributes from both sides or the proxy logs data the impl
+    /// marked as redacted.
+    /// </param>
+    private static InterceptedMethodModel? BuildMethodModel(
+        IMethodSymbol method,
+        List<AspectInfo> aspects,
+        IMethodSymbol? attributeOverlay = null)
     {
         // Parse parameters
         var parameters = new List<InterceptedParameterModel>();
-        foreach (var param in method.Parameters)
+        for (int pi = 0; pi < method.Parameters.Length; pi++)
         {
-            bool isSensitive = param.GetAttributes()
-                .Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
-            bool isNoLog = param.GetAttributes()
-                .Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+            var param = method.Parameters[pi];
+            var overlayParam = attributeOverlay is not null && pi < attributeOverlay.Parameters.Length
+                ? attributeOverlay.Parameters[pi]
+                : null;
+
+            bool isSensitive = HasAttr(param, SensitiveAttributeName)
+                || (overlayParam is not null && HasAttr(overlayParam, SensitiveAttributeName));
+            bool isNoLog = HasAttr(param, NoLogAttributeName)
+                || (overlayParam is not null && HasAttr(overlayParam, NoLogAttributeName));
             bool isComplex = IsComplexType(param.Type);
 
             SanitizedTypeModel? sanitizedType = null;
@@ -405,34 +421,37 @@ public static class AopParser
                 continue;
 
             var openMethod = (IMethodSymbol)closedMethod.OriginalDefinition;
+            var implMethod = implClassSymbol.FindImplementationForInterfaceMember(closedMethod) as IMethodSymbol;
 
             var aspects = new List<AspectInfo>();
             var seenAspectTypes = new HashSet<string>();
 
             // Method-level aspects declared on the interface member itself (rare but valid).
-            CollectAspects(openMethod.GetAttributes(), openMethod, aspects, seenAspectTypes);
+            // Passing implMethod as the attribute-overlay lets [return: NoLog]/[return: Sensitive]
+            // declared on the concrete impl flow into the proxy too.
+            CollectAspects(openMethod.GetAttributes(), openMethod, aspects, seenAspectTypes, implMethod);
 
             // Method-level aspects on the concrete implementation of THIS interface member.
             // This is what makes `[Log]` on an impl method intercept calls made via the
             // interface reference too.
-            if (implClassSymbol.FindImplementationForInterfaceMember(closedMethod) is IMethodSymbol implMethod)
-                CollectAspects(implMethod.GetAttributes(), openMethod, aspects, seenAspectTypes);
+            if (implMethod is not null)
+                CollectAspects(implMethod.GetAttributes(), openMethod, aspects, seenAspectTypes, implMethod);
 
             // Impl class-level aspects (e.g. `[Log]` on the class) apply to every public method.
             if (classLevelAspectAttrs.Length > 0)
-                CollectAspects(classLevelAspectAttrs, openMethod, aspects, seenAspectTypes);
+                CollectAspects(classLevelAspectAttrs, openMethod, aspects, seenAspectTypes, implMethod);
 
             // Apply() rules from IAopConfigurator — match against the IMPL method so that
             // selectors like ClassesWhere(c => c.Name.StartsWith("Order")) resolve against
             // the concrete class, not the interface.
-            if (implClassSymbol.FindImplementationForInterfaceMember(closedMethod) is IMethodSymbol implMethodForApply
+            if (implMethod is not null
                 && (implClassSymbol.ContainingAssembly as ISourceAssemblySymbol)?.Compilation is { } compilation)
             {
                 var config = AopConfiguratorParser.ReadAll(compilation);
                 foreach (var rule in config.ApplyRules)
                 {
-                    if (!seenAspectTypes.Contains(rule.AspectFqn) && MatchesApplyRule(rule, implMethodForApply))
-                        CollectVirtualAspect(rule, openMethod, aspects, seenAspectTypes, compilation);
+                    if (!seenAspectTypes.Contains(rule.AspectFqn) && MatchesApplyRule(rule, implMethod))
+                        CollectVirtualAspect(rule, openMethod, aspects, seenAspectTypes, compilation, implMethod);
                 }
             }
 
@@ -441,7 +460,10 @@ public static class AopParser
 
             aspects.Sort((a, b) => a.Order.CompareTo(b.Order));
 
-            var model = BuildMethodModel(openMethod, aspects);
+            // attributeOverlay = implMethod so [NoLog]/[Sensitive] on the concrete impl's
+            // parameters flow through the interface proxy (the proxy otherwise only sees
+            // interface-declared parameter attributes).
+            var model = BuildMethodModel(openMethod, aspects, implMethod);
             if (model != null)
                 methods.Add(model);
         }
@@ -615,12 +637,19 @@ public static class AopParser
     /// Creates an AspectInfo from an Apply rule — equivalent to having the attribute
     /// on the method, but driven from the fluent config.
     /// </summary>
+    /// <param name="attributeOverlay">
+    /// Additional symbol whose return-type attributes are merged with
+    /// <paramref name="method"/>'s. Used by <see cref="ParseInterfaceProxy"/> so that
+    /// <c>[return: NoLog]</c> declared on the concrete impl propagates through the
+    /// synthesized interface proxy.
+    /// </param>
     private static void CollectVirtualAspect(
         AopConfiguratorParser.ApplyRule rule,
         IMethodSymbol method,
         List<AspectInfo> aspects,
         HashSet<string> seenTypes,
-        Compilation compilation)
+        Compilation compilation,
+        IMethodSymbol? attributeOverlay = null)
     {
         if (!seenTypes.Add(rule.AspectFqn)) return;
 
@@ -674,23 +703,45 @@ public static class AopParser
             }
         }
 
+        var returnAttrs = method.GetReturnTypeAttributes();
+        if (attributeOverlay is not null)
+            returnAttrs = returnAttrs.AddRange(attributeOverlay.GetReturnTypeAttributes());
+        bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
+        bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
+
         aspects.Add(new AspectInfo(
             rule.AspectFqn,
             order: 0,
             properties: props,
             handlerTypeName: handlerTypeName,
-            hasSyncHandler: hasSyncHandler,
             isAsyncHandler: isAsyncHandler,
             isAroundHandler: isAroundHandler,
             isAsyncAroundHandler: isAsyncAroundHandler,
-            genericAroundTypeArg: genericAroundTypeArg));
+            sensitiveReturn: sensitiveReturn,
+            noLogReturn: noLogReturn,
+            genericAroundTypeArg: genericAroundTypeArg,
+            hasSyncHandler: hasSyncHandler));
     }
 
+    /// <summary>
+    /// Resolution order for aspect properties (highest wins):
+    /// <list type="number">
+    ///   <item>method-level attribute: <c>[Log(LogParameters=false)]</c></item>
+    ///   <item>class-level attribute: <c>[Log]</c> on the class</item>
+    ///   <item><c>b.Apply&lt;LogAttribute&gt;(..., a =&gt; a.LogParameters = false)</c></item>
+    ///   <item><c>ILogConfigurator.Defaults(d =&gt; d.LogParameters = false)</c></item>
+    ///   <item>hard-coded generator default</item>
+    /// </list>
+    /// This is realised by populating <see cref="AspectInfo.Properties"/> from sources
+    /// (1)–(3) (earlier wins) and <c>InterceptedClassModel.AspectClassData</c> from (4).
+    /// The <c>P(...)</c> helper in each emitter consults them in the same order.
+    /// </summary>
     private static void CollectAspects(
         System.Collections.Immutable.ImmutableArray<AttributeData> attributes,
         IMethodSymbol method,
         List<AspectInfo> aspects,
-        HashSet<string> seenTypes)
+        HashSet<string> seenTypes,
+        IMethodSymbol? attributeOverlay = null)
     {
         foreach (var attr in attributes)
         {
@@ -779,6 +830,8 @@ public static class AopParser
             }
 
             var returnAttrs = method.GetReturnTypeAttributes();
+            if (attributeOverlay is not null)
+                returnAttrs = returnAttrs.AddRange(attributeOverlay.GetReturnTypeAttributes());
             bool sensitiveReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == SensitiveAttributeName);
             bool noLogReturn = returnAttrs.Any(a => a.AttributeClass?.ToDisplayString() == NoLogAttributeName);
 
@@ -798,6 +851,9 @@ public static class AopParser
         }
         return false;
     }
+
+    private static bool HasAttr(IParameterSymbol param, string attrFqn) =>
+        param.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attrFqn);
 
     /// <summary>
     /// Returns true if a generated interceptor — which lives in a separate `__X_Aop` static
