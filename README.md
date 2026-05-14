@@ -29,7 +29,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 - **ZibStack.NET.Query** — filter/sort DSL (`filter=Level>25,Team.Name=*ski`) compiled to LINQ/SQL.
 - **ZibStack.NET.UI** — compile-time form/table metadata, consumed by any frontend.
 
-> **Try the Playground** — edit C# models with `[ImTiredOfCrud]` to see generated endpoints, DTOs, query DSL, and form/table schemas update in real-time. Hosted on Render's free tier so initial load may be slow — for best experience clone the repo and run locally: `cd packages/ZibStack.NET.UI/sample/SampleApi && dotnet run`
+> **Try the Playground** — edit C# models with `[ImTiredOfCrud]` to see generated endpoints, DTOs, query DSL, and form/table schemas update in real-time. The Examples tab auto-generates filter/sort URLs for your model and a **▶ Run** button fires each one against an in-memory mock backend wired through the real `ZibStack.NET.Query` parsers — paste a sample, click Run, see the DSL evaluate live. Hosted on Render's free tier so initial load may be slow — for best experience clone the repo and run locally: `cd packages/ZibStack.NET.UI/sample/SampleApi && dotnet run`
 
 ## Why?
 

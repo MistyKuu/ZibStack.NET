@@ -887,6 +887,11 @@ async function compile() {
     if(data.error&&!data.formSchema&&!data.tableSchema){status.className='status-bar error';status.textContent=`Error (${ms}ms): ${data.error.substring(0,100)}`;return;}
     tableSchema=data.tableSchema?JSON.parse(data.tableSchema):null; formSchema=data.formSchema?JSON.parse(data.formSchema):null;
     if(tableSchema&&!tableSchema.apiUrl)tableSchema.apiUrl='/api/products'; if(formSchema&&!formSchema.apiUrl)formSchema.apiUrl='/api/products';
+    // Route the playground Data tab + Examples through the in-memory mock backend
+    // (Program.cs intentionally does NOT map real CRUD endpoints).
+    const mockUrl = u => u && u.startsWith('/api/') ? '/mock/' + (u.split('/').filter(Boolean).pop()||'items').toLowerCase() : u;
+    if(tableSchema?.apiUrl) tableSchema.apiUrl=mockUrl(tableSchema.apiUrl);
+    if(formSchema?.apiUrl)  formSchema.apiUrl =mockUrl(formSchema.apiUrl);
     const gf=data.generated||[];lastGenerated=gf;const counts={};gf.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
     status.className='status-bar success';status.textContent=`${ms}ms | ${gf.length} files`;
     ['endpoints','dtos','query','database','ui','utility','validation','typegen'].forEach(t=>updateTabCount(t,counts[{endpoints:'Endpoints',dtos:'DTOs',query:'Query',database:'Database',ui:'UI',utility:'Utility Types',validation:'Validation',typegen:'TypeGen'}[t]]));
@@ -902,7 +907,9 @@ async function compile() {
     renderCodeTab('tab-typegen',gf.filter(f=>f.category==='TypeGen'),'TypeGen');
     renderExamples();
     currentSort=tableSchema?.defaultSort?.column||null;currentSortDesc=tableSchema?.defaultSort?.direction==='desc';
-    currentPage=1;activeFilters={};editingId=null; renderTable();renderForm();loadData();
+    currentPage=1;activeFilters={};editingId=null; renderTable();renderForm();
+    await seedIfEmpty();
+    loadData();
   } catch(ex){status.className='status-bar error';status.textContent=ex.message;}
 }
 function updateTabCount(n,c){const t=$(`.tab[data-tab="${n}"]`);if(!t)return;let b=t.querySelector('.count');if(c){if(!b){b=document.createElement('span');b.className='count';t.appendChild(b);}b.textContent=c;}else if(b)b.remove();}
@@ -917,6 +924,7 @@ function hlCs(src){const tks=[];let i=0;function tk(c,t){const id=`\x00${i++}\x0
 
 function renderExamples() {
   const el=$('#tab-examples');
+  exCounter = 0; Object.keys(exData).forEach(k => delete exData[k]);
 
   // Try extracting fields from Query generated source if no table schema
   let cols = (tableSchema?.columns || []).filter(c => c.visible !== false);
@@ -1036,16 +1044,101 @@ function renderExamples() {
   el.innerHTML = h || '<div class="empty">No examples available</div>';
 }
 
+let exCounter = 0;
+const exData = {}; // eid -> { method, url, body }
+
 function ex(label, method, url, body) {
   const mc = {GET:'var(--accent)',POST:'var(--success)',PATCH:'#f59e0b',DELETE:'var(--danger)'}[method]||'var(--muted)';
+  const eid = 'ex-'+(exCounter++);
+  exData[eid] = { method, url, body: body || null };
   return `<div style="margin-bottom:.6rem">
     <div style="font-size:.7rem;color:var(--muted);margin-bottom:.15rem">${esc(label)}</div>
     <div style="display:flex;align-items:start;gap:.4rem">
       <span style="color:${mc};font-weight:600;font-size:.75rem;min-width:3rem">${method}</span>
-      <code style="font-size:.75rem;color:var(--text);word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent);toast('Copied!','success')">${esc(url)}</code>
+      <code style="font-size:.75rem;color:var(--text);word-break:break-all;cursor:pointer;flex:1" onclick="navigator.clipboard.writeText(this.textContent);toast('Copied!','success')">${esc(url)}</code>
+      <button class="secondary" style="padding:.1rem .35rem;font-size:.65rem" onclick="runExample('${eid}')">▶ Run</button>
     </div>
     ${body ? `<pre class="code" style="margin-top:.25rem;max-height:80px;font-size:.7rem">${esc(body)}</pre>` : ''}
+    <div id="${eid}-out" style="display:none;margin-top:.3rem"></div>
   </div>`;
+}
+
+async function runExample(eid) {
+  const d = exData[eid]; if (!d) return;
+  const out = $('#'+eid+'-out'); out.style.display='block';
+  out.innerHTML = `<div style="font-size:.7rem;color:var(--muted)">…fetching</div>`;
+  const t0 = performance.now();
+  try {
+    const opts = { method: d.method, headers: {} };
+    if (d.body) { opts.headers['Content-Type']='application/json'; opts.body = d.body.trim(); }
+    const res = await fetch(d.url, opts);
+    const ms = Math.round(performance.now()-t0);
+    const txt = await res.text();
+    let pretty = txt;
+    try { pretty = JSON.stringify(JSON.parse(txt), null, 2); } catch {}
+    const color = res.ok ? 'var(--success)' : 'var(--danger)';
+    out.innerHTML = `<div style="font-size:.65rem;color:${color};margin-bottom:.15rem">${res.status} ${res.statusText} · ${ms}ms</div>
+      <pre class="json" style="max-height:220px;font-size:.68rem">${esc(pretty || '(empty)')}</pre>`;
+  } catch (ex) {
+    out.innerHTML = `<div style="font-size:.7rem;color:var(--danger)">${esc(ex.message)}</div>`;
+  }
+}
+
+// ─── Synthetic data + seed ──────────────────────────────────────────
+function fakeValue(field, idx) {
+  const n = (field.name||'').toLowerCase(); const t = field.type;
+  if (n === 'id') return undefined; // server-assigned
+  if (n.includes('email')) return `user${idx+1}@example.com`;
+  if (n.includes('phone')) return `+1-555-${(1000+idx).toString().padStart(4,'0')}`;
+  if (n.includes('url') || n.includes('link') || n.includes('website')) return `https://example.com/${n}-${idx+1}`;
+  if (t === 'enum' && field.options?.length) {
+    const o = field.options[idx % field.options.length];
+    return typeof o === 'string' ? o : (o.value ?? o.label ?? o);
+  }
+  if (t === 'boolean') return idx % 3 !== 0;
+  if (t === 'integer') return (idx*7 + 13) % 1000 + 1;
+  if (t === 'decimal') return +((idx*17.31 + 9.99) % 1000).toFixed(2);
+  if (t === 'date' || t === 'datetime') {
+    const d = new Date(Date.now() - idx*86400000*3);
+    return d.toISOString();
+  }
+  if (n.includes('name') || n.includes('title')) {
+    const words = ['Acme','Globex','Initech','Hooli','Stark','Wayne','Wonka','Umbrella','Cyberdyne','Tyrell'];
+    return `${words[idx % words.length]} ${n.includes('title')?'#':''}${idx+1}`;
+  }
+  if (n.includes('description') || n.includes('notes') || n.includes('comment')) {
+    return `Sample ${n} for record ${idx+1} — lorem ipsum dolor sit amet.`;
+  }
+  return `${field.name||'value'}-${idx+1}`;
+}
+
+async function seedIfEmpty() {
+  if (!tableSchema?.apiUrl) return;
+  try {
+    const probe = await fetch(`${tableSchema.apiUrl}?pageSize=1`);
+    if (!probe.ok) return;
+    const data = await probe.json();
+    if ((data.totalCount||0) > 0) return;
+    // Build seed rows from form schema (preferred — has uiHint/options) or table columns
+    const fields = (formSchema?.fields||[]).filter(f => !f.hidden && (f.name||'').toLowerCase() !== 'id');
+    let rows;
+    if (fields.length) {
+      rows = Array.from({length: 20}, (_, i) => {
+        const r = {};
+        fields.forEach(f => { const v = fakeValue(f, i); if (v !== undefined) r[f.name] = v; });
+        return r;
+      });
+    } else {
+      const cols = (tableSchema?.columns||[]).filter(c => c.visible !== false && (c.name||'').toLowerCase() !== 'id');
+      if (!cols.length) return;
+      rows = Array.from({length: 20}, (_, i) => {
+        const r = {};
+        cols.forEach(c => { const v = fakeValue(c, i); if (v !== undefined) r[c.name] = v; });
+        return r;
+      });
+    }
+    await fetch(`${tableSchema.apiUrl}/seed`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rows) });
+  } catch {}
 }
 
 function C(name) { return name.charAt(0).toUpperCase() + name.slice(1); }

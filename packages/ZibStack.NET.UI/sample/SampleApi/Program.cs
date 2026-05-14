@@ -25,4 +25,8 @@ app.MapZibStackUiSchemas();
 // Live playground: POST C# code → compile with generators → return schemas
 app.MapPlayground();
 
+// In-memory CRUD backend for the playground Data tab + Examples "Run" button.
+// Lives at /mock/{collection}; FE rewrites generated apiUrls to point here.
+app.MapMockApi();
+
 app.Run();
