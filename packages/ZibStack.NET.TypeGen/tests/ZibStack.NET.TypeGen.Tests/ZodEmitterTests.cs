@@ -59,8 +59,8 @@ public class ZodEmitterTests
         Assert.Contains("name: z.string()", content);
         Assert.Contains("active: z.boolean()", content);
         Assert.Contains("price: z.string()", content);  // decimal → string (precision)
-        Assert.Contains("when: z.string().datetime()", content);
-        Assert.Contains("token: z.string().uuid()", content);
+        Assert.Contains("when: z.iso.datetime()", content);
+        Assert.Contains("token: z.uuid()", content);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class ZodEmitterTests
     }
 
     [Fact]
-    public void EmailFormat_BecomesChainedEmail()
+    public void EmailFormat_BecomesTopLevelEmail()
     {
         var cls = Cls("Customer");
         cls.Properties.Add(new SchemaProperty
@@ -184,7 +184,7 @@ public class ZodEmitterTests
         });
         var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
 
-        Assert.Contains("email: z.string().email()", content);
+        Assert.Contains("email: z.email()", content);
     }
 
     [Fact]

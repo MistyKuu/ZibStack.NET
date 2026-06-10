@@ -37,7 +37,7 @@ import { OrderStatusSchema } from './OrderStatus.schema';
 
 export const OrderSchema = z.object({
     id: z.number().int(),
-    email: z.string().email(),
+    email: z.email(),
     qty: z.number().int().gte(1).lte(100),
     status: OrderStatusSchema,
 });
@@ -60,11 +60,15 @@ Same attributes that drive OpenAPI constraints map to Zod chained calls:
 | `[MaxLength(n)]`, `[ZMaxLength(n)]` | `.max(n)` |
 | `[Range(min, max)]`, `[ZRange(min, max)]` | `.gte(min).lte(max)` |
 | `[RegularExpression("pat")]`, `[ZMatch("pat")]` | `.regex(/pat/)` |
-| `[EmailAddress]`, `[ZEmail]` | `.email()` |
-| `[Url]`, `[ZUrl]` | `.url()` |
-| `System.Guid` | `z.string().uuid()` |
-| `System.DateTime` | `z.string().datetime()` |
-| `System.DateOnly` | `z.string().date()` *(Zod 3.23+)* |
+| `[EmailAddress]`, `[ZEmail]` | `z.email()` |
+| `[Url]`, `[ZUrl]` | `z.url()` |
+| `System.Guid` | `z.uuid()` |
+| `System.DateTime` | `z.iso.datetime()` |
+| `System.DateOnly` | `z.iso.date()` |
+
+The emitter targets **Zod 4** — it emits the top-level format factories
+(`z.uuid()`, `z.email()`, `z.iso.datetime()`, …) rather than the chained
+`z.string().uuid()` forms that Zod 4 deprecated. Install Zod 4: `npm install zod@^4`.
 
 ## Type mapping
 
@@ -128,4 +132,5 @@ b.Zod(z =>
 ```
 
 **Consumer install:** the emitted code imports `zod` — add it to the frontend
-project: `npm install zod`. TypeGen doesn't bundle or generate the dep.
+project: `npm install zod@^4`. The emitter targets Zod 4's top-level format
+factories. TypeGen doesn't bundle or generate the dep.

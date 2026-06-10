@@ -339,18 +339,10 @@ internal static class ZodEmitter
         if (!isString) return expr;
 
         // Format markers come from validation attrs via OpenApiFormat — the
-        // SchemaParser normalises [EmailAddress]/[ZEmail] → "email" etc.
-        switch (prop.OpenApiFormat)
-        {
-            case "email": expr += ".email()"; break;
-            case "uri": case "url": expr += ".url()"; break;
-            case "uuid": expr += ".uuid()"; break;
-            case "date-time": expr += ".datetime()"; break;
-            case "date":
-                // Zod 3.23+ ships z.string().date(); older versions fall back via regex.
-                // We emit .date() — users on old Zod get a clear error, easy to see.
-                expr += ".date()"; break;
-        }
+        // SchemaParser normalises [EmailAddress]/[ZEmail] → "email" etc. Zod 4
+        // moved these to top-level factories (z.email(), z.uuid(), z.iso.datetime())
+        // and deprecated the chained z.string().email() forms.
+        expr = ApplyStringFormat(expr, prop.OpenApiFormat);
 
         if (prop.MinLength is int min) expr += $".min({min})";
         if (prop.MaxLength is int max) expr += $".max({max})";
@@ -361,6 +353,33 @@ internal static class ZodEmitter
             expr += $".regex(/{EscapeRegexForJs(pat)}/)";
         }
         return expr;
+    }
+
+    /// <summary>
+    /// Applies a string <c>format</c> validator to a <c>z.string()</c>-based
+    /// expression using the Zod 4 top-level factories (<c>z.email()</c>,
+    /// <c>z.uuid()</c>, <c>z.url()</c>, <c>z.iso.datetime()</c>, <c>z.iso.date()</c>).
+    /// The factory replaces the leading <c>z.string()</c> so any subsequent
+    /// <c>.min()</c>/<c>.max()</c>/<c>.regex()</c> chain onto it.
+    /// </summary>
+    private static string ApplyStringFormat(string expr, string? format)
+    {
+        var factory = format switch
+        {
+            "email" => "z.email()",
+            "uri" or "url" => "z.url()",
+            "uuid" => "z.uuid()",
+            "date-time" => "z.iso.datetime()",
+            "date" => "z.iso.date()",
+            _ => null,
+        };
+        if (factory is null) return expr; // no recognised format
+
+        // Swap the leading `z.string()` base for the top-level factory.
+        const string stringBase = "z.string()";
+        return expr.StartsWith(stringBase, System.StringComparison.Ordinal)
+            ? factory + expr.Substring(stringBase.Length)
+            : expr;
     }
 
     private static string ApplyNumericConstraints(string expr, SchemaProperty prop)
@@ -428,6 +447,8 @@ internal static class ZodEmitter
         if (dictMatch != null)
             return $"z.record({MapCSharpToZod(dictMatch.Value.K, false, nameByCSharp, schemaConstSuffix, typeParameters)}, {MapCSharpToZod(dictMatch.Value.V, false, nameByCSharp, schemaConstSuffix, typeParameters)})";
 
+        // Zod 4 top-level format factories — the chained z.string().uuid() forms
+        // are deprecated in Zod 4. See also ApplyStringFormat for attr-driven formats.
         return t switch
         {
             "string" => "z.string()",
@@ -436,9 +457,9 @@ internal static class ZodEmitter
                 or "System.Int32" or "System.Int64" => "z.number().int()",
             "float" or "double" or "System.Single" or "System.Double" => "z.number()",
             "decimal" or "System.Decimal" => "z.string()",
-            "System.Guid" or "Guid" => "z.string().uuid()",
-            "System.DateTime" or "DateTime" or "System.DateTimeOffset" or "DateTimeOffset" => "z.string().datetime()",
-            "System.DateOnly" or "DateOnly" => "z.string().date()",
+            "System.Guid" or "Guid" => "z.uuid()",
+            "System.DateTime" or "DateTime" or "System.DateTimeOffset" or "DateTimeOffset" => "z.iso.datetime()",
+            "System.DateOnly" or "DateOnly" => "z.iso.date()",
             "System.TimeOnly" or "TimeOnly" or "System.TimeSpan" or "TimeSpan" => "z.string()",
             "object" => "z.unknown()",
             _ => "z.unknown()",
