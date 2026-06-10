@@ -22,7 +22,7 @@ public sealed class ZodCompilationTests : IDisposable
 {
     // Pin both packages for determinism across machines / CI.
     private const string TscPackageSpec = "typescript@5.7.3";
-    private const string ZodPackageSpec = "zod@3.23.8";
+    private const string ZodPackageSpec = "zod@4.4.3";
 
     private readonly string _tempDir;
     private readonly bool _skip;
@@ -74,7 +74,7 @@ public sealed class ZodCompilationTests : IDisposable
 
         var (exitCode, stdout, stderr) = await RunAsync(
             "npx",
-            $"-y -p {TscPackageSpec} tsc --noEmit --strict --target ES2020 --moduleResolution node " +
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
                 string.Join(" ", files.Select(f => f.FileName)),
             workingDir: _tempDir);
 
@@ -123,7 +123,47 @@ public sealed class ZodCompilationTests : IDisposable
 
         var (exitCode, stdout, stderr) = await RunAsync(
             "npx",
-            $"-y -p {TscPackageSpec} tsc --noEmit --strict --target ES2020 --moduleResolution node " +
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
+                string.Join(" ", files.Select(f => f.FileName)),
+            workingDir: _tempDir);
+
+        Assert.True(exitCode == 0,
+            $"tsc failed (exit {exitCode}):{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+    }
+
+    [Fact]
+    public async Task ZodV4FormatTypes_CompileAgainstRealZod()
+    {
+        if (_skip) return;
+
+        // Guid/DateTime/DateOnly + [Email]/[Url] formats exercise the Zod 4
+        // top-level factories (z.uuid(), z.iso.datetime(), z.email(), ...).
+        // Compiling against a real zod 4 install proves the syntax is valid.
+        var model = new SchemaModel();
+        var cls = ClsModel("Account", new[]
+        {
+            ("Id", "System.Guid", false),
+            ("CreatedAt", "System.DateTime", false),
+            ("BirthDate", "System.DateOnly", false),
+        });
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Email", CSharpTypeFullName = "string", OpenApiFormat = "email",
+        });
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Website", CSharpTypeFullName = "string", OpenApiFormat = "url",
+        });
+        model.Classes.Add(cls);
+
+        var files = ZodEmitter.Emit(model, new GlobalSettings());
+        await PrepareWorkspaceAsync();
+        foreach (var f in files)
+            File.WriteAllText(Path.Combine(_tempDir, f.FileName), f.Content);
+
+        var (exitCode, stdout, stderr) = await RunAsync(
+            "npx",
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
                 string.Join(" ", files.Select(f => f.FileName)),
             workingDir: _tempDir);
 
