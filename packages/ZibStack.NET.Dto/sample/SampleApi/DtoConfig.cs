@@ -12,9 +12,10 @@ namespace ZibStack.NET.Dto.Sample;
 /// and configure everything in one place.
 ///
 /// <para>
-/// Phase 1: only Create / Update / CreateOrUpdate go through fluent.
-/// Response / Query / per-property overrides are still attribute-driven —
-/// landing in Phase 1B once their extraction is split into reusable cores.
+/// Fluent covers Create / Update / CreateOrUpdate / Response / Query, per-property
+/// overrides (.Ignore/.IgnoreIn/.OnlyIn/.RenameTo) and CrudApi option overrides.
+/// Only limitation: .RenameTo() doesn't apply to Query DTOs (the query generator
+/// uses the property name for both the URL param and the entity expression).
 /// </para>
 /// </summary>
 // `internal` matches the generated IDtoConfigurator interface accessibility —
