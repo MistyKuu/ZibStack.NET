@@ -263,6 +263,11 @@ public class Player
 [ColumnPermission("Salary", "finance.read")]
 public partial class Employee { /* ... */ }
 
+// Optimistic concurrency — weak ETags + If-Match preconditions (428/412),
+// RowVersion property generated on the entity:
+[CrudApi(Concurrency = true)]
+public partial class Document { /* ... */ }
+
 // Test scaffolding — generates xUnit CRUD integration tests for every [CrudApi] entity:
 [assembly: GenerateCrudTests]
 

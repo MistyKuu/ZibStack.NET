@@ -50,6 +50,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("IDtoConfigurator.g.cs", ConfiguratorSource);
             ctx.AddSource("GenerateCrudTestsAttribute.g.cs", GenerateCrudTestsAttributeSource);
             ctx.AddSource("SignalRHubAttribute.g.cs", SignalRHubAttributeSource);
+            ctx.AddSource("ETag.g.cs", ETagSource);
         });
 
         // Detect available serializers and emit PatchField + converters
@@ -590,6 +591,10 @@ public partial class DtoGenerator : IIncrementalGenerator
             if (info.SoftDelete)
                 spc.AddSource($"{info.FullyQualifiedName}.SoftDelete.g.cs", GenerateSoftDeleteProperties(info));
 
+            // Concurrency: emit RowVersion property on the entity partial
+            if (info.Concurrency && !info.HasUserRowVersion)
+                spc.AddSource($"{info.FullyQualifiedName}.Concurrency.g.cs", GenerateConcurrencyProperties(info));
+
             // SignalR hub: emit hub class + client interface when [SignalRHub] is on the entity
             if (info.SignalR)
                 spc.AddSource($"{info.FullyQualifiedName}.Hub.g.cs", GenerateSignalRHub(info));
@@ -621,6 +626,8 @@ public partial class DtoGenerator : IIncrementalGenerator
             spc.AddSource($"{info.FullyQualifiedName}.CodeMap.Model.g.cs", GenerateCodeMap(info));
             if (info.ColumnPermissions.Count > 0 && info.HasResponseDto && info.ResponseName is not null)
                 spc.AddSource($"{info.FullyQualifiedName}.ColumnPermissions.Model.g.cs", GenerateColumnPermissionsSource(info));
+            if (info.Concurrency && !info.HasUserRowVersion)
+                spc.AddSource($"{info.FullyQualifiedName}.Concurrency.Model.g.cs", GenerateConcurrencyProperties(info));
         });
 
         // ── [assembly: GenerateCrudTests] → xUnit integration test stubs ────

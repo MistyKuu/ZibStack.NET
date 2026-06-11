@@ -33,6 +33,7 @@ app.MapScalarApiReference();
 // Auto-generated CRUD endpoints
 app.MapPlayerEndpoints();
 app.MapTeamEndpoints();
+app.MapDocumentEndpoints();
 
 // ─── [Destructurable<T>] demo ───────────────────────────────────────
 // Shape-record approach: a user-declared partial record carries the picked

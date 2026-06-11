@@ -223,7 +223,9 @@ Explicit DTO attributes always take priority when present:
     UpdatePolicy = "write:players",        // override for PATCH only
     DeletePolicy = "admin",               // override for DELETE only
     GetByIdPolicy = "read:players",        // override for GET by ID
-    GetListPolicy = "read:players"         // override for GET list
+    GetListPolicy = "read:players",        // override for GET list
+    SoftDelete = true,                     // DELETE flags IsDeleted instead of removing
+    Concurrency = true                     // optimistic concurrency via ETag / If-Match
 )]
 ```
 
@@ -432,6 +434,38 @@ public class Player { ... }
 ```
 
 If you already have `IsDeleted` / `DeletedAt` properties on your entity, the generator reuses them and does not emit duplicates.
+
+## Optimistic concurrency (ETags)
+
+Set `Concurrency = true` on `[CrudApi]` to protect updates against lost writes with standard HTTP preconditions:
+
+```csharp
+[CrudApi(Concurrency = true)]
+public partial class Document
+{
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
+    public required string Title { get; set; }
+}
+```
+
+What gets generated:
+
+- **`RowVersion` (long) property** is added to the entity via a generated partial (skipped if you already declare one).
+- **`ETag` response header** — `GET /{id}`, `POST` and `PATCH` respond with a weak ETag: `ETag: W/"3"`.
+- **PATCH requires `If-Match`** — missing header → `428 Precondition Required`; stale version → `412 Precondition Failed`. On success the version is incremented and the fresh ETag returned.
+- **DELETE honors `If-Match`** when provided (412 on mismatch); without the header it deletes unconditionally.
+- **`If-Match: *`** explicitly bypasses the version check (RFC 9110 semantics, comma-separated lists supported).
+
+Typical client flow:
+
+```http
+GET /api/documents/7          → 200, ETag: W/"2"
+PATCH /api/documents/7
+If-Match: W/"2"               → 200, ETag: W/"3"     (someone else's W/"2" now gets 412)
+```
+
+The version compare-and-increment happens in the endpoint, which protects API-level workflows. For hard database-level guarantees under concurrent writers, additionally mark `RowVersion` as a concurrency token in your EF model configuration (`builder.Property(x => x.RowVersion).IsConcurrencyToken()`). Bulk endpoints intentionally skip precondition checks.
 
 ### Conditional emission
 

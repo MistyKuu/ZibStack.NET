@@ -36,6 +36,10 @@ internal sealed class CrudApiInfo
     public bool HasQueryDsl { get; set; }
     public bool SoftDelete { get; set; }
     public bool SignalR { get; set; }
+    /// <summary>Optimistic concurrency: RowVersion property + ETag/If-Match handling in endpoints.</summary>
+    public bool Concurrency { get; set; }
+    /// <summary>True when the entity already declares its own RowVersion property — skip the generated partial.</summary>
+    public bool HasUserRowVersion { get; set; }
 
     public CrudApiInfo(
         string className,
