@@ -264,6 +264,20 @@ app.MapPost("/api/orders/{id}/ship", async (int id, ShipmentService svc) =>
 
 > **Tip:** Place the `ToResponse()` extension in a shared project or `ServiceCollectionExtensions` file so all endpoints can use it consistently.
 
+## AOP integration
+
+When a method returns `Result` / `Result<T>`, ZibStack.NET.Aop aspects cooperate with the Result pattern: `[Authorize]` failures come back as `Error.Unauthorized` and `[Validate]` failures as `Error.Validation` — no exceptions, no try/catch:
+
+```csharp
+[Authorize(Roles = "Admin")]
+public async Task<Result<Order>> DeleteOrderAsync(int id) { ... }
+
+var result = await svc.DeleteOrderAsync(7);   // never throws on authorization failure
+if (result.IsFailure) return result.ToResponse();
+```
+
+See [Aop → Built-in aspects](/packages/aop/built-in/) for details.
+
 ## Requirements
 
 - .NET 8.0+ (async extensions)
