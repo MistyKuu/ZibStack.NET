@@ -438,7 +438,9 @@ public class AuthorizeTests
     {
         _auth.Roles.Add("User");
         var svc = new AuthorizeTestService();
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AdminOnlyAsync());
+        // AspectAuthorizationException derives from UnauthorizedAccessException —
+        // assert the exact type so a regression to the base type is caught.
+        var ex = await Assert.ThrowsAsync<AspectAuthorizationException>(() => svc.AdminOnlyAsync());
         Assert.Contains("Admin", ex.Message);
     }
 
@@ -446,7 +448,7 @@ public class AuthorizeTests
     public async Task Authorize_Roles_NoRoles_Throws()
     {
         var svc = new AuthorizeTestService();
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AdminOnlyAsync());
+        await Assert.ThrowsAsync<AspectAuthorizationException>(() => svc.AdminOnlyAsync());
     }
 
     [Fact]
@@ -462,7 +464,7 @@ public class AuthorizeTests
     public async Task Authorize_Policy_Denied_Throws()
     {
         var svc = new AuthorizeTestService();
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.PolicyProtectedAsync());
+        var ex = await Assert.ThrowsAsync<AspectAuthorizationException>(() => svc.PolicyProtectedAsync());
         Assert.Contains("CanEdit", ex.Message);
     }
 
@@ -480,7 +482,7 @@ public class AuthorizeTests
     {
         _auth.IsAuthenticated = false;
         var svc = new AuthorizeTestService();
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AuthenticatedOnlyAsync());
+        await Assert.ThrowsAsync<AspectAuthorizationException>(() => svc.AuthenticatedOnlyAsync());
     }
 }
 
@@ -503,7 +505,7 @@ public class ValidateTests
     public void Validate_RequiredMissing_Throws()
     {
         var svc = new ValidateTestService();
-        var ex = Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<AspectValidationException>(() =>
             svc.Process(new ValidateRequest { Age = 25 })); // Name is null
         Assert.Contains("Name", ex.Message);
     }
@@ -512,7 +514,7 @@ public class ValidateTests
     public void Validate_RangeViolation_Throws()
     {
         var svc = new ValidateTestService();
-        var ex = Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<AspectValidationException>(() =>
             svc.Process(new ValidateRequest { Name = "Bob", Age = 200 }));
         Assert.Contains("Age", ex.Message);
     }

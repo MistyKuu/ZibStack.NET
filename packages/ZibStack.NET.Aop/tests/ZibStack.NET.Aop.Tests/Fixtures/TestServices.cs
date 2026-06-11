@@ -522,6 +522,46 @@ public class ValidateTestService
     public string ProcessMulti(ValidateRequest request, int count) => $"ok:{count}";
 }
 
+// ── Aspect ↔ Result integration ─────────────────────────────────────────────────
+// Methods returning ZibStack.NET.Result.Result / Result<T>: aspect precondition
+// failures ([Authorize], [Validate]) come back as failed Results, not exceptions.
+
+public class ResultAspectService
+{
+    [Authorize(Roles = "Admin")]
+    public async Task<ZibStack.NET.Result.Result<int>> AdminNumberAsync()
+    {
+        await Task.CompletedTask;
+        return ZibStack.NET.Result.Result<int>.Success(42);
+    }
+
+    [Authorize(Roles = "Admin")]
+    public async Task<ZibStack.NET.Result.Result> AdminActionAsync()
+    {
+        await Task.CompletedTask;
+        return ZibStack.NET.Result.Result.Success();
+    }
+
+    [Validate]
+    public ZibStack.NET.Result.Result<string> Register(ValidateRequest request) =>
+        ZibStack.NET.Result.Result<string>.Success($"ok:{request.Name}");
+
+    [Authorize(Roles = "Admin")]
+    public async Task<ZibStack.NET.Result.Result<int>> AdminThrowsAsync()
+    {
+        await Task.CompletedTask;
+        throw new InvalidOperationException("body exploded");
+    }
+
+    // Plain return type — aspect failures must still throw.
+    [Authorize(Roles = "Admin")]
+    public async Task<int> AdminPlainAsync()
+    {
+        await Task.CompletedTask;
+        return 1;
+    }
+}
+
 // ── Built-in [Transaction] ──────────────────────────────────────────────────────
 
 public class TransactionTestService

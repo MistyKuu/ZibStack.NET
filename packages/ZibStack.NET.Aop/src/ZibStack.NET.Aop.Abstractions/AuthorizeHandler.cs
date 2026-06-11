@@ -33,7 +33,7 @@ public sealed class AuthorizeHandler : IAsyncAspectHandler
         if (policy is not null)
         {
             if (!await _provider.IsAuthorizedAsync(policy).ConfigureAwait(false))
-                throw new UnauthorizedAccessException(
+                throw new AspectAuthorizationException(
                     $"Authorization policy '{policy}' failed for {context.ClassName}.{context.MethodName}.");
             return;
         }
@@ -48,13 +48,13 @@ public sealed class AuthorizeHandler : IAsyncAspectHandler
                     return;
             }
 
-            throw new UnauthorizedAccessException(
+            throw new AspectAuthorizationException(
                 $"None of the required roles '{roles}' matched for {context.ClassName}.{context.MethodName}.");
         }
 
         // No policy or roles specified — [Authorize] without args means "must be authenticated".
         if (!await _provider.IsAuthorizedAsync("__authenticated").ConfigureAwait(false))
-            throw new UnauthorizedAccessException(
+            throw new AspectAuthorizationException(
                 $"Authentication required for {context.ClassName}.{context.MethodName}.");
     }
 
