@@ -74,7 +74,8 @@ public partial class PostalCodeView
                Endpoint = "/api/voivodeships/recalculate", Method = "POST",
                Confirmation = "Recalculate balances?", Permission = "finance.write")]
 
-// Permission metadata
+// Permission metadata. [ColumnPermission] also masks the column server-side
+// in [CrudApi]/[ImTiredOfCrud] endpoints — see Dto → CRUD API docs.
 [Permission("voivodeship.read")]
 [ColumnPermission("Budget", "finance.read")]
 [DataFilter("VoivodeshipId")]

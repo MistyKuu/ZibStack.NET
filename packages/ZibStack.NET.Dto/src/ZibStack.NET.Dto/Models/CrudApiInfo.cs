@@ -27,6 +27,9 @@ internal sealed class CrudApiInfo
     public string? ListResponseName { get; }
     public string? QueryName { get; }
     public Dictionary<string, string> ColumnPermissions { get; }
+    /// <summary>Subset of <see cref="ColumnPermissions"/> whose columns survive in the list DTO
+    /// (i.e. not removed by [DtoIgnore(DtoTarget.List)]). Used by the list endpoint.</summary>
+    public Dictionary<string, string> ListColumnPermissions { get; set; } = new();
     public bool IsCombinedDto { get; }
     public bool HasResponseDto { get; }
     public bool HasQueryDto { get; }

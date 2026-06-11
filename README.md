@@ -257,6 +257,12 @@ public class Player
     [DtoIgnore(DtoTarget.Response)] public DateTime CreatedAt { get; set; }
 }
 
+// Column-level permissions — endpoints mask restricted columns automatically
+// (response masking + select= filtering) unless the caller holds the claim/role:
+[CrudApi]
+[ColumnPermission("Salary", "finance.read")]
+public partial class Employee { /* ... */ }
+
 // Test scaffolding — generates xUnit CRUD integration tests for every [CrudApi] entity:
 [assembly: GenerateCrudTests]
 

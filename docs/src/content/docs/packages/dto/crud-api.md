@@ -321,6 +321,22 @@ public class PlayerStore : EfCrudStore<Player, int, AppDbContext>
 }
 ```
 
+### Column-level permissions (`[ColumnPermission]`)
+
+`[ColumnPermission("Column", "permission")]` (from ZibStack.NET.UI) is enforced automatically by the generated endpoints — no manual wiring. A caller must hold a `permission` claim with that value **or** be in a role of that name; otherwise the column is masked:
+
+```csharp
+[CrudApi]
+[ColumnPermission("Salary", "finance.read")]
+public partial class Player { ... }
+```
+
+- `GET /{id}`, `POST`, `PATCH`, `POST /bulk` — `Salary` is set to `default` in the response unless the caller holds `finance.read`.
+- `GET /` (list) — every page item is masked the same way (also when a separate `ListItem` DTO is in play, as long as the column survives `[DtoIgnore(DtoTarget.List)]`).
+- `GET /?select=Name,Salary` — restricted fields are silently dropped from the projection.
+
+Anonymous and unauthenticated callers are treated as having **no** permissions (safe by default). The masking logic lives in a generated `{Entity}ColumnPermissions` class — call `PlayerColumnPermissions.Apply(response, user)` yourself if you build custom endpoints on top of the generated DTOs.
+
 ### Error responses
 
 All error responses use the [RFC 9110](https://tools.ietf.org/html/rfc9110) **ProblemDetails** format (`application/problem+json`):

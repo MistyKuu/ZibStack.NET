@@ -22,3 +22,5 @@ Thumbs.db
 
 ## TypeGen sample outputs — regenerated on every build, never commit.
 **/sample/**/generated/
+
+.claude/settings.local.json
