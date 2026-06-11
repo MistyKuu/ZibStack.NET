@@ -26,6 +26,7 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 **Tier 3 — Opinionated scaffolding. High buy-in, high payoff.** Full-stack CRUD generation, query DSL, UI metadata. Best for solo projects and small teams where the time savings justify the framework buy-in; be cautious on large enterprise codebases where "magic" can surprise teammates.
 
 - **`[CrudApi]` / `[ImTiredOfCrud]`** — one attribute generates DTOs, endpoints, EF/Dapper stores, validation, query DSL, form/table UI schemas. Add `[SignalRHub]` for real-time push — generated endpoints notify connected clients via `OnCreated`/`OnUpdated`/`OnDeleted`.
+- **Aspects meet `Result<T>`** — methods returning `Result`/`Result<T>` get `[Authorize]`/`[Validate]` failures as failed Results (`Error.Unauthorized`/`Error.Validation`) instead of exceptions.
 - **ZibStack.NET.Query** — filter/sort DSL (`filter=Level>25,Team.Name=*ski`) compiled to LINQ/SQL.
 - **ZibStack.NET.UI** — compile-time form/table metadata, consumed by any frontend.
 
@@ -256,6 +257,21 @@ public class Player
     [DtoOnly(DtoTarget.Create)]     public required string Password { get; set; }
     [DtoIgnore(DtoTarget.Response)] public DateTime CreatedAt { get; set; }
 }
+
+// Column-level permissions — endpoints mask restricted columns automatically
+// (response masking + select= filtering) unless the caller holds the claim/role:
+[CrudApi]
+[ColumnPermission("Salary", "finance.read")]
+public partial class Employee { /* ... */ }
+
+// Optimistic concurrency + audit trail — weak ETags + If-Match preconditions
+// (428/412), RowVersion + CreatedAt/UpdatedAt/CreatedBy/UpdatedBy generated on
+// the entity and stamped automatically by the endpoints:
+[CrudApi(Concurrency = true, Audit = true)]
+public partial class Document { /* ... */ }
+
+// Cursor (keyset) pagination on every generated list endpoint:
+//   GET /api/documents?cursor=&pageSize=20 → { items, nextCursor, pageSize }
 
 // Test scaffolding — generates xUnit CRUD integration tests for every [CrudApi] entity:
 [assembly: GenerateCrudTests]

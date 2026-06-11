@@ -50,6 +50,8 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("IDtoConfigurator.g.cs", ConfiguratorSource);
             ctx.AddSource("GenerateCrudTestsAttribute.g.cs", GenerateCrudTestsAttributeSource);
             ctx.AddSource("SignalRHubAttribute.g.cs", SignalRHubAttributeSource);
+            ctx.AddSource("ETag.g.cs", ETagSource);
+            ctx.AddSource("CursorPage.g.cs", CursorPageSource);
         });
 
         // Detect available serializers and emit PatchField + converters
@@ -582,9 +584,21 @@ public partial class DtoGenerator : IIncrementalGenerator
             // Emit code map partial class with summary linking to all generated types
             spc.AddSource($"{info.FullyQualifiedName}.CodeMap.g.cs", GenerateCodeMap(info));
 
+            // [ColumnPermission] masking helper shared by endpoints and controller
+            if (info.ColumnPermissions.Count > 0 && info.HasResponseDto && info.ResponseName is not null)
+                spc.AddSource($"{info.FullyQualifiedName}.ColumnPermissions.g.cs", GenerateColumnPermissionsSource(info));
+
             // Soft delete: emit IsDeleted + DeletedAt properties on the entity partial
             if (info.SoftDelete)
                 spc.AddSource($"{info.FullyQualifiedName}.SoftDelete.g.cs", GenerateSoftDeleteProperties(info));
+
+            // Concurrency: emit RowVersion property on the entity partial
+            if (info.Concurrency && !info.HasUserRowVersion)
+                spc.AddSource($"{info.FullyQualifiedName}.Concurrency.g.cs", GenerateConcurrencyProperties(info));
+
+            // Audit: emit missing CreatedAt/UpdatedAt/CreatedBy/UpdatedBy on the entity partial
+            if (info.Audit && info.AuditFieldsToGenerate.Count > 0)
+                spc.AddSource($"{info.FullyQualifiedName}.Audit.g.cs", GenerateAuditProperties(info));
 
             // SignalR hub: emit hub class + client interface when [SignalRHub] is on the entity
             if (info.SignalR)
@@ -615,6 +629,12 @@ public partial class DtoGenerator : IIncrementalGenerator
             if (info.Style == StyleController || info.Style == StyleBoth)
                 spc.AddSource($"{info.FullyQualifiedName}.Controller.Model.g.cs", GenerateControllerSource(info));
             spc.AddSource($"{info.FullyQualifiedName}.CodeMap.Model.g.cs", GenerateCodeMap(info));
+            if (info.ColumnPermissions.Count > 0 && info.HasResponseDto && info.ResponseName is not null)
+                spc.AddSource($"{info.FullyQualifiedName}.ColumnPermissions.Model.g.cs", GenerateColumnPermissionsSource(info));
+            if (info.Concurrency && !info.HasUserRowVersion)
+                spc.AddSource($"{info.FullyQualifiedName}.Concurrency.Model.g.cs", GenerateConcurrencyProperties(info));
+            if (info.Audit && info.AuditFieldsToGenerate.Count > 0)
+                spc.AddSource($"{info.FullyQualifiedName}.Audit.Model.g.cs", GenerateAuditProperties(info));
         });
 
         // ── [assembly: GenerateCrudTests] → xUnit integration test stubs ────

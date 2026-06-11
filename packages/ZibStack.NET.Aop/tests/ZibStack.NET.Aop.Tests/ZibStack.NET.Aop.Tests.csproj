@@ -25,6 +25,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\ZibStack.NET.Log\src\ZibStack.NET.Log.Abstractions\ZibStack.NET.Log.Abstractions.csproj" />
+    <!-- Result integration fixtures — methods returning Result<T> get aspect failures
+         converted to failed Results by the generated interceptors. -->
+    <ProjectReference Include="..\..\..\ZibStack.NET.Result\src\ZibStack.NET.Result\ZibStack.NET.Result.csproj" />
     <!-- Optional add-on packages — exercised by behavioral fixtures so we'd notice
          if their handlers ever stop being intercepted by the main AOP generator. -->
     <ProjectReference Include="..\..\src\ZibStack.NET.Aop.Polly\ZibStack.NET.Aop.Polly.csproj" />

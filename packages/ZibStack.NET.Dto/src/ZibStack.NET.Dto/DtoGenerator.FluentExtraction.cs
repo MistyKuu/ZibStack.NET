@@ -6,11 +6,12 @@ using ZibStack.NET.Shared;
 namespace ZibStack.NET.Dto;
 
 /// <summary>
-/// Adapters that turn a <see cref="DtoConfiguratorParser.TypeConfig"/> into a
-/// <see cref="DtoClassInfo"/> via the shared <c>BuildDtoClassInfoCore</c>. This
-/// is Phase 1 — Create/Update/Combined only. ResponseDto / QueryDto fluent
-/// support arrives in Phase 1B once their <c>Get*Info</c> bodies are split into
-/// reusable cores too.
+/// Adapters that turn a <see cref="DtoConfiguratorParser.TypeConfig"/> into the
+/// per-kind info models via the shared <c>Build*InfoCore</c> methods. Covers
+/// Create/Update/Combined, ResponseDto, QueryDto, per-property overrides
+/// (Ignore/IgnoreIn/OnlyIn/RenameTo) and CrudApi option overrides. Known
+/// limitation: <c>.RenameTo()</c> is not applied to Query DTOs (see
+/// <see cref="ApplyFluentQueryOverrides"/>).
 /// </summary>
 public partial class DtoGenerator
 {

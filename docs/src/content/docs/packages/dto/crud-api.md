@@ -223,7 +223,10 @@ Explicit DTO attributes always take priority when present:
     UpdatePolicy = "write:players",        // override for PATCH only
     DeletePolicy = "admin",               // override for DELETE only
     GetByIdPolicy = "read:players",        // override for GET by ID
-    GetListPolicy = "read:players"         // override for GET list
+    GetListPolicy = "read:players",        // override for GET list
+    SoftDelete = true,                     // DELETE flags IsDeleted instead of removing
+    Concurrency = true,                    // optimistic concurrency via ETag / If-Match
+    Audit = true                           // auto-stamp CreatedAt/UpdatedAt/CreatedBy/UpdatedBy
 )]
 ```
 
@@ -321,6 +324,22 @@ public class PlayerStore : EfCrudStore<Player, int, AppDbContext>
 }
 ```
 
+### Column-level permissions (`[ColumnPermission]`)
+
+`[ColumnPermission("Column", "permission")]` (from ZibStack.NET.UI) is enforced automatically by the generated endpoints — no manual wiring. A caller must hold a `permission` claim with that value **or** be in a role of that name; otherwise the column is masked:
+
+```csharp
+[CrudApi]
+[ColumnPermission("Salary", "finance.read")]
+public partial class Player { ... }
+```
+
+- `GET /{id}`, `POST`, `PATCH`, `POST /bulk` — `Salary` is set to `default` in the response unless the caller holds `finance.read`.
+- `GET /` (list) — every page item is masked the same way (also when a separate `ListItem` DTO is in play, as long as the column survives `[DtoIgnore(DtoTarget.List)]`).
+- `GET /?select=Name,Salary` — restricted fields are silently dropped from the projection.
+
+Anonymous and unauthenticated callers are treated as having **no** permissions (safe by default). The masking logic lives in a generated `{Entity}ColumnPermissions` class — call `PlayerColumnPermissions.Apply(response, user)` yourself if you build custom endpoints on top of the generated DTOs.
+
 ### Error responses
 
 All error responses use the [RFC 9110](https://tools.ietf.org/html/rfc9110) **ProblemDetails** format (`application/problem+json`):
@@ -405,7 +424,8 @@ What gets generated:
 - **DELETE endpoints** (`DELETE /api/players/{id}` and `POST /api/players/bulk-delete`) set `IsDeleted = true` and `DeletedAt = DateTime.UtcNow` instead of removing the row.
 - **GET list** (`GET /api/players`) filters out soft-deleted entities by default — a `WHERE IsDeleted = false` clause is appended to the query automatically.
 - **`?includeDeleted=true`** query parameter on the GET list endpoint bypasses the filter and returns all entities including deleted ones.
-- **GET by ID** still returns soft-deleted entities (no silent 404 — the consumer can inspect `IsDeleted` on the response).
+- **`?cursor=`** on the GET list endpoint switches to keyset pagination — see [PaginatedResponse → Cursor pagination](/packages/dto/paginated/).
+- **GET by ID** returns `404 Not Found` for soft-deleted entities — same as the list view, a deleted record is invisible through the API. Query the store directly (`store.Query()` is unfiltered) when you need to inspect archived rows.
 
 Works with all API styles — Minimal API, Controller, and bulk operations. The bulk-delete endpoint also applies the soft-delete logic per entity instead of issuing a hard delete.
 
@@ -416,6 +436,56 @@ public class Player { ... }
 ```
 
 If you already have `IsDeleted` / `DeletedAt` properties on your entity, the generator reuses them and does not emit duplicates.
+
+## Optimistic concurrency (ETags)
+
+Set `Concurrency = true` on `[CrudApi]` to protect updates against lost writes with standard HTTP preconditions:
+
+```csharp
+[CrudApi(Concurrency = true)]
+public partial class Document
+{
+    [DtoIgnore(DtoTarget.Create | DtoTarget.Update | DtoTarget.Query)]
+    public int Id { get; set; }
+    public required string Title { get; set; }
+}
+```
+
+What gets generated:
+
+- **`RowVersion` (long) property** is added to the entity via a generated partial (skipped if you already declare one).
+- **`ETag` response header** — `GET /{id}`, `POST` and `PATCH` respond with a weak ETag: `ETag: W/"3"`.
+- **PATCH requires `If-Match`** — missing header → `428 Precondition Required`; stale version → `412 Precondition Failed`. On success the version is incremented and the fresh ETag returned.
+- **DELETE honors `If-Match`** when provided (412 on mismatch); without the header it deletes unconditionally.
+- **`If-Match: *`** explicitly bypasses the version check (RFC 9110 semantics, comma-separated lists supported).
+
+Typical client flow:
+
+```http
+GET /api/documents/7          → 200, ETag: W/"2"
+PATCH /api/documents/7
+If-Match: W/"2"               → 200, ETag: W/"3"     (someone else's W/"2" now gets 412)
+```
+
+The version compare-and-increment happens in the endpoint, which protects API-level workflows. For hard database-level guarantees under concurrent writers, additionally mark `RowVersion` as a concurrency token in your EF model configuration (`builder.Property(x => x.RowVersion).IsConcurrencyToken()`). Bulk endpoints intentionally skip precondition checks.
+
+## Audit fields
+
+Set `Audit = true` on `[CrudApi]` to have the generated endpoints maintain audit metadata automatically:
+
+```csharp
+[CrudApi(Audit = true)]
+public partial class Document { ... }
+```
+
+What gets generated:
+
+- **Missing audit properties** are added to the entity partial: `CreatedAt`/`UpdatedAt` (`DateTime`) and `CreatedBy`/`UpdatedBy` (`string?`). Properties you already declare are reused (declare them yourself if you want them in response DTOs — generated partials are invisible to DTO extraction).
+- **POST** (and bulk create) stamps `CreatedAt`/`UpdatedAt` with `DateTime.UtcNow` and `CreatedBy`/`UpdatedBy` with the caller's identity name (`null` for anonymous callers).
+- **PATCH** refreshes `UpdatedAt`/`UpdatedBy`.
+- **Soft DELETE** (when combined with `SoftDelete = true`) also refreshes `UpdatedAt`/`UpdatedBy`, so you can tell who archived the record.
+
+The stamping happens in the endpoint layer, so it works identically with the EF store, the Dapper store, and any custom `ICrudStore` implementation. (The EF-generated store additionally fills `CreatedAt`/`UpdatedAt` by convention when those properties exist on the entity — the two mechanisms agree, endpoint values simply win.)
 
 ### Conditional emission
 

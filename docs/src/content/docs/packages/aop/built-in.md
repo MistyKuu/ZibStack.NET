@@ -231,7 +231,20 @@ public class MyAuthProvider : IAuthorizationProvider
 }
 ```
 
-Throws `UnauthorizedAccessException` on failure. **Async methods only** (`IAsyncAspectHandler`).
+Throws `AspectAuthorizationException` (derives from `UnauthorizedAccessException`) on failure. **Async methods only** (`IAsyncAspectHandler`).
+
+**Result integration** — when the method returns `ZibStack.NET.Result.Result` or `Result<T>`, authorization failures come back as a failed Result with `Error.Unauthorized` instead of throwing:
+
+```csharp
+[Authorize(Roles = "Admin")]
+public async Task<Result<Order>> DeleteOrderAsync(int id) { ... }
+
+var result = await svc.DeleteOrderAsync(7);
+if (result.IsFailure) // Error.Code == "Unauthorized" — no try/catch needed
+    return result.ToHttpResult();
+```
+
+The method's own exceptions (including plain `UnauthorizedAccessException`) still propagate as exceptions — only aspect precondition failures are converted.
 
 ### `[PollyRetry]` — Polly integration (optional)
 
@@ -283,10 +296,19 @@ Setup: `builder.Services.AddHybridCache();`
 ```csharp
 [Validate]
 public Order CreateOrder(CreateOrderRequest request) { ... }
-// If request has [Required] Name = null → throws ArgumentException before method runs
+// If request has [Required] Name = null → throws AspectValidationException
+// (derives from ArgumentException) before method runs
 ```
 
 Validates complex object parameters using `System.ComponentModel.DataAnnotations.Validator`. Primitives/strings are skipped. Works on sync and async methods.
+
+**Result integration** — when the method returns `ZibStack.NET.Result.Result` or `Result<T>`, validation failures come back as a failed Result with `Error.Validation` instead of throwing:
+
+```csharp
+[Validate]
+public Result<Order> CreateOrder(CreateOrderRequest request) { ... }
+// invalid request → Result.IsFailure with Error.Code == "Validation"
+```
 
 ### `[Transaction]` — TransactionScope
 

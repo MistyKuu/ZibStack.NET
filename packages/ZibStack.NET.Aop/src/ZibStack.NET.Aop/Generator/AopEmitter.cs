@@ -164,6 +164,17 @@ public static class AopEmitter
 
         var indent = "            ";
 
+        // Result-returning methods: aspect precondition failures ([Authorize], [Validate])
+        // convert to a failed Result instead of escaping as exceptions. The outer try wraps
+        // the whole interceptor body because OnBefore (where preconditions throw) runs
+        // before the regular try/catch around the method invocation.
+        var resultReturnType = method.ReturnsVoid ? null : GetResultReturnType(method);
+        if (resultReturnType is not null)
+        {
+            sb.AppendLine($"{indent}try");
+            sb.AppendLine($"{indent}{{");
+        }
+
         // If the method has a CancellationToken parameter, create a linked CTS
         // upfront so handlers can signal cancellation via AspectContext that the
         // method body actually observes through its own awaits. The linked source
@@ -357,7 +368,38 @@ public static class AopEmitter
 
         sb.AppendLine($"{indent}    throw;");
         sb.AppendLine($"{indent}}}");
+
+        // Close the Result-conversion wrapper. Aspect-specific exception types only —
+        // the method's own ArgumentException / UnauthorizedAccessException still throw.
+        if (resultReturnType is not null)
+        {
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine($"{indent}catch (global::ZibStack.NET.Aop.AspectAuthorizationException __raex)");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    return {resultReturnType}.Failure(global::ZibStack.NET.Result.Error.Unauthorized(__raex.Message));");
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine($"{indent}catch (global::ZibStack.NET.Aop.AspectValidationException __rvex)");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    return {resultReturnType}.Failure(global::ZibStack.NET.Result.Error.Validation(__rvex.Message));");
+            sb.AppendLine($"{indent}}}");
+        }
+
         sb.AppendLine("        }");
+    }
+
+    /// <summary>
+    /// When the (unwrapped) return type is ZibStack.NET.Result.Result or Result&lt;T&gt;,
+    /// returns the fully-qualified type expression to call <c>.Failure(...)</c> on;
+    /// otherwise null. Matched by fully-qualified name so user types named Result
+    /// never trigger the conversion.
+    /// </summary>
+    private static string? GetResultReturnType(InterceptedMethodModel method)
+    {
+        var rt = GetUnwrappedReturnType(method).Trim().TrimEnd('?');
+        if (rt == "global::ZibStack.NET.Result.Result" ||
+            (rt.StartsWith("global::ZibStack.NET.Result.Result<", System.StringComparison.Ordinal) && rt.EndsWith(">", System.StringComparison.Ordinal)))
+            return rt;
+        return null;
     }
 
     // === Runtime handler emission (for [AspectHandler]-based aspects) ===

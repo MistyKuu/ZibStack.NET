@@ -37,7 +37,7 @@ public sealed class ValidateHandler : IAspectHandler
                         errors.Add(result.ErrorMessage);
                 }
 
-                throw new ArgumentException(
+                throw new AspectValidationException(
                     $"Validation failed for parameter '{param.Name}' in {context.ClassName}.{context.MethodName}: {string.Join("; ", errors)}",
                     param.Name);
             }
