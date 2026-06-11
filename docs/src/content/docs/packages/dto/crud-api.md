@@ -225,7 +225,8 @@ Explicit DTO attributes always take priority when present:
     GetByIdPolicy = "read:players",        // override for GET by ID
     GetListPolicy = "read:players",        // override for GET list
     SoftDelete = true,                     // DELETE flags IsDeleted instead of removing
-    Concurrency = true                     // optimistic concurrency via ETag / If-Match
+    Concurrency = true,                    // optimistic concurrency via ETag / If-Match
+    Audit = true                           // auto-stamp CreatedAt/UpdatedAt/CreatedBy/UpdatedBy
 )]
 ```
 
@@ -466,6 +467,24 @@ If-Match: W/"2"               → 200, ETag: W/"3"     (someone else's W/"2" now
 ```
 
 The version compare-and-increment happens in the endpoint, which protects API-level workflows. For hard database-level guarantees under concurrent writers, additionally mark `RowVersion` as a concurrency token in your EF model configuration (`builder.Property(x => x.RowVersion).IsConcurrencyToken()`). Bulk endpoints intentionally skip precondition checks.
+
+## Audit fields
+
+Set `Audit = true` on `[CrudApi]` to have the generated endpoints maintain audit metadata automatically:
+
+```csharp
+[CrudApi(Audit = true)]
+public partial class Document { ... }
+```
+
+What gets generated:
+
+- **Missing audit properties** are added to the entity partial: `CreatedAt`/`UpdatedAt` (`DateTime`) and `CreatedBy`/`UpdatedBy` (`string?`). Properties you already declare are reused (declare them yourself if you want them in response DTOs — generated partials are invisible to DTO extraction).
+- **POST** (and bulk create) stamps `CreatedAt`/`UpdatedAt` with `DateTime.UtcNow` and `CreatedBy`/`UpdatedBy` with the caller's identity name (`null` for anonymous callers).
+- **PATCH** refreshes `UpdatedAt`/`UpdatedBy`.
+- **Soft DELETE** (when combined with `SoftDelete = true`) also refreshes `UpdatedAt`/`UpdatedBy`, so you can tell who archived the record.
+
+The stamping happens in the endpoint layer, so it works identically with the EF store, the Dapper store, and any custom `ICrudStore` implementation. (The EF-generated store additionally fills `CreatedAt`/`UpdatedAt` by convention when those properties exist on the entity — the two mechanisms agree, endpoint values simply win.)
 
 ### Conditional emission
 

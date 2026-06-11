@@ -32,6 +32,14 @@ public partial class DtoGenerator
         var softDelete = softDeleteRaw is true;
         var concurrency = attr.NamedArguments.FirstOrDefault(a => a.Key == "Concurrency").Value.Value is true;
         var hasUserRowVersion = concurrency && GetAllProperties(symbol).Any(p => p.Name == "RowVersion");
+        var audit = attr.NamedArguments.FirstOrDefault(a => a.Key == "Audit").Value.Value is true;
+        var auditFieldsToGenerate = new List<string>();
+        if (audit)
+        {
+            var existing = new HashSet<string>(GetAllProperties(symbol).Select(p => p.Name));
+            foreach (var f in new[] { "CreatedAt", "UpdatedAt", "CreatedBy", "UpdatedBy" })
+                if (!existing.Contains(f)) auditFieldsToGenerate.Add(f);
+        }
         var signalR = symbol.GetAttributes().Any(a => a.AttributeClass?.Name == "SignalRHubAttribute");
 
         // Resolve key property type
@@ -185,7 +193,7 @@ public partial class DtoGenerator
             updatePolicy,
             deletePolicy,
             listResponseName,
-            columnPermissions) { SoftDelete = softDelete, SignalR = signalR, Concurrency = concurrency, HasUserRowVersion = hasUserRowVersion, ListColumnPermissions = listColumnPermissions };
+            columnPermissions) { SoftDelete = softDelete, SignalR = signalR, Concurrency = concurrency, HasUserRowVersion = hasUserRowVersion, Audit = audit, AuditFieldsToGenerate = auditFieldsToGenerate, ListColumnPermissions = listColumnPermissions };
     } catch { return null; } }
 
     // ─── Auto-implied DTOs from [CrudApi] ──────────────────────────────

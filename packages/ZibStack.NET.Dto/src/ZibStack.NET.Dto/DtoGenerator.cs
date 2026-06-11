@@ -595,6 +595,10 @@ public partial class DtoGenerator : IIncrementalGenerator
             if (info.Concurrency && !info.HasUserRowVersion)
                 spc.AddSource($"{info.FullyQualifiedName}.Concurrency.g.cs", GenerateConcurrencyProperties(info));
 
+            // Audit: emit missing CreatedAt/UpdatedAt/CreatedBy/UpdatedBy on the entity partial
+            if (info.Audit && info.AuditFieldsToGenerate.Count > 0)
+                spc.AddSource($"{info.FullyQualifiedName}.Audit.g.cs", GenerateAuditProperties(info));
+
             // SignalR hub: emit hub class + client interface when [SignalRHub] is on the entity
             if (info.SignalR)
                 spc.AddSource($"{info.FullyQualifiedName}.Hub.g.cs", GenerateSignalRHub(info));
@@ -628,6 +632,8 @@ public partial class DtoGenerator : IIncrementalGenerator
                 spc.AddSource($"{info.FullyQualifiedName}.ColumnPermissions.Model.g.cs", GenerateColumnPermissionsSource(info));
             if (info.Concurrency && !info.HasUserRowVersion)
                 spc.AddSource($"{info.FullyQualifiedName}.Concurrency.Model.g.cs", GenerateConcurrencyProperties(info));
+            if (info.Audit && info.AuditFieldsToGenerate.Count > 0)
+                spc.AddSource($"{info.FullyQualifiedName}.Audit.Model.g.cs", GenerateAuditProperties(info));
         });
 
         // ── [assembly: GenerateCrudTests] → xUnit integration test stubs ────

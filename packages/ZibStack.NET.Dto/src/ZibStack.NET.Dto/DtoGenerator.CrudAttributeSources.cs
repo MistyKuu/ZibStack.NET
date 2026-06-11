@@ -105,6 +105,15 @@ namespace ZibStack.NET.Dto
         /// concurrency token in your EF model configuration.
         /// </summary>
         public bool Concurrency { get; set; }
+
+        /// <summary>
+        /// When true, audit fields are maintained automatically by the generated endpoints:
+        /// POST fills CreatedAt/UpdatedAt (UTC) and CreatedBy/UpdatedBy (from the caller's
+        /// identity name), PATCH and soft DELETE refresh UpdatedAt/UpdatedBy. Missing audit
+        /// properties are added to the entity partial class (CreatedAt/UpdatedAt as DateTime,
+        /// CreatedBy/UpdatedBy as string?); properties you already declare are reused.
+        /// </summary>
+        public bool Audit { get; set; }
     }
 }
 ";
