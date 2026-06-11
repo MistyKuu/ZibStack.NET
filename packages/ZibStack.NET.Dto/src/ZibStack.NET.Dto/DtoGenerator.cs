@@ -51,6 +51,7 @@ public partial class DtoGenerator : IIncrementalGenerator
             ctx.AddSource("GenerateCrudTestsAttribute.g.cs", GenerateCrudTestsAttributeSource);
             ctx.AddSource("SignalRHubAttribute.g.cs", SignalRHubAttributeSource);
             ctx.AddSource("ETag.g.cs", ETagSource);
+            ctx.AddSource("CursorPage.g.cs", CursorPageSource);
         });
 
         // Detect available serializers and emit PatchField + converters

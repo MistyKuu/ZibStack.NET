@@ -424,7 +424,8 @@ What gets generated:
 - **DELETE endpoints** (`DELETE /api/players/{id}` and `POST /api/players/bulk-delete`) set `IsDeleted = true` and `DeletedAt = DateTime.UtcNow` instead of removing the row.
 - **GET list** (`GET /api/players`) filters out soft-deleted entities by default — a `WHERE IsDeleted = false` clause is appended to the query automatically.
 - **`?includeDeleted=true`** query parameter on the GET list endpoint bypasses the filter and returns all entities including deleted ones.
-- **GET by ID** still returns soft-deleted entities (no silent 404 — the consumer can inspect `IsDeleted` on the response).
+- **`?cursor=`** on the GET list endpoint switches to keyset pagination — see [PaginatedResponse → Cursor pagination](/packages/dto/paginated/).
+- **GET by ID** returns `404 Not Found` for soft-deleted entities — same as the list view, a deleted record is invisible through the API. Query the store directly (`store.Query()` is unfiltered) when you need to inspect archived rows.
 
 Works with all API styles — Minimal API, Controller, and bulk operations. The bulk-delete endpoint also applies the soft-delete logic per entity instead of issuing a hard delete.
 

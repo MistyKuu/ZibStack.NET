@@ -140,14 +140,21 @@ public partial class DtoGenerator
                 ? (info.Namespace is not null ? $"{info.Namespace}.{info.QueryName}" : info.QueryName)
                 : null;
 
+            // Cursor (keyset) pagination — supported for int/long/Guid/string keys.
+            var cursorKeyParse = GetCursorKeyParseExpression(info.KeyTypeName);
+            var cursorParam = cursorKeyParse is not null ? ", string? cursor = null" : "";
+            // Any branch that returns a materialized value forces the async form so all
+            // lambda return paths agree (IResult vs Task<PaginatedResponse<T>>).
+            var listAsync = info.HasQueryDsl || enforceListPerms || cursorKeyParse is not null;
+
             // ClaimsPrincipal binds from HttpContext.User; it can't be optional, so it
             // goes before the defaulted params instead of reusing userParam.
             var listUserParam = enforcePerms ? " System.Security.Claims.ClaimsPrincipal? __user," : "";
             if (fqQuery is not null)
             {
-                var asyncKeyword = info.HasQueryDsl || enforceListPerms ? "async " : "";
+                var asyncKeyword = listAsync ? "async " : "";
                 sb.AppendLine($"        group.MapGet(\"\", {asyncKeyword}([Microsoft.AspNetCore.Http.AsParameters] {fqQuery} query,");
-                sb.AppendLine($"            {storeType} store,{listUserParam} int page = 1, int pageSize = 20{dslParams}{softDeleteParam}, CancellationToken ct = default) =>");
+                sb.AppendLine($"            {storeType} store,{listUserParam} int page = 1, int pageSize = 20{dslParams}{softDeleteParam}{cursorParam}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
                 if (info.SoftDelete)
@@ -158,8 +165,8 @@ public partial class DtoGenerator
             }
             else
             {
-                var asyncKeyword = enforceListPerms ? "async " : "";
-                sb.AppendLine($"        group.MapGet(\"\", {asyncKeyword}({storeType} store,{listUserParam} int page = 1, int pageSize = 20{dslParams}{softDeleteParam}, CancellationToken ct = default) =>");
+                var asyncKeyword = listAsync ? "async " : "";
+                sb.AppendLine($"        group.MapGet(\"\", {asyncKeyword}({storeType} store,{listUserParam} int page = 1, int pageSize = 20{dslParams}{softDeleteParam}{cursorParam}, CancellationToken ct = default) =>");
                 sb.AppendLine("        {");
                 sb.AppendLine("            var q = store.Query();");
                 if (info.SoftDelete)
@@ -170,6 +177,39 @@ public partial class DtoGenerator
             if (info.HasQueryDsl)
             {
                 sb.AppendLine("            if (count) return Results.Ok(new { count = q.Count() });");
+            }
+
+            // cursor= keyset pagination: ordered by key, windowed by pageSize + 1 to
+            // detect the last page. cursor= (empty) starts from the beginning; the
+            // response carries the opaque cursor for the next page. sort= is ignored
+            // in cursor mode — keyset pagination requires the stable key order.
+            if (cursorKeyParse is not null)
+            {
+                var keyProp = info.KeyPropertyName;
+                var fqCursorResponse = info.HasResponseDto && info.ResponseName is not null
+                    ? (info.Namespace is not null ? $"{info.Namespace}.{info.ResponseName}" : info.ResponseName)
+                    : null;
+                var cursorItemType = fqCursorResponse ?? fqEntity;
+                var cursorItemExpr = fqCursorResponse is null
+                    ? "e"
+                    : enforcePerms
+                        ? $"{permsClass}.Apply({fqCursorResponse}.FromEntity(e), __user)"
+                        : $"{fqCursorResponse}.FromEntity(e)";
+
+                sb.AppendLine("            if (cursor is not null)");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                var __ordered = q.OrderBy(e => e.{keyProp});");
+                sb.AppendLine("                if (cursor.Length > 0)");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    var __after = {cursorKeyParse};");
+                sb.AppendLine($"                    __ordered = q.Where(e => e.{keyProp}.CompareTo(__after) > 0).OrderBy(e => e.{keyProp});");
+                sb.AppendLine("                }");
+                sb.AppendLine("                var __win = __ordered.Take(pageSize + 1).ToList();");
+                sb.AppendLine("                var __hasMore = __win.Count > pageSize;");
+                sb.AppendLine("                if (__hasMore) __win.RemoveAt(pageSize);");
+                sb.AppendLine($"                var __next = __hasMore && __win.Count > 0 ? ZibStack.NET.Dto.Cursor.Encode(__win[__win.Count - 1].{keyProp}) : null;");
+                sb.AppendLine($"                return Results.Ok(new CursorPage<{cursorItemType}> {{ Items = __win.Select(e => {cursorItemExpr}).ToList(), NextCursor = __next, PageSize = pageSize }});");
+                sb.AppendLine("            }");
             }
 
             // select= field projection (when ZibStack.NET.Query is referenced)
@@ -193,14 +233,14 @@ public partial class DtoGenerator
                 sb.AppendLine($"            var defaultProjected = {fqListResponse}.ProjectFrom(q);");
                 if (enforceListPerms)
                     sb.AppendLine($"            return Results.Ok((await PaginatedResponse<{fqListResponse}>.CreateAsync(defaultProjected, page, pageSize, ct)).Map(r => {permsClass}.Apply(r, __user)));");
-                else if (info.HasQueryDsl)
+                else if (listAsync)
                     sb.AppendLine($"            return Results.Ok(await PaginatedResponse<{fqListResponse}>.CreateAsync(defaultProjected, page, pageSize, ct));");
                 else
                     sb.AppendLine($"            return PaginatedResponse<{fqListResponse}>.CreateAsync(defaultProjected, page, pageSize, ct);");
             }
             else
             {
-                if (info.HasQueryDsl)
+                if (listAsync)
                     sb.AppendLine($"            return Results.Ok(await PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct));");
                 else
                     sb.AppendLine($"            return PaginatedResponse<{fqEntity}>.CreateAsync(q, page, pageSize, ct);");
@@ -509,6 +549,20 @@ public partial class DtoGenerator
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// C# expression parsing the decoded cursor back into the entity key type, or null
+    /// when the key type doesn't support keyset pagination (cursor support is then
+    /// simply not emitted for that entity).
+    /// </summary>
+    private static string? GetCursorKeyParseExpression(string keyTypeName) => keyTypeName.TrimEnd('?') switch
+    {
+        "int" or "System.Int32" => "int.Parse(ZibStack.NET.Dto.Cursor.Decode(cursor), System.Globalization.CultureInfo.InvariantCulture)",
+        "long" or "System.Int64" => "long.Parse(ZibStack.NET.Dto.Cursor.Decode(cursor), System.Globalization.CultureInfo.InvariantCulture)",
+        "System.Guid" or "Guid" => "System.Guid.Parse(ZibStack.NET.Dto.Cursor.Decode(cursor))",
+        "string" or "System.String" => "ZibStack.NET.Dto.Cursor.Decode(cursor)",
+        _ => null,
+    };
 
     private static string GenerateControllerSource(CrudApiInfo info)
     {

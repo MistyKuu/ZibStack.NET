@@ -270,6 +270,9 @@ public partial class Employee { /* ... */ }
 [CrudApi(Concurrency = true, Audit = true)]
 public partial class Document { /* ... */ }
 
+// Cursor (keyset) pagination on every generated list endpoint:
+//   GET /api/documents?cursor=&pageSize=20 → { items, nextCursor, pageSize }
+
 // Test scaffolding — generates xUnit CRUD integration tests for every [CrudApi] entity:
 [assembly: GenerateCrudTests]
 

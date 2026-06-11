@@ -24,3 +24,4 @@ Thumbs.db
 **/sample/**/generated/
 
 .claude/settings.local.json
+packages/ZibStack.NET.Dto/sample/SampleApi/generated1/
