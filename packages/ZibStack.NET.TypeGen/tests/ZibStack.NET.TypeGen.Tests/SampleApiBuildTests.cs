@@ -42,6 +42,7 @@ public sealed class SampleApiBuildTests
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "hoho.ts")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "OrderStatus.ts")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "openapi.yaml")));
+        Assert.True(File.Exists(Path.Combine(GeneratedDir, "api.gen.ts")));
 
         // The root-level openapi.yaml bug (pre-OutputDir-routing fix) would leave
         // a copy next to SampleApi.csproj. Guard against regression.
@@ -97,9 +98,23 @@ public sealed class SampleApiBuildTests
         Assert.Contains("  /api/health:", yaml);
         Assert.Contains("  /api/echo:", yaml);
         Assert.Contains("  /api/admin/ping:", yaml);   // via MapGroup prefix chain
+        Assert.Contains("  /api/workflow/workspaces/{workspaceId:guid}/items:", yaml);
+        Assert.Contains("operationId: searchWorkItems", yaml);
+        Assert.Contains("operationId: createWorkItem", yaml);
         // Hand-written [ApiController]:
         Assert.Contains("  /api/widgets/{id}:", yaml);
         Assert.Contains("tags: [Widgets]", yaml);
+
+        var queryClient = File.ReadAllText(Path.Combine(GeneratedDir, "api.gen.ts"));
+        Assert.Contains("export const workflowKeys = {", queryClient);
+        Assert.Contains("export type SearchWorkItemsInput = {", queryClient);
+        Assert.Contains("state?: workItemState;", queryClient);
+        Assert.Contains("labels?: string[];", queryClient);
+        Assert.Contains("export type PaginatedResponseOfWorkItemSummary = {", queryClient);
+        Assert.Contains("export function searchWorkItems(input: SearchWorkItemsInput", queryClient);
+        Assert.Contains("`/api/workflow/workspaces/${encodeURIComponent(String(input.workspaceId))}/items`", queryClient);
+        Assert.Contains("export function useCreateWorkItem()", queryClient);
+        Assert.Contains("export const echoKeys = {", queryClient);
     }
 
     private static (int Exit, string Output) Run(string file, string args)

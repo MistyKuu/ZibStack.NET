@@ -2,12 +2,14 @@
 
 Attributes, settings types, and the `ITypeGenConfigurator` interface consumed by
 [ZibStack.NET.TypeGen](https://www.nuget.org/packages/ZibStack.NET.TypeGen) — the
-Roslyn source generator that emits TypeScript and OpenAPI from C# DTOs.
+Roslyn source generator that emits TypeScript, OpenAPI, and TanStack Query
+clients from C# DTOs/endpoints.
 
 ## What's in this package
 
 - **`[GenerateTypes]`** — entry-point attribute. Declares which targets (TS /
-  OpenAPI / Python) and output directory a DTO should emit to.
+  OpenAPI / Python / Zod / GraphQL / TanStack Query) and output directory a DTO
+  should emit to.
 - **Per-class overrides** — `[TsName]`, `[OpenApiSchemaName]`, `[TsIgnore]`,
   `[OpenApiIgnore]`.
 - **Per-property overrides** — `[TsType("…")]` / `[TsType<T>]`,
@@ -16,7 +18,8 @@ Roslyn source generator that emits TypeScript and OpenAPI from C# DTOs.
   fluent DSL for project-wide defaults and per-type / per-property
   configuration without touching model files.
 - **Settings records** — `TypeScriptSettings`, `OpenApiSettings`, `PythonSettings`,
-  plus `NameStyle`, `TypeScriptFileLayout`, `PythonStyle` enums.
+  `ZodSettings`, `GraphQLSettings`, `TanStackQuerySettings`, plus layout/name
+  enums such as `NameStyle`, `TypeScriptFileLayout`, and `QueryFileLayout`.
 
 ## Why separate from the analyzer package
 

@@ -16,18 +16,10 @@ internal static class TypeScriptEmitter
         var files = new List<EmittedFile>();
         var ts = settings.TypeScript;
 
-        // First pass: compute final emitted name per class (apply StripSuffixes etc.).
-        // Stored back on the model so the type-reference resolver can look up by source name.
-        foreach (var cls in model.Classes)
-        {
-            if (cls.TsIgnore || (cls.Targets & TypeTarget.TypeScript) == 0) continue;
-            cls.EmittedName = ResolveTsTypeName(cls.SourceName, cls.TsNameOverride, ts);
-        }
-        foreach (var en in model.Enums)
-        {
-            if (en.TsIgnore || (en.Targets & TypeTarget.TypeScript) == 0) continue;
-            en.EmittedName = ResolveTsTypeName(en.SourceName, en.TsNameOverride, ts);
-        }
+        // First pass: compute final emitted names once, then let model and
+        // client emitters read the same values from the shared schema model.
+        TypeScriptNaming.ApplyEmittedNames(model, ts, TypeTarget.TypeScript | TypeTarget.TanStackQuery);
+        model.TypeScriptNamesResolved = true;
 
         // Build a C#-fullname → TS-name lookup so property references resolve correctly.
         var tsNameByCSharp = new Dictionary<string, string>();
@@ -325,7 +317,7 @@ internal static class TypeScriptEmitter
             // duplicate declarations that'd widen the required set and confuse
             // structural type compatibility on `extends` chains.
             if (coveredMemberNames.Contains(prop.SourceName)) continue;
-            var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, ts.PropertyNameStyle);
+            var name = prop.TsNameOverride ?? TypeScriptNaming.ApplyNameStyle(prop.SourceName, ts.PropertyNameStyle);
             var typeExpr = prop.TsTypeOverride ?? MapCSharpToTs(prop.CSharpTypeFullName, prop.IsNullable, nameLookup, cls.TypeParameters);
             // Server-computed getters (`public int X => …;` / `{ get; private set; }`)
             // are `readonly` (blocks client reassignment) AND optional: a single
@@ -428,19 +420,7 @@ internal static class TypeScriptEmitter
         if (dictMatch != null)
             return $"Record<{MapCSharpToTs(dictMatch.Value.K, false, nameLookup, typeParameters)}, {MapCSharpToTs(dictMatch.Value.V, false, nameLookup, typeParameters)}>";
 
-        return t switch
-        {
-            "string" => "string",
-            "bool" or "System.Boolean" => "boolean",
-            "byte" or "sbyte" or "short" or "ushort" or "int" or "uint" or "long" or "ulong"
-                or "float" or "double" or "System.Int32" or "System.Int64" or "System.Single" or "System.Double" => "number",
-            "decimal" or "System.Decimal" => "string",   // safest: decimals don't fit in number
-            "System.Guid" or "Guid" => "string",
-            "System.DateTime" or "DateTime" or "System.DateTimeOffset" or "DateTimeOffset" => "string",   // ISO 8601
-            "System.DateOnly" or "DateOnly" or "System.TimeOnly" or "TimeOnly" or "System.TimeSpan" or "TimeSpan" => "string",
-            "object" => "unknown",
-            _ => "unknown",
-        };
+        return TypeScriptNaming.TryMapPrimitive(t, out var primitive) ? primitive : "unknown";
     }
 
     private static string? ExtractGeneric(string typeName, params string[] names)
@@ -485,46 +465,6 @@ internal static class TypeScriptEmitter
             else if (s[i] == '>') { depth--; if (depth == 0) return s.Substring(openAngleBracketIndex + 1, i - openAngleBracketIndex - 1); }
         }
         return null;
-    }
-
-    private static string ApplyNameStyle(string name, NameStyle style)
-    {
-        if (string.IsNullOrEmpty(name)) return name;
-        return style switch
-        {
-            NameStyle.AsIs => name,
-            NameStyle.CamelCase => char.ToLowerInvariant(name[0]) + name.Substring(1),
-            NameStyle.PascalCase => char.ToUpperInvariant(name[0]) + name.Substring(1),
-            NameStyle.SnakeCase => ToSeparated(name, '_'),
-            _ => name,
-        };
-    }
-
-    private static string ToSeparated(string name, char sep)
-    {
-        var sb = new StringBuilder();
-        for (int i = 0; i < name.Length; i++)
-        {
-            if (i > 0 && char.IsUpper(name[i])) sb.Append(sep);
-            sb.Append(char.ToLowerInvariant(name[i]));
-        }
-        return sb.ToString();
-    }
-
-    private static string ResolveTsTypeName(string source, string? overrideName, TypeScriptSettings ts)
-    {
-        if (overrideName != null) return overrideName;
-        var n = source;
-        // Strip configured suffixes (longest first to avoid partial-strip ordering issues).
-        foreach (var suffix in ts.StripSuffixes.OrderByDescending(s => s.Length))
-        {
-            if (n.EndsWith(suffix, System.StringComparison.Ordinal) && n.Length > suffix.Length)
-            {
-                n = n.Substring(0, n.Length - suffix.Length);
-                break;
-            }
-        }
-        return ApplyNameStyle(n, ts.TypeNameStyle);
     }
 
     private static string ResolveOutputDir(string? globalDir, SchemaModel model)

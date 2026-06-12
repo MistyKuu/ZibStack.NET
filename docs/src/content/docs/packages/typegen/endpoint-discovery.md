@@ -1,11 +1,13 @@
 ---
-title: TypeGen — Endpoint discovery (OpenAPI `paths:`)
-description: "Three ways TypeGen populates the OpenAPI paths block — hand-written Minimal API scan, native [ApiController] scan, and [CrudApi] synthesis. All unified, with collision rules."
+title: TypeGen — Endpoint discovery
+description: "Three ways TypeGen discovers endpoints for OpenAPI paths and TanStack Query clients — hand-written Minimal API scan, native [ApiController] scan, and [CrudApi] synthesis. All unified, with collision rules."
 ---
 
-TypeGen populates the OpenAPI `paths:` block from three sources, merged into
-one unified output. Hand-written code is always ground truth — when sources
-collide on the same (verb, path), the native handler wins over synthesis.
+TypeGen populates its endpoint model from three sources, merged into one unified
+output. OpenAPI uses it for `paths:`; the TanStack Query emitter uses it for
+client functions, keys, hooks, and cache helpers. Hand-written code is always
+ground truth — when sources collide on the same (verb, path), the native handler
+wins over synthesis.
 
 ## Hand-written Minimal API → OpenAPI `paths:`
 
@@ -34,32 +36,40 @@ lambda body.
   constants). Interpolated strings, `string.Concat`, and field reads stay
   unresolvable at compile time and the endpoint is silently skipped.
 - **Inline lambdas** (`(x, y) => body`, parenthesized or simple). Method
-  references (`app.MapGet("/x", HandlerMethod)`) aren't resolved in MVP.
+  references (`app.MapGet("/x", HandlerMethod)`) are resolved when the endpoint
+  has an explicit `.WithName(...)` so the generated operation name stays stable.
 - **`MapGroup` prefix chains**, including via local variables:
   ```csharp
   var g = app.MapGroup("/api/widgets");
   g.MapGet("/{id}", (int id) => ...);   // emits /api/widgets/{id}
   ```
+- **Endpoint names and tags** from `.WithName("operationId")` and
+  `.WithTags("Tag")`. These feed OpenAPI `operationId`/`tags` and TanStack
+  Query function/key names.
 - **Parameter binding**: explicit `[FromRoute]` / `[FromBody]` / `[FromQuery]` /
   `[FromHeader]` first; fallback to ASP.NET convention. `CancellationToken` /
-  `HttpContext` / `[FromServices]` params are filtered out.
+  `HttpContext` / `[FromServices]` params are filtered out. Route placeholders
+  without a matching handler parameter are still emitted as required path
+  parameters, using common route constraints like `:guid`, `:int`, and
+  `:decimal` to infer their type when possible.
 - **Return type** unwrapped from `Task<T>` / `ValueTask<T>`. `IResult` yields
   no response schema (untyped success — ASP.NET Core doesn't expose T in that
   path).
+- **`.Produces<T>()` response metadata**. When present, TypeGen treats the
+  produced type as the explicit response contract. It runs after handler return
+  type inference, so `.Produces<T>()` intentionally wins if the two disagree.
 
 **Collisions** follow the same rule as controllers: if Minimal API and
 `[CrudApi]` synthesis both claim the same (verb, pattern), the hand-written
 `MapX` wins.
 
 **MVP limitations** (track these before relying heavily on the scan):
-- Handler delegates passed as field / method references aren't resolved
+- Handler delegates passed through fields or other dynamic registrations aren't
+  resolved
 - `TypedResults.Ok<T>(...)` pattern: response type from the generic arg isn't
   extracted yet (uses the raw `Ok<T>` return type which reads as `IResult`)
 - Endpoint filters chained via `.AddEndpointFilter(...)` are ignored (they
   don't change the contract, only runtime behaviour)
-- Per-endpoint metadata extension methods (`.WithName("X").Produces<T>()`) aren't
-  read — use the handler's actual return type or add `[CrudApi]` on the DTO
-  if you need fine control over the emitted shape
 
 ## Hand-written controllers → OpenAPI `paths:`
 

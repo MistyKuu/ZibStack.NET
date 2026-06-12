@@ -1,9 +1,9 @@
 # ZibStack.NET.TypeGen
 
-Roslyn source generator that emits **TypeScript** (`.ts`) and **OpenAPI 3.0**
-(`.yaml` / `.json`) from C# DTOs annotated with `[GenerateTypes]`. Optional
-**Python** (Pydantic v2 / dataclass) output. Compile-time only, zero reflection,
-no running app required.
+Roslyn source generator that emits **TypeScript** (`.ts`), **OpenAPI 3.0**
+(`.yaml` / `.json`), and **TanStack Query** clients from C# DTOs/endpoints
+annotated with `[GenerateTypes]`. Optional **Python** (Pydantic v2 / dataclass)
+output. Compile-time only, zero reflection, no running app required.
 
 ## What it does
 
@@ -29,6 +29,9 @@ public enum OrderStatus { Pending, Shipped }
 - `generated/openapi.yaml` — OpenAPI 3.0.3 schema with every class under
   `components/schemas`, correct `$ref`s, and `nullable` / `required` / validation
   constraints pulled from `ZibStack.NET.Validation` attributes.
+- `generated/api.gen.ts` — optional TanStack Query v5 helpers from discovered
+  Minimal API, controller, and `[CrudApi]` endpoints: typed fetch functions,
+  query keys, options factories, hooks, and invalidation/prefetch helpers.
 
 Nested types without their own `[GenerateTypes]` are auto-discovered by walking
 the property graph, so you only annotate root aggregates.
@@ -49,6 +52,9 @@ the property graph, so you only annotate root aggregates.
   (GET list, GET by id, POST, PATCH, DELETE) with the right request/response
   schema refs, pagination wrappers, and query-string bindings for
   `ZibStack.NET.Query` when referenced.
+- **TanStack Query emitter** — generates React Query v5 clients from the same
+  endpoint discovery model as OpenAPI. Supports Minimal API `.WithName(...)` /
+  `.WithTags(...)`, custom API clients, split-by-tag output, and cache helpers.
 - **Fluent project-wide config** via `ITypeGenConfigurator` — global output dir,
   file layout (`FilePerClass` / `SingleFile`), naming styles, per-type overrides,
   property-level overrides.
@@ -72,7 +78,7 @@ in the attribute / configurator surface.
 ## Docs
 
 Full reference — type mapping, diagnostic list (`TG0001`-`TG0021`), fluent DSL,
-`[CrudApi]` integration, Python emitter, file layout options — lives at
+`[CrudApi]` integration, TanStack Query, Python/Zod emitters, file layout options — lives at
 [mistykuu.github.io/ZibStack.NET/packages/typegen](https://mistykuu.github.io/ZibStack.NET/packages/typegen/).
 
 ## License

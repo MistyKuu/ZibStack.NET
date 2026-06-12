@@ -187,6 +187,12 @@ internal static class ConfiguratorParser
                 if (calls.Count > 1) ReportUnknown(report, calls[1]);
                 return;
 
+            case "TanStackQuery":
+                ApplyLambdaBlock(first, semantic, parsed.Settings.TanStackQuery, report,
+                    (settings, prop, val) => AssignTanStackQuery(settings, prop, val));
+                if (calls.Count > 1) ReportUnknown(report, calls[1]);
+                return;
+
             case "ForType":
                 var (typeName, typeSym) = ResolveForTypeArgWithSymbol(first, semantic);
                 // If symbol resolution fails (Dto-generated companion types like
@@ -396,6 +402,25 @@ internal static class ConfiguratorParser
             case "SchemaConstSuffix": if (val is string scs) s.SchemaConstSuffix = scs; break;
             case "EmitInferredTypes": if (val is bool eit) s.EmitInferredTypes = eit; break;
             case "PropertyNameStyle": if (val is int pn) s.PropertyNameStyle = (NameStyle)pn; break;
+            case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
+        }
+    }
+
+    private static void AssignTanStackQuery(TanStackQuerySettings s, string prop, object? val)
+    {
+        switch (prop)
+        {
+            case "OutputDir": s.OutputDir = val as string; break;
+            case "FileLayout": if (val is int fl) s.FileLayout = (QueryFileLayout)fl; break;
+            case "SingleFileName": if (val is string sf) s.SingleFileName = sf; break;
+            case "BaseUrlExpression": if (val is string bu) s.BaseUrlExpression = bu; break;
+            case "ApiClientImportPath": s.ApiClientImportPath = val as string; break;
+            case "ApiClientName": if (val is string ac) s.ApiClientName = ac; break;
+            case "ModelsImportPath": s.ModelsImportPath = val as string; break;
+            case "EmitQueryOptions": if (val is bool eqo) s.EmitQueryOptions = eqo; break;
+            case "EmitMutationOptions": if (val is bool emo) s.EmitMutationOptions = emo; break;
+            case "EmitHooks": if (val is bool eh) s.EmitHooks = eh; break;
+            case "EmitCacheHelpers": if (val is bool ech) s.EmitCacheHelpers = ech; break;
             case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
         }
     }

@@ -78,7 +78,7 @@ internal static class EndpointDiscovery
         foreach (var cls in model.Classes)
         {
             if (cls.Crud is null) continue;
-            if ((cls.Targets & TypeTarget.OpenApi) == 0) continue;
+            if ((cls.Targets & (TypeTarget.OpenApi | TypeTarget.TanStackQuery)) == 0) continue;
 
             var route = ResolveRoute(cls);
             var collectionPath = "/" + route.TrimStart('/');
@@ -282,6 +282,7 @@ internal static class EndpointDiscovery
             if (responseType is { } r && r.StartsWith("PaginatedResponse<", System.StringComparison.Ordinal))
                 endpoint.IsListEndpoint = true;
 
+            AddMissingRouteParameters(endpoint);
             model.Endpoints.Add(endpoint);
         }
     }
@@ -338,6 +339,103 @@ internal static class EndpointDiscovery
     {
         if (string.IsNullOrEmpty(pattern)) return "/";
         return "/" + pattern.TrimStart('/');
+    }
+
+    private static void AddMissingRouteParameters(EndpointInfo endpoint)
+    {
+        var existing = new HashSet<string>(
+            endpoint.Parameters
+                .Where(p => p.Location == ParamLocation.Route)
+                .Select(p => p.Name),
+            System.StringComparer.Ordinal);
+
+        foreach (var routeParam in ExtractRouteParameters(endpoint.Pattern))
+        {
+            if (!existing.Add(routeParam.Name)) continue;
+            endpoint.Parameters.Add(new EndpointParameter
+            {
+                Name = routeParam.Name,
+                Location = ParamLocation.Route,
+                CSharpType = routeParam.CSharpType,
+                Required = true,
+                Description = "Inferred from route template because no handler parameter was bound.",
+            });
+        }
+    }
+
+    private static IEnumerable<(string Name, string CSharpType)> ExtractRouteParameters(string pattern)
+    {
+        for (var i = 0; i < pattern.Length; i++)
+        {
+            if (pattern[i] != '{') continue;
+            var close = pattern.IndexOf('}', i + 1);
+            if (close < 0) yield break;
+
+            var raw = pattern.Substring(i + 1, close - i - 1).Trim();
+            while (raw.StartsWith("*", System.StringComparison.Ordinal)) raw = raw.Substring(1);
+            if (raw.Length == 0)
+            {
+                i = close;
+                continue;
+            }
+
+            var colon = raw.IndexOf(':');
+            var nameEnd = FirstNonNegative(
+                colon,
+                raw.IndexOf('='),
+                raw.IndexOf('?'));
+            var name = (nameEnd >= 0 ? raw.Substring(0, nameEnd) : raw).Trim();
+            if (name.Length == 0)
+            {
+                i = close;
+                continue;
+            }
+
+            var constraint = "";
+            if (colon >= 0 && colon + 1 < raw.Length)
+            {
+                var constraintStart = colon + 1;
+                var constraintEnd = FirstNonNegative(
+                    raw.IndexOf(':', constraintStart),
+                    raw.IndexOf('=', constraintStart),
+                    raw.IndexOf('?', constraintStart));
+                constraint = constraintEnd >= 0
+                    ? raw.Substring(constraintStart, constraintEnd - constraintStart)
+                    : raw.Substring(constraintStart);
+            }
+
+            yield return (name, InferRouteConstraintCSharpType(constraint));
+            i = close;
+        }
+    }
+
+    private static int FirstNonNegative(params int[] values)
+    {
+        var best = -1;
+        foreach (var value in values)
+        {
+            if (value < 0) continue;
+            if (best < 0 || value < best) best = value;
+        }
+        return best;
+    }
+
+    private static string InferRouteConstraintCSharpType(string constraint)
+    {
+        if (string.IsNullOrWhiteSpace(constraint)) return "string";
+        return constraint.Trim().ToLowerInvariant() switch
+        {
+            "bool" or "boolean" => "bool",
+            "datetime" => "System.DateTime",
+            "decimal" => "decimal",
+            "double" => "double",
+            "float" => "float",
+            "guid" => "System.Guid",
+            "int" => "int",
+            "long" => "long",
+            "short" => "short",
+            _ => "string",
+        };
     }
 
     /// <summary>
@@ -467,21 +565,25 @@ internal static class EndpointDiscovery
     private const string RouteGroupBuilderFqn = "Microsoft.AspNetCore.Routing.RouteGroupBuilder";
 
     /// <summary>
-    /// Finds <c>app.MapGet("/path", lambda)</c> / <c>MapPost</c> / etc.
+    /// Finds <c>app.MapGet("/path", handler)</c> / <c>MapPost</c> / etc.
     /// invocations in user source and adds them as <see cref="EndpointInfo"/>
     /// entries. MVP coverage:
     /// <list type="bullet">
     ///   <item>Literal string route pattern (first arg) — interpolated or
     ///   const-from-field patterns are skipped silently.</item>
-    ///   <item>Inline lambda handler (parenthesized or simple) — method
-    ///   references aren't resolved (rare in Minimal API anyway).</item>
+    ///   <item>Inline lambda handlers and method-group handlers. Method groups
+    ///   require explicit endpoint names so operation IDs stay stable.</item>
     ///   <item><c>MapGroup("/prefix")</c> chain tracking — prefixes prepended
     ///   to the child pattern.</item>
-    ///   <item>Parameter binding via <c>[FromX]</c> attributes on lambda params
-    ///   or convention (route placeholder name match, simple→query, complex→body).</item>
+    ///   <item>Parameter binding via <c>[FromX]</c> attributes or convention
+    ///   (route placeholder name match, simple→query, complex→body).</item>
     ///   <item>Return type via SemanticModel — unwraps <c>Task&lt;T&gt;</c> and
     ///   <c>ValueTask&lt;T&gt;</c>. <c>IResult</c> return leaves the response
     ///   schema empty (ASP.NET Core's untyped success path).</item>
+    ///   <item><c>.Produces&lt;T&gt;()</c> response metadata. When present, the
+    ///   produced type is treated as the explicit contract and overrides the
+    ///   lambda or method-group return type for generated OpenAPI/TanStack
+    ///   response shapes.</item>
     /// </list>
     /// </summary>
     private static void ScanMinimalApi(SchemaModel model, Compilation compilation)
@@ -510,7 +612,6 @@ internal static class EndpointDiscovery
                 if (patternLit is null) continue;  // non-literal pattern → skip
 
                 var handler = inv.ArgumentList.Arguments[1].Expression;
-                if (handler is not LambdaExpressionSyntax lambda) continue;  // non-lambda → skip (MVP)
 
                 // Walk left of `.MapX(...)` to collect MapGroup prefix chain +
                 // find the root builder (app / MapGroup result / field of type
@@ -518,18 +619,41 @@ internal static class EndpointDiscovery
                 var prefix = ResolveGroupChain(inv.Expression, semantic);
                 var pattern = NormalizePath(CombineRouteSegments(prefix, patternLit));
 
+                var explicitOperationId = ResolveChainedEndpointMetadata(inv, semantic, "WithName");
+                if (handler is not LambdaExpressionSyntax && explicitOperationId is null) continue;
+
+                var operationId = explicitOperationId ?? DeriveMinimalApiOperationId(inv, pattern, verb);
+                var tag = ResolveChainedEndpointMetadata(inv, semantic, "WithTags")
+                    ?? DeriveMinimalApiTag(pattern);
+
                 var endpoint = new EndpointInfo
                 {
                     Verb = verb,
                     Pattern = pattern,
-                    OperationId = DeriveMinimalApiOperationId(inv, pattern, verb),
-                    Tag = DeriveMinimalApiTag(pattern),
+                    OperationId = LowerFirst(operationId),
+                    Tag = tag,
                     Source = EndpointSource.MinimalApi,
                 };
 
-                BindLambdaParameters(lambda, endpoint, semantic);
-                SetLambdaReturnType(lambda, endpoint, semantic);
+                if (handler is LambdaExpressionSyntax lambda)
+                {
+                    BindLambdaParameters(lambda, endpoint, semantic);
+                    SetLambdaReturnType(lambda, endpoint, semantic);
+                }
+                else if (ResolveHandlerMethod(handler, semantic) is { } method)
+                {
+                    BindMethodParameters(method, endpoint);
+                    SetMethodReturnType(method, endpoint);
+                }
+                else
+                {
+                    continue;
+                }
 
+                if (ResolveChainedProducesResponseType(inv, semantic) is { } producedResponseType)
+                    endpoint.ResponseCSharpType = producedResponseType;
+
+                AddMissingRouteParameters(endpoint);
                 if (existing.Add((endpoint.Verb, endpoint.Pattern)))
                     model.Endpoints.Add(endpoint);
             }
@@ -566,6 +690,65 @@ internal static class EndpointDiscovery
         return cv.HasValue ? cv.Value as string : null;
     }
 
+    private static string? ResolveChainedEndpointMetadata(
+        InvocationExpressionSyntax mapInvocation,
+        SemanticModel sm,
+        string methodName)
+    {
+        SyntaxNode current = mapInvocation;
+        while (current.Parent is MemberAccessExpressionSyntax ma
+            && ReferenceEquals(ma.Expression, current)
+            && ma.Parent is InvocationExpressionSyntax outer)
+        {
+            if (ma.Name.Identifier.Text == methodName && outer.ArgumentList.Arguments.Count > 0)
+            {
+                var value = GetStringLiteral(outer.ArgumentList.Arguments[0].Expression, sm);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            current = outer;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Walks metadata chained after <c>MapGet(...)</c> looking for
+    /// <c>.Produces&lt;T&gt;()</c>. ASP.NET treats this as explicit response
+    /// metadata, so TypeGen intentionally lets it override the handler's
+    /// inferred return type for generated OpenAPI and TanStack response types.
+    /// </summary>
+    private static string? ResolveChainedProducesResponseType(
+        InvocationExpressionSyntax mapInvocation,
+        SemanticModel sm)
+    {
+        SyntaxNode current = mapInvocation;
+        while (current.Parent is MemberAccessExpressionSyntax ma
+            && ReferenceEquals(ma.Expression, current)
+            && ma.Parent is InvocationExpressionSyntax outer)
+        {
+            if (ma.Name is GenericNameSyntax genericName
+                && genericName.Identifier.Text == "Produces"
+                && genericName.TypeArgumentList.Arguments.Count > 0)
+            {
+                var typeInfo = sm.GetTypeInfo(genericName.TypeArgumentList.Arguments[0]);
+                if (typeInfo.Type is not null)
+                    return typeInfo.Type.ToDisplayString();
+            }
+            current = outer;
+        }
+        return null;
+    }
+
+    private static IMethodSymbol? ResolveHandlerMethod(ExpressionSyntax handler, SemanticModel sm)
+    {
+        var symbol = sm.GetSymbolInfo(handler).Symbol;
+        if (symbol is IMethodSymbol method) return method;
+
+        foreach (var candidate in sm.GetSymbolInfo(handler).CandidateSymbols.OfType<IMethodSymbol>())
+            return candidate;
+
+        return null;
+    }
+
     /// <summary>
     /// Walks left of a <c>.MapGet(...)</c> invocation looking for
     /// <c>MapGroup("/prefix")</c> calls or variables of type
@@ -593,13 +776,19 @@ internal static class EndpointDiscovery
         // `x.MapGroup("/api")` — peel off the MapGroup layer, recurse left,
         // append this layer's literal prefix.
         if (receiver is InvocationExpressionSyntax nested
-            && nested.Expression is MemberAccessExpressionSyntax nestedMa
-            && nestedMa.Name.Identifier.Text == "MapGroup"
-            && nested.ArgumentList.Arguments.Count >= 1)
+            && nested.Expression is MemberAccessExpressionSyntax nestedMa)
         {
-            var inner = ResolveReceiver(nestedMa.Expression, sm);
-            var thisPrefix = GetStringLiteral(nested.ArgumentList.Arguments[0].Expression, sm);
-            return CombineRouteSegments(inner, thisPrefix);
+            if (nestedMa.Name.Identifier.Text == "MapGroup")
+            {
+                var inner = ResolveReceiver(nestedMa.Expression, sm);
+                var thisPrefix = nested.ArgumentList.Arguments.Count >= 1
+                    ? GetStringLiteral(nested.ArgumentList.Arguments[0].Expression, sm)
+                    : null;
+                return CombineRouteSegments(inner, thisPrefix);
+            }
+
+            if (IsEndpointConventionBuilderMetadata(nestedMa.Name.Identifier.Text))
+                return ResolveReceiver(nestedMa.Expression, sm);
         }
 
         // `g.MapGet(...)` where g is a local from `var g = app.MapGroup("/api")` —
@@ -617,6 +806,11 @@ internal static class EndpointDiscovery
         }
         return "";
     }
+
+    private static bool IsEndpointConventionBuilderMetadata(string methodName) =>
+        methodName is "WithName" or "WithTags" or "WithDisplayName" or "WithDescription"
+            or "WithSummary" or "WithGroupName" or "WithOpenApi" or "RequireAuthorization"
+            or "AllowAnonymous" or "Produces" or "ProducesProblem" or "Accepts";
 
     /// <summary>
     /// Builds an operationId for a Minimal API endpoint. Minimal API has no
@@ -681,6 +875,25 @@ internal static class EndpointDiscovery
             if (IsInfrastructureParam(sym)) continue;
             BindParameter(sym, endpoint);
         }
+    }
+
+    private static void BindMethodParameters(IMethodSymbol method, EndpointInfo endpoint)
+    {
+        foreach (var param in method.Parameters)
+        {
+            if (IsInfrastructureParam(param)) continue;
+            BindParameter(param, endpoint);
+        }
+    }
+
+    private static void SetMethodReturnType(IMethodSymbol method, EndpointInfo endpoint)
+    {
+        var (responseType, _) = UnwrapReturnType(method.ReturnType);
+        endpoint.ResponseCSharpType = responseType;
+        if (responseType is "Microsoft.AspNetCore.Http.IResult") endpoint.ResponseCSharpType = null;
+
+        if (responseType is { } r && r.StartsWith("PaginatedResponse<", System.StringComparison.Ordinal))
+            endpoint.IsListEndpoint = true;
     }
 
     /// <summary>

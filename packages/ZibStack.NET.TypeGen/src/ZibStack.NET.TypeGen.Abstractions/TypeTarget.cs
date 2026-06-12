@@ -41,4 +41,13 @@ public enum TypeTarget
     /// each enum a GraphQL <c>enum</c> with UPPER_CASE members.
     /// </summary>
     GraphQL = 1 << 4,
+
+    /// <summary>
+    /// TanStack Query React client helpers (<c>.ts</c> files). Emits typed fetch
+    /// functions, query keys, <c>queryOptions</c>/<c>mutationOptions</c>, React
+    /// hooks, and cache helpers from discovered endpoints. Intended to be used
+    /// together with <see cref="TypeScript"/> so request/response model imports
+    /// are generated in the same build.
+    /// </summary>
+    TanStackQuery = 1 << 5,
 }

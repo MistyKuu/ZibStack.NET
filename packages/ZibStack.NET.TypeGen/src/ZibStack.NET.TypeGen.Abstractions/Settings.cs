@@ -247,6 +247,74 @@ public sealed class ZodSettings
 }
 
 /// <summary>
+/// Layout strategy for TanStack Query client output.
+/// </summary>
+public enum QueryFileLayout
+{
+    /// <summary>All endpoint helpers in one file. Default file name is <c>api.gen.ts</c>.</summary>
+    SingleFile,
+
+    /// <summary>One <c>{tag}.gen.ts</c> file per endpoint tag/resource.</summary>
+    SplitByTag,
+}
+
+/// <summary>
+/// TanStack Query React emitter settings. Emits TypeScript source files importing
+/// <c>@tanstack/react-query</c>. Use with <see cref="TypeTarget.TypeScript"/> so
+/// request/response model imports exist.
+/// </summary>
+public sealed class TanStackQuerySettings
+{
+    /// <summary>Output directory, relative to the project or absolute.</summary>
+    public string? OutputDir { get; set; }
+
+    /// <summary>Default <see cref="QueryFileLayout.SingleFile"/>.</summary>
+    public QueryFileLayout FileLayout { get; set; } = QueryFileLayout.SingleFile;
+
+    /// <summary>File name for <see cref="QueryFileLayout.SingleFile"/> mode. Default <c>"api.gen.ts"</c>.</summary>
+    public string SingleFileName { get; set; } = "api.gen.ts";
+
+    /// <summary>
+    /// Expression evaluated by the generated default fetch client before
+    /// building request URLs. Default is <c>import.meta.env.VITE_API_URL</c>.
+    /// If the expression is undefined, empty, or throws, the client falls back to
+    /// <c>window.location.origin</c> in browsers.
+    /// </summary>
+    public string BaseUrlExpression { get; set; } = "import.meta.env.VITE_API_URL";
+
+    /// <summary>
+    /// Optional module specifier for a user-supplied API client. When set, the
+    /// emitter imports <see cref="ApiClientName"/> from this module and does not
+    /// emit the default <c>apiFetch</c> implementation.
+    /// </summary>
+    public string? ApiClientImportPath { get; set; }
+
+    /// <summary>Function name for the default or imported API client. Default <c>"apiFetch"</c>.</summary>
+    public string ApiClientName { get; set; } = "apiFetch";
+
+    /// <summary>
+    /// Optional import base for model types. When unset, a relative import path is
+    /// computed from <see cref="OutputDir"/> to the TypeScript model output.
+    /// </summary>
+    public string? ModelsImportPath { get; set; }
+
+    /// <summary>Emit <c>queryOptions</c> helpers for GET endpoints. Default <c>true</c>.</summary>
+    public bool EmitQueryOptions { get; set; } = true;
+
+    /// <summary>Emit <c>mutationOptions</c> helpers for non-GET endpoints. Default <c>true</c>.</summary>
+    public bool EmitMutationOptions { get; set; } = true;
+
+    /// <summary>Emit React <c>useQuery</c>/<c>useMutation</c> hooks. Default <c>true</c>.</summary>
+    public bool EmitHooks { get; set; } = true;
+
+    /// <summary>Emit invalidation and prefetch helpers. Default <c>true</c>.</summary>
+    public bool EmitCacheHelpers { get; set; } = true;
+
+    /// <summary>Emit the standard <c>// @generated</c> banner at the top of each file.</summary>
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
+
+/// <summary>
 /// GraphQL SDL emitter settings. Emits <c>.graphql</c> files with
 /// <c>type</c> and <c>enum</c> definitions.
 /// </summary>
