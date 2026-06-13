@@ -139,7 +139,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     // recreate the schemas ourselves. Output targets the SAME emitters the
                     // parent does — TypeScript companions when parent is TS, OpenAPI when
                     // parent is OpenAPI, etc. $refs / cross-file imports resolve cleanly.
-                    if ((cls.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python | TypeTarget.Zod)) != 0
+                    if ((cls.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python | TypeTarget.Zod | TypeTarget.TanStackQuery)) != 0
                         && !cls.OpenApiIgnore)
                     {
                         SynthesizeAuxiliaryForVariant(model, cls, sym, Shared.DtoTarget.Create);
@@ -240,7 +240,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     //   b.ForType<CreateArticleRequest>().WithGeneratedTypes(TS)
                     // — that goes through the second pass below which detects the naming
                     // pattern and synthesizes that one variant from the parent's properties.
-                    if ((aux.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python | TypeTarget.Zod)) != 0
+                    if ((aux.Targets & (TypeTarget.OpenApi | TypeTarget.TypeScript | TypeTarget.Python | TypeTarget.Zod | TypeTarget.TanStackQuery)) != 0
                         && !aux.OpenApiIgnore)
                     {
                         SynthesizeAuxiliaryForVariant(model, aux, sym, Shared.DtoTarget.Create);
@@ -344,6 +344,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 allFiles.AddRange(ZodEmitter.Emit(model, settings));
             if (RequestsTarget(model, TypeTarget.GraphQL))
                 allFiles.AddRange(GraphQLEmitter.Emit(model, settings));
+            if (RequestsTarget(model, TypeTarget.TanStackQuery))
+                allFiles.AddRange(TanStackQueryEmitter.Emit(model, settings));
 
             if (allFiles.Count == 0) return;
 

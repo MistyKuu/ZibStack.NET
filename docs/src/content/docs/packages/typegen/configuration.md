@@ -6,7 +6,7 @@ description: "Project-wide ITypeGenConfigurator fluent DSL, open-generic targeti
 ## Layers (lowest → highest precedence)
 
 1. Defaults
-2. Global `TypeScript` / `OpenApi` / `Python` / `Zod` blocks in `ITypeGenConfigurator`
+2. Global `TypeScript` / `OpenApi` / `Python` / `Zod` / `TanStackQuery` blocks in `ITypeGenConfigurator`
 3. `ForType<T>()` per-type fluent overrides
 4. Class / property attributes (`[TsName]`, `[OpenApiProperty]`, etc.)
 
@@ -39,6 +39,16 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             oa.Description = "Public API for the order service.";
         });
 
+        b.TanStackQuery(q =>
+        {
+            q.OutputDir = "../client/src/api";
+            q.SingleFileName = "api.gen.ts";
+            q.BaseUrlExpression = "import.meta.env.VITE_API_URL";
+            // q.FileLayout = QueryFileLayout.SplitByTag;
+            // q.ApiClientImportPath = "./http-client";
+            // q.ApiClientName = "request";
+        });
+
         // Per-type overrides for DTOs you can't (or don't want to) annotate —
         // e.g. types from a referenced library.
         b.ForType<Order>()
@@ -58,6 +68,10 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
     }
 }
 ```
+
+For the emitted default TanStack Query fetch client, `BaseUrlExpression` is
+evaluated safely. If the expression is unset, empty, or throws, the client falls
+back to `window.location.origin` in browsers.
 
 > **Discovery vs override.** Without `.WithGeneratedTypes(...)`, the fluent block
 > is a no-op for types that don't carry `[GenerateTypes]` — the chain just sits

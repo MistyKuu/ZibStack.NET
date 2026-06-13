@@ -76,6 +76,40 @@ public class ConfiguratorParserTests
     }
 
     [Fact]
+    public void TanStackQueryBlock_SetsGlobalSettings()
+    {
+        var parsed = Parse("""
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.TanStackQuery(q => {
+                        q.OutputDir = "../client/src/api";
+                        q.FileLayout = QueryFileLayout.SplitByTag;
+                        q.SingleFileName = "query.gen.ts";
+                        q.BaseUrlExpression = "window.location.origin";
+                        q.ApiClientImportPath = "./client";
+                        q.ApiClientName = "request";
+                        q.ModelsImportPath = "../models";
+                        q.EmitHooks = false;
+                        q.EmitCacheHelpers = false;
+                    });
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        Assert.NotNull(parsed);
+        Assert.Equal("../client/src/api", parsed!.Settings.TanStackQuery.OutputDir);
+        Assert.Equal(QueryFileLayout.SplitByTag, parsed.Settings.TanStackQuery.FileLayout);
+        Assert.Equal("query.gen.ts", parsed.Settings.TanStackQuery.SingleFileName);
+        Assert.Equal("window.location.origin", parsed.Settings.TanStackQuery.BaseUrlExpression);
+        Assert.Equal("./client", parsed.Settings.TanStackQuery.ApiClientImportPath);
+        Assert.Equal("request", parsed.Settings.TanStackQuery.ApiClientName);
+        Assert.Equal("../models", parsed.Settings.TanStackQuery.ModelsImportPath);
+        Assert.False(parsed.Settings.TanStackQuery.EmitHooks);
+        Assert.False(parsed.Settings.TanStackQuery.EmitCacheHelpers);
+    }
+
+    [Fact]
     public void ForType_CollectsPerTypeOverrides()
     {
         var parsed = Parse("""
@@ -419,9 +453,10 @@ public class ConfiguratorParserTests
             using System;
             namespace ZibStack.NET.TypeGen {
                 [System.Flags]
-                public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4 }
+                public enum TypeTarget { None = 0, TypeScript = 1, OpenApi = 2, Python = 4, Zod = 8, GraphQL = 16, TanStackQuery = 32 }
                 public enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
                 public enum TypeScriptFileLayout { FilePerClass, SingleFile }
+                public enum QueryFileLayout { SingleFile, SplitByTag }
                 public sealed class TypeScriptSettings {
                     public string? OutputDir { get; set; }
                     public string SingleFileName { get; set; } = "models.ts";
@@ -438,9 +473,24 @@ public class ConfiguratorParserTests
                     public string? Description { get; set; }
                     public string OpenApiVersion { get; set; } = "3.0.3";
                 }
+                public sealed class TanStackQuerySettings {
+                    public string? OutputDir { get; set; }
+                    public QueryFileLayout FileLayout { get; set; }
+                    public string SingleFileName { get; set; } = "api.gen.ts";
+                    public string BaseUrlExpression { get; set; } = "import.meta.env.VITE_API_URL";
+                    public string? ApiClientImportPath { get; set; }
+                    public string ApiClientName { get; set; } = "apiFetch";
+                    public string? ModelsImportPath { get; set; }
+                    public bool EmitQueryOptions { get; set; } = true;
+                    public bool EmitMutationOptions { get; set; } = true;
+                    public bool EmitHooks { get; set; } = true;
+                    public bool EmitCacheHelpers { get; set; } = true;
+                    public bool EmitGeneratedBanner { get; set; } = true;
+                }
                 public interface ITypeGenBuilder {
                     ITypeGenBuilder TypeScript(Action<TypeScriptSettings> c);
                     ITypeGenBuilder OpenApi(Action<OpenApiSettings> c);
+                    ITypeGenBuilder TanStackQuery(Action<TanStackQuerySettings> c);
                     ITypeBuilder<T> ForType<T>();
                     ITypeBuilder<object> ForType(System.Type t);
                 }

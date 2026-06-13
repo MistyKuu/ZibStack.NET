@@ -1,12 +1,13 @@
 ---
-title: TypeGen — TypeScript & OpenAPI from C#
-description: Compile-time code generator that emits TypeScript interfaces and OpenAPI 3.0 schemas from C# DTOs. Roslyn-native, zero reflection, no running app required. One [GenerateTypes] attribute on a class, and `dotnet build` writes the .ts and .yaml files into your configured output directory.
+title: TypeGen — TypeScript, OpenAPI & TanStack Query from C#
+description: Compile-time code generator that emits TypeScript interfaces, OpenAPI 3.0 schemas, and TanStack Query clients from C# DTOs/endpoints. Roslyn-native, zero reflection, no running app required. One [GenerateTypes] attribute on a class, and `dotnet build` writes generated files into your configured output directory.
 ---
 
 [![NuGet](https://img.shields.io/nuget/v/ZibStack.NET.TypeGen.svg)](https://www.nuget.org/packages/ZibStack.NET.TypeGen) [![Source](https://img.shields.io/badge/source-GitHub-blue)](https://github.com/MistyKuu/ZibStack.NET/tree/master/packages/ZibStack.NET.TypeGen)
 
-Roslyn source generator that turns C# DTOs into **TypeScript interfaces** and an
-**OpenAPI 3.0 schema document** at compile time. One attribute on a class,
+Roslyn source generator that turns C# DTOs and ASP.NET endpoints into
+**TypeScript interfaces**, an **OpenAPI 3.0 schema document**, and optional
+**TanStack Query** client helpers at compile time. One attribute on a class,
 `dotnet build`, and the files land in your configured output directory.
 
 > **Why not NSwag / Reinforced.Typings?** Both rely on reflection over the
@@ -29,6 +30,7 @@ Roslyn source generator that turns C# DTOs into **TypeScript interfaces** and an
 - [Diagnostic reference](/ZibStack.NET/packages/typegen/diagnostics/) — every `TG00xx` ID
 - [Validation → OpenAPI](/ZibStack.NET/packages/typegen/validation-mapping/) — DataAnnotations / `[Z…]` → schema constraints
 - [Endpoint discovery](/ZibStack.NET/packages/typegen/endpoint-discovery/) — Minimal API scan, native controllers, `[CrudApi]` synthesis
+- [TanStack Query emitter](/ZibStack.NET/packages/typegen/emitters/tanstack-query/) — typed fetch functions, query keys, options, hooks, and cache helpers
 - [Polymorphism & interfaces](/ZibStack.NET/packages/typegen/polymorphism-and-interfaces/) — `[JsonPolymorphic]` discriminated unions, opt-in `EmitInterfaces`
 - [Advanced type features](/ZibStack.NET/packages/typegen/advanced-types/) — `[JsonExtensionData]`, computed/immutable props, string-enum converters, transitive nested-type discovery, inheritance rules
 - [Python emitter](/ZibStack.NET/packages/typegen/emitters/python/) — Pydantic v2 / dataclasses

@@ -23,6 +23,7 @@ internal enum TypeTarget
     Python = 1 << 2,
     Zod = 1 << 3,
     GraphQL = 1 << 4,
+    TanStackQuery = 1 << 5,
 }
 
 /// <summary>
@@ -72,6 +73,7 @@ internal enum TsEnumStyle { Union, Enum }
 internal enum PythonFileLayout { FilePerClass, SingleFile }
 internal enum PythonStyle { Pydantic, Dataclass }
 internal enum ZodFileLayout { FilePerClass, SingleFile }
+internal enum QueryFileLayout { SingleFile, SplitByTag }
 
 internal sealed class GraphQLSettings
 {
@@ -90,6 +92,22 @@ internal sealed class ZodSettings
     public string SchemaConstSuffix { get; set; } = "Schema";
     public bool EmitInferredTypes { get; set; } = true;
     public NameStyle PropertyNameStyle { get; set; } = NameStyle.CamelCase;
+    public bool EmitGeneratedBanner { get; set; } = true;
+}
+
+internal sealed class TanStackQuerySettings
+{
+    public string? OutputDir { get; set; }
+    public QueryFileLayout FileLayout { get; set; } = QueryFileLayout.SingleFile;
+    public string SingleFileName { get; set; } = "api.gen.ts";
+    public string BaseUrlExpression { get; set; } = "import.meta.env.VITE_API_URL";
+    public string? ApiClientImportPath { get; set; }
+    public string ApiClientName { get; set; } = "apiFetch";
+    public string? ModelsImportPath { get; set; }
+    public bool EmitQueryOptions { get; set; } = true;
+    public bool EmitMutationOptions { get; set; } = true;
+    public bool EmitHooks { get; set; } = true;
+    public bool EmitCacheHelpers { get; set; } = true;
     public bool EmitGeneratedBanner { get; set; } = true;
 }
 
@@ -143,6 +161,15 @@ internal sealed class SchemaModel
 {
     public List<SchemaClass> Classes { get; } = new();
     public List<SchemaEnum> Enums { get; } = new();
+
+    /// <summary>
+    /// True after the TypeScript naming pass has populated <see cref="SchemaClass.TypeScriptEmittedName"/>
+    /// / <see cref="SchemaEnum.TypeScriptEmittedName"/> using the TypeScript settings. The
+    /// TanStack Query emitter reads these stable names instead of carrying a second copy
+    /// of the model naming rules; direct unit-test calls can still run the pass
+    /// lazily when this flag is false.
+    /// </summary>
+    public bool TypeScriptNamesResolved { get; set; }
 
     /// <summary>
     /// Unified endpoint list emitted under OpenAPI <c>paths:</c>. Populated by
@@ -272,6 +299,13 @@ internal sealed class SchemaClass
     /// Each emitter may further override via per-class attributes.
     /// </summary>
     public string EmittedName { get; set; } = "";
+
+    /// <summary>
+    /// Stable model/export name computed by the TypeScript naming pass. Unlike
+    /// <see cref="EmittedName"/>, this is not reused by later emitters that may
+    /// apply target-specific names.
+    /// </summary>
+    public string? TypeScriptEmittedName { get; set; }
 
     /// <summary>Output directory from <c>[GenerateTypes(OutputDir = "...")]</c> or fluent per-type override.</summary>
     public string OutputDir { get; set; } = ".";
@@ -534,6 +568,12 @@ internal sealed class SchemaEnum
     public string CSharpFullName { get; set; } = "";
     public string SourceName { get; set; } = "";
     public string EmittedName { get; set; } = "";
+    /// <summary>
+    /// Stable model/export name computed by the TypeScript naming pass. Unlike
+    /// <see cref="EmittedName"/>, this is not reused by later emitters that may
+    /// apply target-specific names.
+    /// </summary>
+    public string? TypeScriptEmittedName { get; set; }
     public string OutputDir { get; set; } = ".";
     public bool HasExplicitOutputDir { get; set; }
     public TypeTarget Targets { get; set; }
@@ -574,6 +614,7 @@ internal sealed class GlobalSettings
     public PythonSettings Python { get; set; } = new();
     public ZodSettings Zod { get; set; } = new();
     public GraphQLSettings GraphQL { get; set; } = new();
+    public TanStackQuerySettings TanStackQuery { get; set; } = new();
 
     /// <summary>
     /// Set by the generator when <c>ZibStack.NET.Query</c> is referenced by the

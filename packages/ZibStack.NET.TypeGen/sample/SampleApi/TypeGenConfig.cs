@@ -21,6 +21,15 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             ts.TypeNameStyle = NameStyle.CamelCase;
         });
 
+        b.TanStackQuery(q =>
+        {
+            q.OutputDir = "generated";
+            q.SingleFileName = "api.gen.ts";
+            // The default is import.meta.env.VITE_API_URL. The sample uses the
+            // current origin so api.gen.ts type-checks in non-Vite clients too.
+            q.BaseUrlExpression = "window.location.origin";
+        });
+
         b.OpenApi(oa =>
         {
             oa.Title = "Sample Order API";

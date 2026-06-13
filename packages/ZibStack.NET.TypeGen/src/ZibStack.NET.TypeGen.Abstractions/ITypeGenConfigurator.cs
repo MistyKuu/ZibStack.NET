@@ -87,6 +87,9 @@ public interface ITypeGenBuilder
     /// <summary>Apply settings to the global <see cref="ZodSettings"/>.</summary>
     ITypeGenBuilder Zod(Action<ZodSettings> configure);
 
+    /// <summary>Apply settings to the global <see cref="TanStackQuerySettings"/>.</summary>
+    ITypeGenBuilder TanStackQuery(Action<TanStackQuerySettings> configure);
+
     /// <summary>
     /// Begin per-type overrides for <typeparamref name="T"/>. Overrides take
     /// precedence over the <c>TypeScript</c>/<c>OpenApi</c> global blocks but lose

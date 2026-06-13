@@ -65,6 +65,57 @@ public class MinimalApiScanTests
     }
 
     [Fact]
+    public void MethodGroup_WithFromServicesParameters_SkipsServicesAndUsesProducesType()
+    {
+        var src = """
+            using System.Collections.Generic;
+            using System.Threading.Tasks;
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Mvc;
+            using Microsoft.AspNetCore.Routing;
+
+            var builder = WebApplication.CreateBuilder();
+            var app = builder.Build();
+
+            app.MapGet("/catalog/products", ListProducts)
+                .WithName("listProducts")
+                .WithTags("Catalog")
+                .Produces<List<ProductDto>>();
+
+            app.MapPost("/catalog/products", CreateProduct)
+                .WithName("createProduct")
+                .WithTags("Catalog");
+
+            app.Run();
+
+            static Task<IResult> ListProducts(HttpContext context, [FromServices] ProductStore store, [FromServices] IAuditService audit)
+                => Task.FromResult(Results.Ok(new List<ProductDto>()));
+
+            static Task<IResult> CreateProduct(HttpContext context, ProductDto dto, [FromServices] IAuditService audit)
+                => Task.FromResult(Results.Ok());
+
+            public sealed class ProductStore { }
+            public interface IAuditService { }
+            public sealed class AuditService : IAuditService { }
+            public sealed class ProductDto { public string Id { get; set; } = ""; }
+            """;
+        var comp = Compile(src);
+        var model = new SchemaModel();
+        EndpointDiscovery.Populate(model, comp);
+
+        var get = Assert.Single(model.Endpoints, e => e.OperationId == "listProducts");
+        Assert.Equal("/catalog/products", get.Pattern);
+        Assert.Equal("System.Collections.Generic.List<ProductDto>", get.ResponseCSharpType);
+        Assert.Empty(get.Parameters);
+        Assert.Null(get.RequestBodyCSharpType);
+
+        var post = Assert.Single(model.Endpoints, e => e.OperationId == "createProduct");
+        Assert.Equal("ProductDto", post.RequestBodyCSharpType);
+        Assert.Empty(post.Parameters);
+    }
+
+    [Fact]
     public void SimpleMapGet_EmitsEndpoint()
     {
         var src = """
@@ -120,6 +171,32 @@ public class MinimalApiScanTests
     }
 
     [Fact]
+    public void WithNameAndWithTags_OverrideDerivedOperationMetadata()
+    {
+        var src = """
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Routing;
+
+            var builder = WebApplication.CreateBuilder();
+            var app = builder.Build();
+
+            app.MapGet("/api/workflow/workspaces/{workspaceId:guid}/items", (System.Guid workspaceId) => "ok")
+                .WithName("SearchWorkItems")
+                .WithTags("Workflow");
+
+            app.Run();
+            """;
+        var comp = Compile(src);
+        var model = new SchemaModel();
+        EndpointDiscovery.Populate(model, comp);
+
+        var ep = Assert.Single(model.Endpoints);
+        Assert.Equal("searchWorkItems", ep.OperationId);
+        Assert.Equal("Workflow", ep.Tag);
+    }
+
+    [Fact]
     public void MapGroup_ViaLocalVariable_PrefixResolved()
     {
         var src = """
@@ -141,6 +218,34 @@ public class MinimalApiScanTests
 
         var ep = Assert.Single(model.Endpoints);
         Assert.Equal("/api/widgets/{id}", ep.Pattern);
+    }
+
+    [Fact]
+    public void MapGroup_ViaLocalVariable_WithMetadata_PrefixResolved()
+    {
+        var src = """
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Routing;
+
+            var builder = WebApplication.CreateBuilder();
+            var app = builder.Build();
+
+            var group = app.MapGroup("/api/workflow").WithTags("Workflow");
+            group.MapGet("/workspaces/{workspaceId:guid}/items", (System.Guid workspaceId) => "ok")
+                .WithName("SearchWorkItems")
+                .WithTags("Workflow");
+
+            app.Run();
+            """;
+        var comp = Compile(src);
+        var model = new SchemaModel();
+        EndpointDiscovery.Populate(model, comp);
+
+        var ep = Assert.Single(model.Endpoints);
+        Assert.Equal("/api/workflow/workspaces/{workspaceId:guid}/items", ep.Pattern);
+        Assert.Equal("searchWorkItems", ep.OperationId);
+        Assert.Equal("Workflow", ep.Tag);
     }
 
     [Fact]
@@ -304,5 +409,36 @@ public class MinimalApiScanTests
         // CancellationToken is infrastructure — not a query/route param.
         Assert.DoesNotContain(ep.Parameters, p => p.Name == "ct");
         Assert.Single(ep.Parameters, p => p.Name == "id");
+    }
+
+    [Fact]
+    public void RouteTemplateParametersWithoutHandlerParameters_AreStillEmitted()
+    {
+        var src = """
+            using Microsoft.AspNetCore.Builder;
+            using Microsoft.AspNetCore.Http;
+            using Microsoft.AspNetCore.Routing;
+
+            var builder = WebApplication.CreateBuilder();
+            var app = builder.Build();
+
+            app.MapGet("/tenants/{tenantId:guid}/reports/{minimumBudget:decimal}", () => "ok");
+
+            app.Run();
+            """;
+        var comp = Compile(src);
+        var model = new SchemaModel();
+        EndpointDiscovery.Populate(model, comp);
+
+        var ep = Assert.Single(model.Endpoints);
+        var tenantId = Assert.Single(ep.Parameters, p => p.Name == "tenantId");
+        Assert.Equal(ParamLocation.Route, tenantId.Location);
+        Assert.Equal("System.Guid", tenantId.CSharpType);
+        Assert.True(tenantId.Required);
+
+        var minimumBudget = Assert.Single(ep.Parameters, p => p.Name == "minimumBudget");
+        Assert.Equal(ParamLocation.Route, minimumBudget.Location);
+        Assert.Equal("decimal", minimumBudget.CSharpType);
+        Assert.True(minimumBudget.Required);
     }
 }
