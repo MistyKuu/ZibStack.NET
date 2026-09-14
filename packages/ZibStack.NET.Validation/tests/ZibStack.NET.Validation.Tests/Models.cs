@@ -200,6 +200,9 @@ public partial class PaymentRequest
 
     [ZPhone]
     public string? Phone { get; set; }
+
+    [ZIban]
+    public string? Iban { get; set; }
 }
 
 // ── Conditional validation test ──────────────────────────────────────────────

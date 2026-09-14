@@ -203,6 +203,8 @@ export function invalidateWorkflowQueries(queryClient: QueryClient) {
 | `ApiClientImportPath` | `null` | Import a custom client instead of emitting `apiFetch` |
 | `ApiClientName` | `apiFetch` | Default or imported client function name |
 | `ModelsImportPath` | computed | Force model type imports from one module |
+| `SchemasImportPath` | computed | Force generated Zod schema imports from one module |
+| `PayloadValidation` | `None` | `None`, `Responses`, or `RequestsAndResponses` runtime parsing |
 | `EmitQueryOptions` | `true` | Emit `queryOptions(...)` helpers |
 | `EmitMutationOptions` | `true` | Emit `mutationOptions(...)` helpers |
 | `EmitHooks` | `true` | Emit `useQuery` / `useMutation` wrappers |
@@ -237,6 +239,23 @@ request<T>(path, {
 arrays as repeated query-string keys and JSON-serializes request bodies.
 Route and query parameter types use the same primitive mapping as generated
 models; notably `decimal` maps to `string` to preserve precision.
+
+## Runtime payload validation
+
+Add `TypeTarget.Zod` to the request/response DTOs, install `zod@^4.6.1`, and opt in:
+
+```csharp
+b.TanStackQuery(q =>
+{
+    q.PayloadValidation = QueryPayloadValidation.RequestsAndResponses;
+    // Optional when TypeGen can compute the relative schema paths:
+    q.SchemasImportPath = "../validation/schemas";
+});
+```
+
+`Responses` parses successful API payloads before returning them to TanStack
+Query. `RequestsAndResponses` additionally parses JSON request bodies before
+they are sent. `None` preserves the existing zero-Zod-dependency client.
 
 ## Naming
 

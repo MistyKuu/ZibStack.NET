@@ -227,4 +227,35 @@ public class TanStackQueryEmitterTests
         Assert.Contains("${encodeURIComponent(String(input.minimumBudget))}", ts);
         Assert.DoesNotContain("String(undefined)", ts);
     }
+
+    [Fact]
+    public void PayloadValidation_ParsesRequestBodiesAndResponsesWithGeneratedSchemas()
+    {
+        var targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.TanStackQuery;
+        var model = ModelWith(Cls("Order", targets), Cls("UpdateOrder", targets));
+        model.Endpoints.Add(new EndpointInfo
+        {
+            Verb = "put",
+            Pattern = "/orders/{id:int}",
+            OperationId = "updateOrder",
+            Tag = "Orders",
+            RequestBodyCSharpType = "UpdateOrder",
+            ResponseCSharpType = "Order",
+            Parameters =
+            {
+                new EndpointParameter { Name = "id", Location = ParamLocation.Route, CSharpType = "int", Required = true },
+            },
+        });
+        var settings = new GlobalSettings();
+        settings.TanStackQuery.PayloadValidation = QueryPayloadValidation.RequestsAndResponses;
+        settings.TanStackQuery.SchemasImportPath = "../schemas";
+
+        var ts = TanStackQueryEmitter.Emit(model, settings).Single().Content;
+
+        Assert.Contains("import { z } from 'zod';", ts);
+        Assert.Contains("import { OrderSchema, UpdateOrderSchema } from '../schemas';", ts);
+        Assert.Contains("body: UpdateOrderSchema.parse(input.body)", ts);
+        Assert.Contains("apiFetch<unknown>", ts);
+        Assert.Contains(".then(value => OrderSchema.parse(value));", ts);
+    }
 }

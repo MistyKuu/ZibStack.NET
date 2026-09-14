@@ -25,6 +25,10 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         {
             q.OutputDir = "generated";
             q.SingleFileName = "api.gen.ts";
+            // Opt-in runtime boundary validation. Responses are fetched as
+            // unknown and parsed through their generated Zod schema before
+            // TanStack Query exposes them to components.
+            q.PayloadValidation = QueryPayloadValidation.Responses;
             // The default is import.meta.env.VITE_API_URL. The sample uses the
             // current origin so api.gen.ts type-checks in non-Vite clients too.
             q.BaseUrlExpression = "window.location.origin";
@@ -45,7 +49,19 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         {
             z.OutputDir = "generated";
             z.EmitInferredTypes = true;
+            // Zod 4.6 additions: compile optimized parsers, prove the schemas
+            // match the generated TS interfaces, and emit cheap `isX(value)`
+            // guards backed by the short-circuiting validate API.
+            z.Compilation = ZodCompilationMode.Compile;
+            z.ConformToTypeScriptTypes = true;
+            z.EmitValidationGuards = true;
         });
+
+        // Zod 4.6 supports a custom NanoID length. The fluent form is useful
+        // when the model lives in another project and cannot be annotated.
+        b.ForType<ZodFeatureExample>()
+            .Property(x => x.PublicToken)
+            .ZodNanoId(16);
         
         b.ForType<Root>()
             .WithGeneratedTypes(TypeTarget.TypeScript)

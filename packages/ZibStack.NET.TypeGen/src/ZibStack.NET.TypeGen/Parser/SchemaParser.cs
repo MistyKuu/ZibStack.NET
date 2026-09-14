@@ -22,6 +22,7 @@ internal static class SchemaParser
     private const string TsIgnoreAttr = "ZibStack.NET.TypeGen.TsIgnoreAttribute";
     private const string OpenApiSchemaNameAttr = "ZibStack.NET.TypeGen.OpenApiSchemaNameAttribute";
     private const string OpenApiPropertyAttr = "ZibStack.NET.TypeGen.OpenApiPropertyAttribute";
+    private const string ZodFormatAttr = "ZibStack.NET.TypeGen.ZodFormatAttribute";
     private const string OpenApiIgnoreAttr = "ZibStack.NET.TypeGen.OpenApiIgnoreAttribute";
     // String-only — no reference to ZibStack.NET.Dto. The attribute is generated
     // by Dto's source generator into the user's compilation, so we read it via
@@ -901,7 +902,21 @@ internal static class SchemaParser
             // directly. Wire-level semantics: client MUST send this field, even
             // when the type is NRT-nullable.
             IsExplicitlyRequired = prop.IsRequired,
+            IsPatchField = prop.Type is INamedTypeSymbol patchType
+                && patchType.Name == "PatchField"
+                && patchType.Arity == 1,
         };
+
+        var zodFormatAttr = prop.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ZodFormatAttr);
+        if (zodFormatAttr is not null
+            && zodFormatAttr.ConstructorArguments.Length > 0
+            && zodFormatAttr.ConstructorArguments[0].Value is int zodFormat)
+            sp.ZodFormat = (ZodStringFormat)zodFormat;
+        if (zodFormatAttr is not null)
+            foreach (var named in zodFormatAttr.NamedArguments)
+                if (named.Key == "Length" && named.Value.Value is int length && length > 0)
+                    sp.ZodFormatLength = length;
 
         // `[UseType<T>]` cross-target generic override — captures T's FQN now;
         // actual per-target rendering (TS import, OpenAPI $ref, Python import)
@@ -989,6 +1004,9 @@ internal static class SchemaParser
                 case "System.ComponentModel.DataAnnotations.UrlAttribute":
                     sp.OpenApiFormat ??= "uri";
                     break;
+                case "System.ComponentModel.DataAnnotations.CreditCardAttribute":
+                    sp.ZodFormat ??= ZodStringFormat.CreditCard;
+                    break;
                 case "System.ComponentModel.DataAnnotations.RequiredAttribute":
                     sp.IsExplicitlyRequired = true;
                     break;
@@ -1014,6 +1032,12 @@ internal static class SchemaParser
                     break;
                 case "ZibStack.NET.Validation.ZUrlAttribute":
                     sp.OpenApiFormat ??= "uri";
+                    break;
+                case "ZibStack.NET.Validation.ZCreditCardAttribute":
+                    sp.ZodFormat ??= ZodStringFormat.CreditCard;
+                    break;
+                case "ZibStack.NET.Validation.ZIbanAttribute":
+                    sp.ZodFormat ??= ZodStringFormat.Iban;
                     break;
                 case "ZibStack.NET.Validation.ZNotEmptyAttribute":
                     // Approximation — for strings "non-empty" includes whitespace rules

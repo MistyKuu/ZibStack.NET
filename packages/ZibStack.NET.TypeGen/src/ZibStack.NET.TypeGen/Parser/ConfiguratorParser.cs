@@ -58,6 +58,8 @@ internal static class ConfiguratorParser
         public string? OpenApiRef { get; set; }
         public string? OpenApiFormat { get; set; }
         public string? OpenApiDescription { get; set; }
+        public ZodStringFormat? ZodFormat { get; set; }
+        public int? ZodFormatLength { get; set; }
         public bool? OpenApiNullable { get; set; }
         public bool Ignore { get; set; }
         public bool TsIgnore { get; set; }
@@ -401,6 +403,9 @@ internal static class ConfiguratorParser
             case "FileSuffix": if (val is string fs) s.FileSuffix = fs; break;
             case "SchemaConstSuffix": if (val is string scs) s.SchemaConstSuffix = scs; break;
             case "EmitInferredTypes": if (val is bool eit) s.EmitInferredTypes = eit; break;
+            case "ConformToTypeScriptTypes": if (val is bool ctt) s.ConformToTypeScriptTypes = ctt; break;
+            case "Compilation": if (val is int c) s.Compilation = (ZodCompilationMode)c; break;
+            case "EmitValidationGuards": if (val is bool evg) s.EmitValidationGuards = evg; break;
             case "PropertyNameStyle": if (val is int pn) s.PropertyNameStyle = (NameStyle)pn; break;
             case "EmitGeneratedBanner": if (val is bool egb) s.EmitGeneratedBanner = egb; break;
         }
@@ -417,6 +422,8 @@ internal static class ConfiguratorParser
             case "ApiClientImportPath": s.ApiClientImportPath = val as string; break;
             case "ApiClientName": if (val is string ac) s.ApiClientName = ac; break;
             case "ModelsImportPath": s.ModelsImportPath = val as string; break;
+            case "SchemasImportPath": s.SchemasImportPath = val as string; break;
+            case "PayloadValidation": if (val is int pv) s.PayloadValidation = (QueryPayloadValidation)pv; break;
             case "EmitQueryOptions": if (val is bool eqo) s.EmitQueryOptions = eqo; break;
             case "EmitMutationOptions": if (val is bool emo) s.EmitMutationOptions = emo; break;
             case "EmitHooks": if (val is bool eh) s.EmitHooks = eh; break;
@@ -515,6 +522,36 @@ internal static class ConfiguratorParser
                 o.TargetTypeCSharpFqn = typeInfo.ToDisplayString();
                 // Seed the fallback — replaced later by ResolveGenericTypeReferences.
                 o.TsType ??= typeInfo.Name;
+            }
+            return;
+        }
+
+        if (name == "ZodFormat")
+        {
+            if (inv.ArgumentList.Arguments.Count > 0)
+            {
+                var value = ReadLiteralValue(inv.ArgumentList.Arguments[0].Expression, sm);
+                if (value is int format) o.ZodFormat = (ZodStringFormat)format;
+                else if (value is NonLiteralMarker) report(Diagnostic.Create(
+                    TypeGenDiagnostics.NonLiteralArgument,
+                    inv.ArgumentList.Arguments[0].GetLocation(), name));
+            }
+            return;
+        }
+
+        if (name == "ZodNanoId")
+        {
+            if (inv.ArgumentList.Arguments.Count > 0)
+            {
+                var value = ReadLiteralValue(inv.ArgumentList.Arguments[0].Expression, sm);
+                if (value is int length && length > 0)
+                {
+                    o.ZodFormat = ZodStringFormat.NanoId;
+                    o.ZodFormatLength = length;
+                }
+                else if (value is NonLiteralMarker) report(Diagnostic.Create(
+                    TypeGenDiagnostics.NonLiteralArgument,
+                    inv.ArgumentList.Arguments[0].GetLocation(), name));
             }
             return;
         }

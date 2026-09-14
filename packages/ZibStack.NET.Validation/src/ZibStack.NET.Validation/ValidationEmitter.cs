@@ -296,7 +296,7 @@ public sealed partial class ValidationGenerator
                 sb.AppendLine($"{indent}if ({name} is not null)");
                 sb.AppendLine($"{indent}{{");
                 sb.AppendLine($"{indent}    var __cc = {name}.Replace(\"-\", \"\").Replace(\" \", \"\");");
-                sb.AppendLine($"{indent}    var __ccValid = __cc.Length >= 13 && __cc.Length <= 19 && __cc.All(char.IsDigit);");
+                sb.AppendLine($"{indent}    var __ccValid = __cc.Length >= 12 && __cc.Length <= 19 && __cc.All(char.IsDigit);");
                 sb.AppendLine($"{indent}    if (__ccValid)");
                 sb.AppendLine($"{indent}    {{");
                 sb.AppendLine($"{indent}        var __sum = 0;");
@@ -315,6 +315,37 @@ public sealed partial class ValidationGenerator
                 sb.AppendLine($"{indent}        __ccValid = __sum % 10 == 0;");
                 sb.AppendLine($"{indent}    }}");
                 sb.AppendLine($"{indent}    if (!__ccValid) {{ errors.Add({err});{brk} }}");
+                sb.AppendLine($"{indent}}}");
+                break;
+            }
+
+            case ValidationRuleKind.Iban:
+            {
+                var msg = rule.CustomMessage ?? $"{displayName} is not a valid IBAN.";
+                var err = ErrWithPlaceholders(name, msg, name);
+                sb.AppendLine($"{indent}if ({name} is not null)");
+                sb.AppendLine($"{indent}{{");
+                sb.AppendLine($"{indent}    var __iban = {name}.Replace(\" \", \"\").ToUpperInvariant();");
+                sb.AppendLine($"{indent}    var __ibanValid = __iban.Length >= 15 && __iban.Length <= 34");
+                sb.AppendLine($"{indent}        && __iban[0] >= 'A' && __iban[0] <= 'Z' && __iban[1] >= 'A' && __iban[1] <= 'Z'");
+                sb.AppendLine($"{indent}        && __iban[2] >= '0' && __iban[2] <= '9' && __iban[3] >= '0' && __iban[3] <= '9'");
+                sb.AppendLine($"{indent}        && __iban.All(__c => (__c >= 'A' && __c <= 'Z') || (__c >= '0' && __c <= '9'));");
+                sb.AppendLine($"{indent}    if (__ibanValid)");
+                sb.AppendLine($"{indent}    {{");
+                sb.AppendLine($"{indent}        var __remainder = 0;");
+                sb.AppendLine($"{indent}        var __rearranged = __iban.Substring(4) + __iban.Substring(0, 4);");
+                sb.AppendLine($"{indent}        foreach (var __ch in __rearranged)");
+                sb.AppendLine($"{indent}        {{");
+                sb.AppendLine($"{indent}            if (char.IsDigit(__ch)) __remainder = (__remainder * 10 + (__ch - '0')) % 97;");
+                sb.AppendLine($"{indent}            else");
+                sb.AppendLine($"{indent}            {{");
+                sb.AppendLine($"{indent}                var __value = __ch - 'A' + 10;");
+                sb.AppendLine($"{indent}                __remainder = (__remainder * 100 + __value) % 97;");
+                sb.AppendLine($"{indent}            }}");
+                sb.AppendLine($"{indent}        }}");
+                sb.AppendLine($"{indent}        __ibanValid = __remainder == 1;");
+                sb.AppendLine($"{indent}    }}");
+                sb.AppendLine($"{indent}    if (!__ibanValid) {{ errors.Add({err});{brk} }}");
                 sb.AppendLine($"{indent}}}");
                 break;
             }

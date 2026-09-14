@@ -111,6 +111,9 @@ public sealed partial class ValidationGenerator
                         case "ZibStack.NET.Validation.ZCreditCardAttribute":
                             rules.Add(new ValidationRule(ValidationRuleKind.CreditCard, customMessage));
                             break;
+                        case "ZibStack.NET.Validation.ZIbanAttribute":
+                            rules.Add(new ValidationRule(ValidationRuleKind.Iban, customMessage));
+                            break;
 
                         case "ZibStack.NET.Validation.ZPhoneAttribute":
                             rules.Add(new ValidationRule(ValidationRuleKind.Phone, customMessage));
@@ -392,6 +395,7 @@ public sealed partial class ValidationGenerator
                     "Match" when args.Count >= 1 && sm.GetConstantValue(args[0].Expression) is { HasValue: true, Value: string pattern }
                         => new ValidationRule(ValidationRuleKind.Match, GetOptionalMessage(args, 1, sm), pattern: pattern),
                     "CreditCard" => new ValidationRule(ValidationRuleKind.CreditCard, GetOptionalMessage(args, 0, sm)),
+                    "Iban" => new ValidationRule(ValidationRuleKind.Iban, GetOptionalMessage(args, 0, sm)),
                     "Phone" => new ValidationRule(ValidationRuleKind.Phone, GetOptionalMessage(args, 0, sm)),
                     "In" when args.Count >= 1 => new ValidationRule(ValidationRuleKind.In, null, allowedValues: ExtractStringArgs(args, sm)),
                     "NotIn" when args.Count >= 1 => new ValidationRule(ValidationRuleKind.NotIn, null, allowedValues: ExtractStringArgs(args, sm)),

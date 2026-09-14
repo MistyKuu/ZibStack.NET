@@ -67,3 +67,36 @@ public class Customer
     public string Name { get; set; } = "";
     public string Email { get; set; } = "";
 }
+
+/// <summary>
+/// Zod 4.6 format showcase. These are TypeGen-only wire checks; use the
+/// matching ZibStack.Validation attributes when the server must enforce the
+/// same rule as well. Parent demonstrates recursive schema emission via z.lazy.
+/// </summary>
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod,
+               OutputDir = "generated")]
+public class ZodFeatureExample
+{
+    [ZodFormat(ZodStringFormat.CreditCard)]
+    public string CardNumber { get; set; } = "";
+
+    [ZodFormat(ZodStringFormat.Iban)]
+    public string BankAccount { get; set; } = "";
+
+    [ZodFormat(ZodStringFormat.Ulid)]
+    public string SortableId { get; set; } = "";
+
+    [ZodFormat(ZodStringFormat.Hostname)]
+    public string Host { get; set; } = "";
+
+    [ZodFormat(ZodStringFormat.Base64)]
+    public string EncodedPayload { get; set; } = "";
+
+    [ZodFormat(ZodStringFormat.Base64Url)]
+    public string UrlSafePayload { get; set; } = "";
+
+    // Configured with .ZodNanoId(16) in TypeGenConfig.cs.
+    public string PublicToken { get; set; } = "";
+
+    public ZodFeatureExample? Parent { get; set; }
+}

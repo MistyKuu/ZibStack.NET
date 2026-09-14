@@ -73,7 +73,10 @@ internal enum TsEnumStyle { Union, Enum }
 internal enum PythonFileLayout { FilePerClass, SingleFile }
 internal enum PythonStyle { Pydantic, Dataclass }
 internal enum ZodFileLayout { FilePerClass, SingleFile }
+internal enum ZodCompilationMode { None, Compile }
+internal enum ZodStringFormat { Email, Url, Uuid, Date, DateTime, Hostname, Ulid, NanoId, Base64, Base64Url, CreditCard, Iban }
 internal enum QueryFileLayout { SingleFile, SplitByTag }
+internal enum QueryPayloadValidation { None, Responses, RequestsAndResponses }
 
 internal sealed class GraphQLSettings
 {
@@ -91,6 +94,9 @@ internal sealed class ZodSettings
     public string FileSuffix { get; set; } = ".schema";
     public string SchemaConstSuffix { get; set; } = "Schema";
     public bool EmitInferredTypes { get; set; } = true;
+    public bool ConformToTypeScriptTypes { get; set; }
+    public ZodCompilationMode Compilation { get; set; }
+    public bool EmitValidationGuards { get; set; }
     public NameStyle PropertyNameStyle { get; set; } = NameStyle.CamelCase;
     public bool EmitGeneratedBanner { get; set; } = true;
 }
@@ -104,6 +110,8 @@ internal sealed class TanStackQuerySettings
     public string? ApiClientImportPath { get; set; }
     public string ApiClientName { get; set; } = "apiFetch";
     public string? ModelsImportPath { get; set; }
+    public string? SchemasImportPath { get; set; }
+    public QueryPayloadValidation PayloadValidation { get; set; }
     public bool EmitQueryOptions { get; set; } = true;
     public bool EmitMutationOptions { get; set; } = true;
     public bool EmitHooks { get; set; } = true;
@@ -509,6 +517,13 @@ internal sealed class SchemaProperty
 
     /// <summary>Fluent-only — emit as <c>$ref</c> to a named external schema instead of the inferred shape.</summary>
     public string? OpenApiRefOverride { get; set; }
+
+    /// <summary>Optional Zod-specific string format factory.</summary>
+    public ZodStringFormat? ZodFormat { get; set; }
+    public int? ZodFormatLength { get; set; }
+
+    /// <summary>True for ZibStack.NET.Dto's tri-state <c>PatchField&lt;T&gt;</c>.</summary>
+    public bool IsPatchField { get; set; }
 
     // ── constraints read from DataAnnotations / ZibStack.Validation attributes ──
 

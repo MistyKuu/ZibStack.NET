@@ -44,11 +44,12 @@ export const OrderSchema = z.object({
 export type Order = z.infer<typeof OrderSchema>;
 ```
 
-**Independent from TypeScript emitter.** Both files are generated from the same
-`SchemaModel`, so drift is structurally impossible — change the C# class and
-both regen identically on the next build. The TS interface stays as the
+**Independent from TypeScript emitter by default.** Both files are generated from the same
+`SchemaModel` and regenerate together on the next build. The TS interface stays as the
 ergonomic type-only view (cheap to import, no runtime dep); the Zod schema
 carries the runtime validator and its own `z.infer` alias for Zod-only consumers.
+Enable `ConformToTypeScriptTypes` when you also want `z.toZod<T>()` to make the
+TypeScript compiler prove that both generated shapes match.
 
 ## Validation constraint mapping
 
@@ -62,6 +63,8 @@ Same attributes that drive OpenAPI constraints map to Zod chained calls:
 | `[RegularExpression("pat")]`, `[ZMatch("pat")]` | `.regex(/pat/)` |
 | `[EmailAddress]`, `[ZEmail]` | `z.email()` |
 | `[Url]`, `[ZUrl]` | `z.url()` |
+| `[CreditCard]`, `[ZCreditCard]` | `z.creditCard()` |
+| `[ZIban]` | `z.iban()` |
 | `System.Guid` | `z.uuid()` |
 | `System.DateTime` | `z.iso.datetime()` |
 | `System.DateOnly` | `z.iso.date()` |
@@ -69,6 +72,25 @@ Same attributes that drive OpenAPI constraints map to Zod chained calls:
 The emitter targets **Zod 4** — it emits the top-level format factories
 (`z.uuid()`, `z.email()`, `z.iso.datetime()`, …) rather than the chained
 `z.string().uuid()` forms that Zod 4 deprecated. Install Zod 4: `npm install zod@^4`.
+
+Zod-only formats can be selected without changing the OpenAPI contract:
+
+```csharp
+[ZodFormat(ZodStringFormat.Ulid)]
+public string PublicId { get; set; } = "";
+
+b.ForType<Payment>()
+    .Property(x => x.CardToken)
+    .ZodFormat(ZodStringFormat.Base64Url);
+
+// Zod 4.6 custom NanoID length:
+b.ForType<Payment>()
+    .Property(x => x.PublicToken)
+    .ZodNanoId(16);
+```
+
+Available formats are email, URL, UUID, date, date-time, hostname, ULID,
+NanoID, Base64, Base64URL, credit card, and IBAN.
 
 ## Type mapping
 
@@ -80,6 +102,7 @@ The emitter targets **Zod 4** — it emits the top-level format factories
 | `string` | `z.string()` |
 | `bool` | `z.boolean()` |
 | `T?` (nullable) | `.nullish()` *(null ∪ undefined ∪ absent)* |
+| `PatchField<T>` | `T.optional()` *(omission is distinct from an explicit value)* |
 | `List<T>`, `T[]` | `z.array(T)` |
 | `Dictionary<string, V>` | `z.record(z.string(), V)` |
 | user DTO | direct ref `{Name}Schema` (cross-file import) |
@@ -128,9 +151,17 @@ b.Zod(z =>
     z.SchemaConstSuffix = "Schema";   // default; "XxxSchema"
     z.EmitInferredTypes = true;       // default; adds `export type X = z.infer<…>`
     z.FileSuffix = ".schema";         // `Order.schema.ts` avoids collision with TS's `Order.ts`
+    z.ConformToTypeScriptTypes = true; // opt-in `z.toZod<T>()` compile-time check
+    z.Compilation = ZodCompilationMode.Compile; // opt-in optimized parser
+    z.EmitValidationGuards = true;     // emits `isOrder(value)` using `.validate()`
 });
 ```
 
+Recursive DTO references are emitted with `z.lazy(...)`, including mutually
+recursive types split across files. Compilation is opt-in because Zod uses
+generated JavaScript internally; unsupported schemas safely fall back to the
+normal parser.
+
 **Consumer install:** the emitted code imports `zod` — add it to the frontend
-project: `npm install zod@^4`. The emitter targets Zod 4's top-level format
+project: `npm install zod@^4.6.1`. The emitter targets Zod 4's top-level format
 factories. TypeGen doesn't bundle or generate the dep.

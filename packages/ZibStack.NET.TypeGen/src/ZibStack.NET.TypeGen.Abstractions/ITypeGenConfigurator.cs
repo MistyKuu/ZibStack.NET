@@ -221,6 +221,12 @@ public interface IPropertyBuilder<TClass, TProp>
     /// <summary>Equivalent to <c>[OpenApiProperty(Format = format)]</c>.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiFormat(string format);
 
+    /// <summary>Use a built-in Zod string-format validator for this property.</summary>
+    IPropertyBuilder<TClass, TProp> ZodFormat(ZodStringFormat format);
+
+    /// <summary>Validate a NanoID with an exact custom length.</summary>
+    IPropertyBuilder<TClass, TProp> ZodNanoId(int length);
+
     /// <summary>Equivalent to <c>[OpenApiProperty(Description = description)]</c>.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiDescription(string description);
 

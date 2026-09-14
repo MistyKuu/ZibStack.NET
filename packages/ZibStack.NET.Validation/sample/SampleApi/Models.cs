@@ -39,12 +39,29 @@ public partial class PaymentInfo
     [ZCreditCard]
     public string CardNumber { get; set; } = "";
 
+    // New in the Zod 4.6 integration: the same server-side rule maps to
+    // z.iban() when this DTO is also emitted by TypeGen.
+    [ZIban]
+    public string? BankAccountIban { get; set; }
+
     [ZRequired]
     [ZMatch(@"^\d{2}/\d{2}$", Message = "Expiry must be MM/YY format")]
     public string Expiry { get; set; } = "";
 
     [ZRange(100, 9999)]
     public int Cvv { get; set; }
+}
+
+// Fluent equivalent for models that keep validation rules in one Configure block.
+[ZValidate]
+public partial class BankTransferInfo : IValidationConfigurator<BankTransferInfo>
+{
+    public string Iban { get; set; } = "";
+
+    public void Configure(IValidationBuilder<BankTransferInfo> b)
+    {
+        b.Property(x => x.Iban).Required().Iban();
+    }
 }
 
 // ── Line item (in collection) ───────────────────────────────────────────────

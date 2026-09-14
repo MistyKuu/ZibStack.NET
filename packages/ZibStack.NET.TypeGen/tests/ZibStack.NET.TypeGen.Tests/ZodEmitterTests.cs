@@ -96,6 +96,19 @@ public class ZodEmitterTests
     }
 
     [Fact]
+    public void Nullable_InTypeScriptConformanceMode_MatchesOptionalProperty()
+    {
+        var cls = Cls("Order", props: new[] { ("Note", "string", true) });
+        cls.Targets = TypeTarget.TypeScript | TypeTarget.Zod;
+        var settings = new GlobalSettings { Zod = { ConformToTypeScriptTypes = true } };
+
+        var content = ZodEmitter.Emit(ModelWith(cls), settings).Single().Content;
+
+        Assert.Contains("note: z.string().optional()", content);
+        Assert.DoesNotContain("note: z.string().nullish()", content);
+    }
+
+    [Fact]
     public void ReadOnly_BecomesOptional()
     {
         var cls = Cls("Order");
@@ -109,6 +122,21 @@ public class ZodEmitterTests
         var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
 
         Assert.Contains("computed: z.number().int().optional()", content);
+    }
+
+    [Fact]
+    public void PatchField_BecomesOptional()
+    {
+        var cls = Cls("UpdateOrder");
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Name",
+            CSharpTypeFullName = "ZibStack.NET.Dto.PatchField<string>",
+            IsPatchField = true,
+        });
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains("name: z.string().optional()", content);
     }
 
     // ── collections ─────────────────────────────────────────────────────────
@@ -185,6 +213,44 @@ public class ZodEmitterTests
         var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
 
         Assert.Contains("email: z.email()", content);
+    }
+
+    [Theory]
+    [InlineData((int)ZodStringFormat.CreditCard, "z.creditCard()")]
+    [InlineData((int)ZodStringFormat.Iban, "z.iban()")]
+    [InlineData((int)ZodStringFormat.Hostname, "z.hostname()")]
+    [InlineData((int)ZodStringFormat.Ulid, "z.ulid()")]
+    [InlineData((int)ZodStringFormat.NanoId, "z.nanoid()")]
+    [InlineData((int)ZodStringFormat.Base64, "z.base64()")]
+    [InlineData((int)ZodStringFormat.Base64Url, "z.base64url()")]
+    public void ZodStringFormat_UsesTopLevelFactory(int format, string expected)
+    {
+        var cls = Cls("Payment");
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Value",
+            CSharpTypeFullName = "string",
+            ZodFormat = (ZodStringFormat)format,
+        });
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains($"value: {expected}", content);
+    }
+
+    [Fact]
+    public void NanoId_CustomLength_UsesZod461LengthParameter()
+    {
+        var cls = Cls("Token");
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Value",
+            CSharpTypeFullName = "string",
+            ZodFormat = ZodStringFormat.NanoId,
+            ZodFormatLength = 16,
+        });
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains("value: z.nanoid({ length: 16 })", content);
     }
 
     [Fact]
@@ -347,6 +413,47 @@ public class ZodEmitterTests
 
         Assert.Contains("export const OrderValidator = z.object", content);
         Assert.Contains("z.infer<typeof OrderValidator>", content);
+    }
+
+    [Fact]
+    public void CompileAndValidationGuard_AreOptIn()
+    {
+        var cls = Cls("Order", props: new[] { ("Id", "int", false) });
+        var settings = new GlobalSettings
+        {
+            Zod = new ZodSettings
+            {
+                Compilation = ZodCompilationMode.Compile,
+                EmitValidationGuards = true,
+            },
+        };
+
+        var content = ZodEmitter.Emit(ModelWith(cls), settings).Single().Content;
+        Assert.Contains("export const OrderSchema = z.compile(z.object({", content);
+        Assert.Contains("export const isOrder = (value: unknown): value is z.output<typeof OrderSchema> => OrderSchema.validate(value);", content);
+    }
+
+    [Fact]
+    public void ValidationGuard_UsesPascalCaseAfterIsPrefix()
+    {
+        var cls = Cls("Order", props: new[] { ("Id", "int", false) });
+        cls.EmittedName = "order";
+        var settings = new GlobalSettings { Zod = { EmitValidationGuards = true } };
+
+        var content = ZodEmitter.Emit(ModelWith(cls), settings).Single().Content;
+
+        Assert.Contains("export const isOrder =", content);
+        Assert.DoesNotContain("export const isorder =", content);
+    }
+
+    [Fact]
+    public void RecursiveProperty_UsesLazyReference()
+    {
+        var node = Cls("Node", props: new[] { ("Children", "List<Node>", false) });
+        var content = ZodEmitter.Emit(ModelWith(node), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("export const NodeSchema: z.ZodType<any>", content);
+        Assert.Contains("children: z.array(z.lazy(() => NodeSchema))", content);
     }
 
     [Fact]

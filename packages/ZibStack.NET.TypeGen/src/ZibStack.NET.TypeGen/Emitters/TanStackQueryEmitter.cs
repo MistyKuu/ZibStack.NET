@@ -58,7 +58,7 @@ internal static class TanStackQueryEmitter
         IReadOnlyDictionary<string, string> nameLookup)
     {
         var query = settings.TanStackQuery;
-        var ops = BuildOperations(endpoints, settings, nameLookup);
+        var ops = BuildOperations(endpoints, settings, model, nameLookup);
         var sb = new StringBuilder();
 
         if (query.EmitGeneratedBanner)
@@ -106,10 +106,12 @@ internal static class TanStackQueryEmitter
     private static List<OperationModel> BuildOperations(
         IReadOnlyList<EndpointInfo> endpoints,
         GlobalSettings settings,
+        SchemaModel model,
         IReadOnlyDictionary<string, string> nameLookup)
     {
         var usedNames = new HashSet<string>(System.StringComparer.Ordinal);
         var operations = new List<OperationModel>();
+        var zodNameLookup = BuildZodNameLookup(model);
 
         foreach (var ep in endpoints.OrderBy(e => e.Tag ?? "", System.StringComparer.Ordinal)
             .ThenBy(e => e.Pattern, System.StringComparer.Ordinal)
@@ -118,8 +120,9 @@ internal static class TanStackQueryEmitter
             var tag = TagName(ep.Tag);
             var operationName = MakeUnique(ToCamelIdentifier(ep.OperationId), usedNames);
             var inputTypeName = ToPascalIdentifier(operationName) + "Input";
-            var inputMembers = BuildInputMembers(ep, settings, nameLookup);
+            var inputMembers = BuildInputMembers(ep, settings, nameLookup, zodNameLookup);
             var response = ResolveResponseType(ep, nameLookup);
+            var responseSchema = ResolveResponseSchema(ep, zodNameLookup, settings.Zod.SchemaConstSuffix);
 
             operations.Add(new OperationModel
             {
@@ -131,6 +134,8 @@ internal static class TanStackQueryEmitter
                 ResponseType = response.TypeExpression,
                 TypeImports = response.TypeImports,
                 PaginatedAliases = response.PaginatedAliases,
+                ResponseSchemaExpression = responseSchema.Expression,
+                SchemaImports = responseSchema.Imports,
                 HasInput = inputMembers.Count > 0,
                 HasRequiredInput = inputMembers.Any(m => m.Required),
                 IsQuery = string.Equals(ep.Verb, "get", System.StringComparison.OrdinalIgnoreCase),
@@ -143,7 +148,8 @@ internal static class TanStackQueryEmitter
     private static List<InputMember> BuildInputMembers(
         EndpointInfo ep,
         GlobalSettings settings,
-        IReadOnlyDictionary<string, string> nameLookup)
+        IReadOnlyDictionary<string, string> nameLookup,
+        IReadOnlyDictionary<string, string> zodNameLookup)
     {
         var members = new List<InputMember>();
         var seen = new HashSet<string>(System.StringComparer.Ordinal);
@@ -153,6 +159,7 @@ internal static class TanStackQueryEmitter
             if (p.Location == ParamLocation.Body) continue;
             if (!seen.Add(p.Name)) continue;
             var type = ResolveType(p.CSharpType, nameLookup);
+            var schema = ResolveZodSchema(p.CSharpType, zodNameLookup, settings.Zod.SchemaConstSuffix);
             members.Add(new InputMember
             {
                 WireName = p.Name,
@@ -162,6 +169,8 @@ internal static class TanStackQueryEmitter
                 Location = p.Location,
                 TypeImports = type.TypeImports,
                 PaginatedAliases = type.PaginatedAliases,
+                SchemaExpression = schema.Expression,
+                SchemaImports = schema.Imports,
             });
         }
 
@@ -170,6 +179,7 @@ internal static class TanStackQueryEmitter
         if (ep.RequestBodyCSharpType is not null)
         {
             var body = ResolveType(ep.RequestBodyCSharpType, nameLookup);
+            var schema = ResolveZodSchema(ep.RequestBodyCSharpType, zodNameLookup, settings.Zod.SchemaConstSuffix);
             members.Add(new InputMember
             {
                 WireName = "body",
@@ -179,11 +189,14 @@ internal static class TanStackQueryEmitter
                 Location = ParamLocation.Body,
                 TypeImports = body.TypeImports,
                 PaginatedAliases = body.PaginatedAliases,
+                SchemaExpression = schema.Expression,
+                SchemaImports = schema.Imports,
             });
         }
         else if (ep.RequestBodyArrayItemCSharpType is not null)
         {
             var body = ResolveType(ep.RequestBodyArrayItemCSharpType, nameLookup);
+            var schema = ResolveZodSchema(ep.RequestBodyArrayItemCSharpType, zodNameLookup, settings.Zod.SchemaConstSuffix);
             members.Add(new InputMember
             {
                 WireName = "body",
@@ -193,6 +206,8 @@ internal static class TanStackQueryEmitter
                 Location = ParamLocation.Body,
                 TypeImports = body.TypeImports,
                 PaginatedAliases = body.PaginatedAliases,
+                SchemaExpression = schema.Expression is null ? null : $"z.array({schema.Expression})",
+                SchemaImports = schema.Imports,
             });
         }
 
@@ -255,6 +270,98 @@ internal static class TanStackQueryEmitter
             return item;
         }
         return new TypeResolution("void");
+    }
+
+    private static SchemaResolution ResolveResponseSchema(
+        EndpointInfo ep,
+        IReadOnlyDictionary<string, string> nameLookup,
+        string suffix)
+    {
+        if (ep.ResponseCSharpType is not null)
+            return ResolveZodSchema(ep.ResponseCSharpType, nameLookup, suffix);
+        if (ep.ResponseArrayItemCSharpType is not null)
+        {
+            var item = ResolveZodSchema(ep.ResponseArrayItemCSharpType, nameLookup, suffix);
+            if (item.Expression is not null) item.Expression = $"z.array({item.Expression})";
+            return item;
+        }
+        return new SchemaResolution();
+    }
+
+    private static SchemaResolution ResolveZodSchema(
+        string cSharpType,
+        IReadOnlyDictionary<string, string> nameLookup,
+        string suffix)
+    {
+        var nullable = cSharpType.Trim().EndsWith("?", System.StringComparison.Ordinal);
+        var t = cSharpType.Trim().TrimEnd('?');
+        var result = new SchemaResolution();
+
+        var patch = ExtractGeneric(t, "PatchField");
+        if (patch is not null) return ResolveZodSchema(patch, nameLookup, suffix);
+        var nullableInner = ExtractGeneric(t, "Nullable", "System.Nullable");
+        if (nullableInner is not null)
+        {
+            var inner = ResolveZodSchema(nullableInner, nameLookup, suffix);
+            if (inner.Expression is not null) inner.Expression += ".nullable()";
+            return inner;
+        }
+        var paged = ExtractGeneric(t, "PaginatedResponse");
+        if (paged is not null)
+        {
+            var inner = ResolveZodSchema(paged, nameLookup, suffix);
+            if (inner.Expression is not null)
+                inner.Expression = $"z.object({{ items: z.array({inner.Expression}), totalCount: z.number().int(), page: z.number().int(), pageSize: z.number().int(), totalPages: z.number().int(), hasNextPage: z.boolean(), hasPreviousPage: z.boolean() }})";
+            return inner;
+        }
+        if (nameLookup.TryGetValue(t, out var mapped))
+        {
+            result.Expression = mapped + suffix;
+            result.Imports.Add(mapped);
+        }
+        else if (t.EndsWith("[]", System.StringComparison.Ordinal))
+        {
+            result = ResolveZodSchema(t.Substring(0, t.Length - 2), nameLookup, suffix);
+            if (result.Expression is not null) result.Expression = $"z.array({result.Expression})";
+        }
+        else
+        {
+            var list = ExtractGeneric(t, "List", "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection", "HashSet", "ISet", "IReadOnlySet");
+            if (list is not null)
+            {
+                result = ResolveZodSchema(list, nameLookup, suffix);
+                if (result.Expression is not null) result.Expression = $"z.array({result.Expression})";
+            }
+            else
+            {
+                result.Expression = t switch
+                {
+                    "string" => "z.string()",
+                    "bool" or "System.Boolean" => "z.boolean()",
+                    "byte" or "sbyte" or "short" or "ushort" or "int" or "uint" or "long" or "ulong" or "System.Int32" or "System.Int64" => "z.number().int()",
+                    "float" or "double" or "System.Single" or "System.Double" => "z.number()",
+                    "decimal" or "System.Decimal" => "z.string()",
+                    "System.Guid" or "Guid" => "z.uuid()",
+                    "System.DateTime" or "DateTime" or "System.DateTimeOffset" or "DateTimeOffset" => "z.iso.datetime()",
+                    _ => null,
+                };
+            }
+        }
+
+        if (nullable && result.Expression is not null) result.Expression += ".nullable()";
+        return result;
+    }
+
+    private static Dictionary<string, string> BuildZodNameLookup(SchemaModel model)
+    {
+        var lookup = new Dictionary<string, string>(System.StringComparer.Ordinal);
+        foreach (var c in model.Classes)
+            if (!c.TsIgnore)
+                lookup[c.CSharpFullName] = c.EmittedName;
+        foreach (var e in model.Enums)
+            if (!e.TsIgnore)
+                lookup[e.CSharpFullName] = e.EmittedName;
+        return lookup;
     }
 
     private static TypeResolution ResolveType(string cSharpType, IReadOnlyDictionary<string, string> nameLookup)
@@ -357,6 +464,17 @@ internal static class TanStackQueryEmitter
         if (!string.IsNullOrEmpty(query.ApiClientImportPath))
             sb.AppendLine($"import {{ {query.ApiClientName} }} from '{query.ApiClientImportPath}';");
 
+        if (query.PayloadValidation != QueryPayloadValidation.None)
+        {
+            sb.AppendLine("import { z } from 'zod';");
+            foreach (var kvp in CollectSchemaImports(ops, queryOutputDir, settings, model).OrderBy(k => k.Key, System.StringComparer.Ordinal))
+            {
+                var names = string.Join(", ", kvp.Value.OrderBy(n => n, System.StringComparer.Ordinal)
+                    .Select(n => n + settings.Zod.SchemaConstSuffix));
+                sb.AppendLine($"import {{ {names} }} from '{kvp.Key}';");
+            }
+        }
+
         var modelImports = CollectModelImports(ops, queryOutputDir, settings, model);
         foreach (var kvp in modelImports.OrderBy(k => k.Key, System.StringComparer.Ordinal))
         {
@@ -364,8 +482,56 @@ internal static class TanStackQueryEmitter
             sb.AppendLine($"import type {{ {names} }} from '{kvp.Key}';");
         }
 
-        if (tanstackImports.Count > 0 || tanstackTypeImports.Count > 0 || !string.IsNullOrEmpty(query.ApiClientImportPath) || modelImports.Count > 0 || query.EmitGeneratedBanner)
+        if (tanstackImports.Count > 0 || tanstackTypeImports.Count > 0 || !string.IsNullOrEmpty(query.ApiClientImportPath) || modelImports.Count > 0 || query.PayloadValidation != QueryPayloadValidation.None || query.EmitGeneratedBanner)
             sb.AppendLine();
+    }
+
+    private static Dictionary<string, HashSet<string>> CollectSchemaImports(
+        IReadOnlyList<OperationModel> ops,
+        string queryOutputDir,
+        GlobalSettings settings,
+        SchemaModel model)
+    {
+        var names = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var op in ops)
+        {
+            names.UnionWith(op.SchemaImports);
+            if (settings.TanStackQuery.PayloadValidation == QueryPayloadValidation.RequestsAndResponses)
+                foreach (var member in op.InputMembers.Where(m => m.Location == ParamLocation.Body))
+                    names.UnionWith(member.SchemaImports);
+        }
+        var result = new Dictionary<string, HashSet<string>>(System.StringComparer.Ordinal);
+        if (names.Count == 0) return result;
+        if (!string.IsNullOrEmpty(settings.TanStackQuery.SchemasImportPath))
+        {
+            result[settings.TanStackQuery.SchemasImportPath!] = names;
+            return result;
+        }
+        var zs = settings.Zod;
+        var schemaDir = !string.IsNullOrEmpty(zs.OutputDir)
+            ? zs.OutputDir!
+            : model.Classes.FirstOrDefault()?.OutputDir ?? ".";
+        if (zs.FileLayout == ZodFileLayout.SingleFile)
+        {
+            var file = StripTsExtension(string.IsNullOrWhiteSpace(zs.SingleFileName) ? "schemas.ts" : zs.SingleFileName);
+            result[SchemaParser.ComputeRelativeImport(queryOutputDir, schemaDir, file)] = names;
+            return result;
+        }
+        foreach (var name in names)
+        {
+            var matchingClass = model.Classes.FirstOrDefault(c => c.EmittedName == name);
+            var matchingEnum = model.Enums.FirstOrDefault(e => e.EmittedName == name);
+            var perTypeDir = matchingClass is not null
+                ? matchingClass.HasExplicitOutputDir ? matchingClass.OutputDir : !string.IsNullOrEmpty(zs.OutputDir) ? zs.OutputDir! : matchingClass.OutputDir
+                : matchingEnum is not null
+                    ? matchingEnum.HasExplicitOutputDir ? matchingEnum.OutputDir : !string.IsNullOrEmpty(zs.OutputDir) ? zs.OutputDir! : matchingEnum.OutputDir
+                    : schemaDir;
+            var path = SchemaParser.ComputeRelativeImport(queryOutputDir, perTypeDir ?? ".", name + zs.FileSuffix);
+            if (!result.TryGetValue(path, out var imported))
+                result[path] = imported = new HashSet<string>(System.StringComparer.Ordinal);
+            imported.Add(name);
+        }
+        return result;
     }
 
     private static Dictionary<string, HashSet<string>> CollectModelImports(
@@ -548,15 +714,26 @@ internal static class TanStackQueryEmitter
             sb.Append("signal?: AbortSignal");
         sb.AppendLine($"): Promise<{op.ResponseType}> {{");
 
-        sb.AppendLine($"    return {query.ApiClientName}<{op.ResponseType}>({BuildPathExpression(op)}, {{");
+        var validateResponse = query.PayloadValidation != QueryPayloadValidation.None
+            && op.ResponseSchemaExpression is not null;
+        sb.AppendLine($"    return {query.ApiClientName}<{(validateResponse ? "unknown" : op.ResponseType)}>({BuildPathExpression(op)}, {{");
         sb.AppendLine($"        method: '{op.Endpoint.Verb.ToUpperInvariant()}',");
         EmitRequestOptionObject(sb, "query", op.InputMembers.Where(m => m.Location == ParamLocation.Query).ToList());
         EmitRequestOptionObject(sb, "headers", op.InputMembers.Where(m => m.Location == ParamLocation.Header).ToList());
         var body = op.InputMembers.FirstOrDefault(m => m.Location == ParamLocation.Body);
         if (body is not null)
-            sb.AppendLine($"        body: {InputAccess(body)},");
+        {
+            var bodyExpr = query.PayloadValidation == QueryPayloadValidation.RequestsAndResponses
+                && body.SchemaExpression is not null
+                ? $"{body.SchemaExpression}.parse({InputAccess(body)})"
+                : InputAccess(body);
+            sb.AppendLine($"        body: {bodyExpr},");
+        }
         sb.AppendLine("        signal,");
-        sb.AppendLine("    });");
+        sb.Append("    })");
+        if (validateResponse)
+            sb.Append($".then(value => {op.ResponseSchemaExpression}.parse(value))");
+        sb.AppendLine(";");
         sb.AppendLine("}");
         sb.AppendLine();
     }
@@ -1014,6 +1191,8 @@ internal static class TanStackQueryEmitter
         public string ResponseType { get; set; } = "void";
         public HashSet<string> TypeImports { get; set; } = new(System.StringComparer.Ordinal);
         public Dictionary<string, string> PaginatedAliases { get; set; } = new(System.StringComparer.Ordinal);
+        public string? ResponseSchemaExpression { get; set; }
+        public HashSet<string> SchemaImports { get; set; } = new(System.StringComparer.Ordinal);
         public bool HasInput { get; set; }
         public bool HasRequiredInput { get; set; }
         public bool IsQuery { get; set; }
@@ -1028,6 +1207,14 @@ internal static class TanStackQueryEmitter
         public ParamLocation Location { get; set; }
         public HashSet<string> TypeImports { get; set; } = new(System.StringComparer.Ordinal);
         public Dictionary<string, string> PaginatedAliases { get; set; } = new(System.StringComparer.Ordinal);
+        public string? SchemaExpression { get; set; }
+        public HashSet<string> SchemaImports { get; set; } = new(System.StringComparer.Ordinal);
+    }
+
+    private sealed class SchemaResolution
+    {
+        public string? Expression { get; set; }
+        public HashSet<string> Imports { get; set; } = new(System.StringComparer.Ordinal);
     }
 
     private sealed class TypeResolution

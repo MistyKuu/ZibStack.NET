@@ -19,6 +19,7 @@ description: Complete reference for all validation attributes — [ZRequired], [
 | `[ZIn("a","b","c")]` | property | Value must be one of the allowed values |
 | `[ZNotIn("x","y")]` | property | Value must NOT be any of the specified values |
 | `[ZCreditCard]` | property (string) | Must pass the Luhn algorithm check |
+| `[ZIban]` | property (string) | Must pass the ISO 13616 mod-97 check |
 | `[ZPhone]` | property (string) | Must match phone number format |
 | `[ZCascade]` | property | Stop after first rule failure for this property |
 
@@ -82,6 +83,15 @@ public partial class PaymentForm
 
 // Valid: "4111111111111111" (Visa test number)
 // Invalid: "1234567890123456"
+```
+
+## `[ZIban]` — ISO 13616
+
+```csharp
+[ZIban]
+public string? BankAccount { get; set; }
+
+// Valid: "GB82 WEST 1234 5698 7654 32"
 ```
 
 ## `[ZPhone]`

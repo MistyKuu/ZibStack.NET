@@ -22,7 +22,7 @@ public sealed class ZodCompilationTests : IDisposable
 {
     // Pin both packages for determinism across machines / CI.
     private const string TscPackageSpec = "typescript@5.7.3";
-    private const string ZodPackageSpec = "zod@4.4.3";
+    private const string ZodPackageSpec = "zod@4.6.1";
 
     private readonly string _tempDir;
     private readonly bool _skip;
@@ -154,9 +154,117 @@ public sealed class ZodCompilationTests : IDisposable
         {
             SourceName = "Website", CSharpTypeFullName = "string", OpenApiFormat = "url",
         });
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "CardNumber", CSharpTypeFullName = "string", ZodFormat = ZodStringFormat.CreditCard,
+        });
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "Iban", CSharpTypeFullName = "string", ZodFormat = ZodStringFormat.Iban,
+        });
+        cls.Properties.Add(new SchemaProperty
+        {
+            SourceName = "PublicToken", CSharpTypeFullName = "string",
+            ZodFormat = ZodStringFormat.NanoId, ZodFormatLength = 16,
+        });
         model.Classes.Add(cls);
+        model.Classes.Add(ClsModel("TreeNode", new[] { ("Children", "List<TreeNode>", false) }));
 
-        var files = ZodEmitter.Emit(model, new GlobalSettings());
+        var settings = new GlobalSettings
+        {
+            Zod = new ZodSettings
+            {
+                Compilation = ZodCompilationMode.Compile,
+                EmitValidationGuards = true,
+            },
+        };
+        var files = ZodEmitter.Emit(model, settings);
+        await PrepareWorkspaceAsync();
+        foreach (var f in files)
+            File.WriteAllText(Path.Combine(_tempDir, f.FileName), f.Content);
+
+        var (exitCode, stdout, stderr) = await RunAsync(
+            "npx",
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
+                string.Join(" ", files.Select(f => f.FileName)),
+            workingDir: _tempDir);
+
+        Assert.True(exitCode == 0,
+            $"tsc failed (exit {exitCode}):{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+    }
+
+    [Fact]
+    public async Task ToZodConformanceAndCompile_TypeCheckWithGeneratedTypeScriptModel()
+    {
+        if (_skip) return;
+
+        var model = new SchemaModel();
+        var account = ClsModel("Account", new[]
+        {
+            ("Id", "int", false),
+            ("Name", "string", false),
+            ("Parent", "Account", true),
+        });
+        account.Targets = TypeTarget.TypeScript | TypeTarget.Zod;
+        model.Classes.Add(account);
+        var settings = new GlobalSettings();
+        settings.Zod.ConformToTypeScriptTypes = true;
+        settings.Zod.Compilation = ZodCompilationMode.Compile;
+        settings.Zod.EmitValidationGuards = true;
+
+        var files = TypeScriptEmitter.Emit(model, settings).Concat(ZodEmitter.Emit(model, settings)).ToList();
+        await PrepareWorkspaceAsync();
+        foreach (var f in files)
+            File.WriteAllText(Path.Combine(_tempDir, f.FileName), f.Content);
+
+        var (exitCode, stdout, stderr) = await RunAsync(
+            "npx",
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
+                string.Join(" ", files.Select(f => f.FileName)),
+            workingDir: _tempDir);
+
+        Assert.True(exitCode == 0,
+            $"tsc failed (exit {exitCode}):{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+    }
+
+    [Fact]
+    public async Task TanStackPayloadValidation_CompilesWithGeneratedSchemas()
+    {
+        if (_skip) return;
+
+        var targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.TanStackQuery;
+        var model = new SchemaModel();
+        var request = ClsModel("UpdateOrder", new[] { ("Name", "string", false) });
+        var response = ClsModel("Order", new[] { ("Id", "int", false), ("Name", "string", false) });
+        request.Targets = targets;
+        response.Targets = targets;
+        model.Classes.Add(request);
+        model.Classes.Add(response);
+        model.Endpoints.Add(new EndpointInfo
+        {
+            Verb = "put",
+            Pattern = "/orders/{id:int}",
+            OperationId = "updateOrder",
+            Tag = "Orders",
+            RequestBodyCSharpType = "UpdateOrder",
+            ResponseCSharpType = "Order",
+            Parameters =
+            {
+                new EndpointParameter { Name = "id", CSharpType = "int", Location = ParamLocation.Route, Required = true },
+            },
+        });
+        var settings = new GlobalSettings();
+        settings.TanStackQuery.PayloadValidation = QueryPayloadValidation.RequestsAndResponses;
+        settings.TanStackQuery.BaseUrlExpression = "undefined";
+        settings.TanStackQuery.EmitQueryOptions = false;
+        settings.TanStackQuery.EmitMutationOptions = false;
+        settings.TanStackQuery.EmitHooks = false;
+        settings.TanStackQuery.EmitCacheHelpers = false;
+
+        var files = TypeScriptEmitter.Emit(model, settings)
+            .Concat(ZodEmitter.Emit(model, settings))
+            .Concat(TanStackQueryEmitter.Emit(model, settings))
+            .ToList();
         await PrepareWorkspaceAsync();
         foreach (var f in files)
             File.WriteAllText(Path.Combine(_tempDir, f.FileName), f.Content);

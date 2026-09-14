@@ -549,6 +549,29 @@ public class ValidationTests
         Assert.Contains(result.Errors, e => e.Contains("CardNumber"));
     }
 
+    [Fact]
+    public void ZIban_ValidNumber_NoError()
+    {
+        var req = new PaymentRequest { CardNumber = "4111111111111111", Iban = "GB82 WEST 1234 5698 7654 32" };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void ZCreditCard_TwelveDigitLuhnNumber_NoError()
+    {
+        var req = new PaymentRequest { CardNumber = "123456789015" };
+        Assert.True(req.Validate().IsValid);
+    }
+
+    [Fact]
+    public void ZIban_InvalidNumber_ReturnsError()
+    {
+        var req = new PaymentRequest { CardNumber = "4111111111111111", Iban = "GB82 TEST 1234" };
+        var result = req.Validate();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Iban"));
+    }
+
     // ── ZPhone ───────────────────────────────────────────────────────
 
     [Fact]

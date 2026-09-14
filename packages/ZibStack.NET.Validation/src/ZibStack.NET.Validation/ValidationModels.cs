@@ -17,6 +17,7 @@ internal enum ValidationRuleKind
     In,
     NotIn,
     CreditCard,
+    Iban,
     Phone,
 }
 

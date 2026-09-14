@@ -74,6 +74,7 @@ All attributes live in the `ZibStack.NET.Validation` namespace and are processed
 | `[ZIn("a","b","c")]` | property | Value must be one of the allowed values |
 | `[ZNotIn("x","y")]` | property | Value must NOT be any of the specified values |
 | `[ZCreditCard]` | property (string) | Must pass the Luhn algorithm check |
+| `[ZIban]` | property (string) | Must pass the ISO 13616 mod-97 check |
 | `[ZPhone]` | property (string) | Must match phone number format regex |
 | `[ZCascade]` | property | Stop after first rule failure for this property |
 

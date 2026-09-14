@@ -53,6 +53,9 @@ internal static class ZodEmitter
             var sb = new StringBuilder();
             EmitBanner(sb, zs);
             sb.AppendLine("import { z } from 'zod';");
+            EmitConformanceImports(sb, model.Classes.Where(c => !SkipClass(c) && (c.Targets & TypeTarget.TypeScript) != 0).Select(c => c.EmittedName)
+                .Concat(model.Enums.Where(e => !SkipEnum(e) && (e.Targets & TypeTarget.TypeScript) != 0).Select(e => e.EmittedName)),
+                ResolveOutputDir(zs.OutputDir, model), settings.TypeScript, zs, model);
             sb.AppendLine();
 
             // In SingleFile mode order matters — a schema has to be declared
@@ -79,12 +82,14 @@ internal static class ZodEmitter
                 var sb = new StringBuilder();
                 EmitBanner(sb, zs);
                 sb.AppendLine("import { z } from 'zod';");
+                var outputDir = (cls.HasExplicitOutputDir ? cls.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : cls.OutputDir) ?? ".";
+                EmitConformanceImports(sb, (cls.Targets & TypeTarget.TypeScript) != 0 ? new[] { cls.EmittedName } : System.Array.Empty<string>(), outputDir, settings.TypeScript, zs, model);
                 EmitImports(sb, CollectClassReferences(cls, nameByCSharp), cls.EmittedName, zs);
                 sb.AppendLine();
                 EmitClass(sb, cls, zs, nameByCSharp, model);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
-                    OutputDir: cls.HasExplicitOutputDir ? cls.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : cls.OutputDir,
+                    OutputDir: outputDir,
                     FileName: cls.EmittedName + zs.FileSuffix + ".ts",
                     Content: sb.ToString()));
             }
@@ -94,11 +99,13 @@ internal static class ZodEmitter
                 var sb = new StringBuilder();
                 EmitBanner(sb, zs);
                 sb.AppendLine("import { z } from 'zod';");
+                var outputDir = (en.HasExplicitOutputDir ? en.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : en.OutputDir) ?? ".";
+                EmitConformanceImports(sb, (en.Targets & TypeTarget.TypeScript) != 0 ? new[] { en.EmittedName } : System.Array.Empty<string>(), outputDir, settings.TypeScript, zs, model);
                 sb.AppendLine();
                 EmitEnum(sb, en, zs);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
-                    OutputDir: en.HasExplicitOutputDir ? en.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : en.OutputDir,
+                    OutputDir: outputDir,
                     FileName: en.EmittedName + zs.FileSuffix + ".ts",
                     Content: sb.ToString()));
             }
@@ -130,6 +137,44 @@ internal static class ZodEmitter
             sb.AppendLine($"import {{ {r}{zs.SchemaConstSuffix} }} from './{r}{zs.FileSuffix}';");
     }
 
+    private static void EmitConformanceImports(
+        StringBuilder sb,
+        IEnumerable<string> typeNames,
+        string zodOutputDir,
+        TypeScriptSettings ts,
+        ZodSettings zs,
+        SchemaModel model)
+    {
+        if (!model.Classes.Any() && !model.Enums.Any()) return;
+        if (!zs.ConformToTypeScriptTypes) return;
+
+        var names = typeNames.Distinct().OrderBy(n => n, System.StringComparer.Ordinal).ToList();
+        if (names.Count == 0) return;
+        var tsOutputDir = !string.IsNullOrEmpty(ts.OutputDir)
+            ? ts.OutputDir!
+            : model.Classes.FirstOrDefault()?.OutputDir ?? model.Enums.FirstOrDefault()?.OutputDir ?? ".";
+        if (ts.FileLayout == TypeScriptFileLayout.SingleFile)
+        {
+            var file = StripTsExtension(string.IsNullOrWhiteSpace(ts.SingleFileName) ? "models.ts" : ts.SingleFileName);
+            var path = SchemaParser.ComputeRelativeImport(zodOutputDir, tsOutputDir, file);
+            sb.AppendLine($"import type {{ {string.Join(", ", names)} }} from '{path}';");
+            return;
+        }
+
+        foreach (var name in names)
+        {
+            var matchingClass = model.Classes.FirstOrDefault(c => c.EmittedName == name || c.TypeScriptEmittedName == name);
+            var matchingEnum = model.Enums.FirstOrDefault(e => e.EmittedName == name || e.TypeScriptEmittedName == name);
+            var perTypeDir = matchingClass is not null
+                ? matchingClass.HasExplicitOutputDir ? matchingClass.OutputDir : !string.IsNullOrEmpty(ts.OutputDir) ? ts.OutputDir! : matchingClass.OutputDir
+                : matchingEnum is not null
+                    ? matchingEnum.HasExplicitOutputDir ? matchingEnum.OutputDir : !string.IsNullOrEmpty(ts.OutputDir) ? ts.OutputDir! : matchingEnum.OutputDir
+                    : tsOutputDir;
+            var path = SchemaParser.ComputeRelativeImport(zodOutputDir, perTypeDir ?? ".", name);
+            sb.AppendLine($"import type {{ {name} }} from '{path}';");
+        }
+    }
+
     private static void EmitClass(
         StringBuilder sb,
         SchemaClass cls,
@@ -140,6 +185,16 @@ internal static class ZodEmitter
         if (SkipClass(cls)) return;
 
         var schemaConst = cls.EmittedName + zs.SchemaConstSuffix;
+        var conform = zs.ConformToTypeScriptTypes && (cls.Targets & TypeTarget.TypeScript) != 0;
+        var lazySchemaNames = CollectLazySchemaNames(cls, model, nameByCSharp);
+        var typeAnnotation = lazySchemaNames.Count > 0
+            ? conform ? $": z.ZodType<{cls.EmittedName}>" : ": z.ZodType<any>"
+            : "";
+        var wrappers = (zs.Compilation == ZodCompilationMode.Compile ? 1 : 0)
+            + (conform ? 1 : 0);
+        var initializerPrefix = (zs.Compilation == ZodCompilationMode.Compile ? "z.compile(" : "")
+            + (conform ? $"z.toZod<{cls.EmittedName}>()(" : "");
+        var initializerSuffix = new string(')', wrappers);
 
         // Polymorphic base → z.discriminatedUnion("kind", [VariantASchema, …]).
         // Zod's discriminatedUnion gives exhaustive narrowing from the literal
@@ -153,14 +208,14 @@ internal static class ZodEmitter
                 .ToList();
             if (variantSchemas.Count > 0)
             {
-                sb.AppendLine($"export const {schemaConst} = z.discriminatedUnion('{cls.PolymorphicDiscriminator}', [");
+                sb.AppendLine($"export const {schemaConst}{typeAnnotation} = {initializerPrefix}z.discriminatedUnion('{cls.PolymorphicDiscriminator}', [");
                 for (int i = 0; i < variantSchemas.Count; i++)
                 {
                     var comma = i < variantSchemas.Count - 1 ? "," : "";
                     sb.AppendLine($"    {variantSchemas[i]}{comma}");
                 }
-                sb.AppendLine("]);");
-                if (zs.EmitInferredTypes)
+                sb.AppendLine($"]){initializerSuffix};");
+                if (zs.EmitInferredTypes && !conform)
                 {
                     sb.AppendLine($"export type {cls.EmittedName} = z.infer<typeof {schemaConst}>;");
                 }
@@ -197,7 +252,7 @@ internal static class ZodEmitter
             ifaceSchemas.Add(ifaceName + zs.SchemaConstSuffix);
         }
 
-        sb.Append($"export const {schemaConst} = ");
+        sb.Append($"export const {schemaConst}{typeAnnotation} = {initializerPrefix}");
         if (baseSchema is not null)
         {
             // Base first, then interface composition, then own shape via .extend.
@@ -248,7 +303,7 @@ internal static class ZodEmitter
             // Explicit TsName override bypasses the style transform — user said what they
             // wanted verbatim. Otherwise run the source name through the configured style.
             var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, zs.PropertyNameStyle);
-            var expr = BuildPropertyZodExpr(prop, nameByCSharp, cls.TypeParameters, zs.SchemaConstSuffix);
+            var expr = BuildPropertyZodExpr(prop, nameByCSharp, cls.TypeParameters, zs.SchemaConstSuffix, lazySchemaNames, conform);
             sb.AppendLine($"    {name}: {expr},");
         }
 
@@ -263,12 +318,14 @@ internal static class ZodEmitter
                 : "z.unknown()";
             catchall = $".catchall({catchallInner})";
         }
-        sb.AppendLine($"}}){catchall};");
+        sb.AppendLine($"}}){catchall}{initializerSuffix};");
 
-        if (zs.EmitInferredTypes)
+        if (zs.EmitInferredTypes && !conform)
         {
             sb.AppendLine($"export type {cls.EmittedName} = z.infer<typeof {schemaConst}>;");
         }
+        if (zs.EmitValidationGuards)
+            sb.AppendLine($"export const {ValidationGuardName(cls.EmittedName)} = (value: unknown): value is z.output<typeof {schemaConst}> => {schemaConst}.validate(value);");
         sb.AppendLine();
     }
 
@@ -276,12 +333,17 @@ internal static class ZodEmitter
     {
         if (SkipEnum(en)) return;
         var schemaConst = en.EmittedName + zs.SchemaConstSuffix;
+        var conform = zs.ConformToTypeScriptTypes && (en.Targets & TypeTarget.TypeScript) != 0;
+        var prefix = (zs.Compilation == ZodCompilationMode.Compile ? "z.compile(" : "")
+            + (conform ? $"z.toZod<{en.EmittedName}>()(" : "");
+        var suffix = new string(')', (zs.Compilation == ZodCompilationMode.Compile ? 1 : 0)
+            + (conform ? 1 : 0));
 
         if (en.IsStringSerialized)
         {
             // z.enum(['A','B','C']) — exhaustive string literal union.
             var members = string.Join(", ", en.Members.Select(m => $"'{m.Name}'"));
-            sb.AppendLine($"export const {schemaConst} = z.enum([{members}]);");
+            sb.AppendLine($"export const {schemaConst} = {prefix}z.enum([{members}]){suffix};");
         }
         else
         {
@@ -290,13 +352,15 @@ internal static class ZodEmitter
             // take Zod target alone). Literal union works without a native enum
             // import and Zod narrows exhaustively.
             var literals = string.Join(", ", en.Members.Select(m => $"z.literal({m.Value})"));
-            sb.AppendLine($"export const {schemaConst} = z.union([{literals}]);");
+            sb.AppendLine($"export const {schemaConst} = {prefix}z.union([{literals}]){suffix};");
         }
 
-        if (zs.EmitInferredTypes)
+        if (zs.EmitInferredTypes && !conform)
         {
             sb.AppendLine($"export type {en.EmittedName} = z.infer<typeof {schemaConst}>;");
         }
+        if (zs.EmitValidationGuards)
+            sb.AppendLine($"export const {ValidationGuardName(en.EmittedName)} = (value: unknown): value is z.output<typeof {schemaConst}> => {schemaConst}.validate(value);");
         sb.AppendLine();
     }
 
@@ -306,25 +370,28 @@ internal static class ZodEmitter
         SchemaProperty prop,
         IReadOnlyDictionary<string, string> nameByCSharp,
         IReadOnlyList<string> typeParameters,
-        string schemaConstSuffix)
+        string schemaConstSuffix,
+        HashSet<string>? lazySchemaNames = null,
+        bool conformToTypeScript = false)
     {
         var targetFqn = prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName;
-        var core = MapCSharpToZod(targetFqn, prop.IsNullable, nameByCSharp, schemaConstSuffix, typeParameters);
+        var core = MapCSharpToZod(targetFqn, prop.IsNullable, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames);
 
         // Apply string-shaped constraints (length, regex, email/url/uuid formats).
         // Numeric constraints use gte/lte.
         core = ApplyStringConstraints(core, prop);
         core = ApplyNumericConstraints(core, prop);
 
-        // Nullable + optional → .nullish() is the Zod shortcut for "null or
-        // undefined or absent". Read-only (computed) props stay optional only —
+        // Nullable + optional → .nullish() by default. In TypeScript conformance
+        // mode, mirror the TS emitter's optional-only contract so z.toZod<T>()
+        // can prove the schemas match. Read-only (computed) props stay optional —
         // server always produces a value, client doesn't supply one. Explicit
         // `[Required]` / `[ZRequired]` / C# `required` override NRT: field must
         // be provided, so no nullish/optional even if the C# type is `string?`.
         var effectivelyNullable = prop.IsNullable && !prop.IsExplicitlyRequired;
         if (effectivelyNullable)
-            core += ".nullish()";
-        else if (prop.IsReadOnly)
+            core += conformToTypeScript ? ".optional()" : ".nullish()";
+        else if (prop.IsReadOnly || prop.IsPatchField || ExtractGeneric(targetFqn.TrimEnd('?'), "PatchField") is not null)
             core += ".optional()";
 
         return core;
@@ -342,7 +409,7 @@ internal static class ZodEmitter
         // SchemaParser normalises [EmailAddress]/[ZEmail] → "email" etc. Zod 4
         // moved these to top-level factories (z.email(), z.uuid(), z.iso.datetime())
         // and deprecated the chained z.string().email() forms.
-        expr = ApplyStringFormat(expr, prop.OpenApiFormat);
+        expr = ApplyStringFormat(expr, prop.ZodFormat, prop.ZodFormatLength, prop.OpenApiFormat);
 
         if (prop.MinLength is int min) expr += $".min({min})";
         if (prop.MaxLength is int max) expr += $".max({max})";
@@ -362,16 +429,32 @@ internal static class ZodEmitter
     /// The factory replaces the leading <c>z.string()</c> so any subsequent
     /// <c>.min()</c>/<c>.max()</c>/<c>.regex()</c> chain onto it.
     /// </summary>
-    private static string ApplyStringFormat(string expr, string? format)
+    private static string ApplyStringFormat(string expr, ZodStringFormat? zodFormat, int? formatLength, string? format)
     {
-        var factory = format switch
+        var factory = zodFormat switch
         {
-            "email" => "z.email()",
-            "uri" or "url" => "z.url()",
-            "uuid" => "z.uuid()",
-            "date-time" => "z.iso.datetime()",
-            "date" => "z.iso.date()",
-            _ => null,
+            ZodStringFormat.Email => "z.email()",
+            ZodStringFormat.Url => "z.url()",
+            ZodStringFormat.Uuid => "z.uuid()",
+            ZodStringFormat.Date => "z.iso.date()",
+            ZodStringFormat.DateTime => "z.iso.datetime()",
+            ZodStringFormat.Hostname => "z.hostname()",
+            ZodStringFormat.Ulid => "z.ulid()",
+            ZodStringFormat.NanoId when formatLength is > 0 => $"z.nanoid({{ length: {formatLength.Value} }})",
+            ZodStringFormat.NanoId => "z.nanoid()",
+            ZodStringFormat.Base64 => "z.base64()",
+            ZodStringFormat.Base64Url => "z.base64url()",
+            ZodStringFormat.CreditCard => "z.creditCard()",
+            ZodStringFormat.Iban => "z.iban()",
+            _ => format switch
+            {
+                "email" => "z.email()",
+                "uri" or "url" => "z.url()",
+                "uuid" => "z.uuid()",
+                "date-time" => "z.iso.datetime()",
+                "date" => "z.iso.date()",
+                _ => null,
+            },
         };
         if (factory is null) return expr; // no recognised format
 
@@ -415,7 +498,8 @@ internal static class ZodEmitter
         bool isNullable,
         IReadOnlyDictionary<string, string> nameByCSharp,
         string schemaConstSuffix,
-        IReadOnlyList<string>? typeParameters = null)
+        IReadOnlyList<string>? typeParameters = null,
+        HashSet<string>? lazySchemaNames = null)
     {
         var t = cSharpType.TrimEnd('?');
 
@@ -428,24 +512,26 @@ internal static class ZodEmitter
 
         // Unwrap Dto's PatchField<T> tri-state — Zod consumers validate plain T.
         var patchInner = ExtractGeneric(t, "PatchField");
-        if (patchInner != null) return MapCSharpToZod(patchInner, isNullable, nameByCSharp, schemaConstSuffix, typeParameters);
+        if (patchInner != null) return MapCSharpToZod(patchInner, isNullable, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames);
 
         // User DTO reference → direct reference to the sibling schema const.
         // FilePerClass mode: import resolution runs before the z.object body
         // is evaluated, so direct refs are safe. SingleFile mode: the topo sort
         // guarantees declaration order.
         if (nameByCSharp.TryGetValue(t, out var mapped))
-            return mapped + schemaConstSuffix;
+            return lazySchemaNames is not null && lazySchemaNames.Contains(mapped)
+                ? $"z.lazy(() => {mapped}{schemaConstSuffix})"
+                : mapped + schemaConstSuffix;
 
         if (t.EndsWith("[]"))
-            return $"z.array({MapCSharpToZod(t.Substring(0, t.Length - 2), false, nameByCSharp, schemaConstSuffix, typeParameters)})";
+            return $"z.array({MapCSharpToZod(t.Substring(0, t.Length - 2), false, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames)})";
         var listMatch = ExtractGeneric(t, "List", "IList", "ICollection", "IEnumerable", "IReadOnlyList", "IReadOnlyCollection");
         if (listMatch != null)
-            return $"z.array({MapCSharpToZod(listMatch, false, nameByCSharp, schemaConstSuffix, typeParameters)})";
+            return $"z.array({MapCSharpToZod(listMatch, false, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames)})";
 
         var dictMatch = ExtractTwoGenericArgs(t, "Dictionary", "IDictionary", "IReadOnlyDictionary");
         if (dictMatch != null)
-            return $"z.record({MapCSharpToZod(dictMatch.Value.K, false, nameByCSharp, schemaConstSuffix, typeParameters)}, {MapCSharpToZod(dictMatch.Value.V, false, nameByCSharp, schemaConstSuffix, typeParameters)})";
+            return $"z.record({MapCSharpToZod(dictMatch.Value.K, false, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames)}, {MapCSharpToZod(dictMatch.Value.V, false, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames)})";
 
         // Zod 4 top-level format factories — the chained z.string().uuid() forms
         // are deprecated in Zod 4. See also ApplyStringFormat for attr-driven formats.
@@ -506,6 +592,65 @@ internal static class ZodEmitter
     }
 
     // ── topological sort (SingleFile mode) ──────────────────────────────────
+
+    private static HashSet<string> CollectLazySchemaNames(
+        SchemaClass owner,
+        SchemaModel model,
+        IReadOnlyDictionary<string, string> nameByCSharp)
+    {
+        var classes = model.Classes.ToDictionary(c => c.CSharpFullName, c => c);
+        var result = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var prop in owner.Properties)
+        {
+            foreach (var referenced in EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes))
+            {
+                if (CanReach(referenced, owner.CSharpFullName, classes, new HashSet<string>(System.StringComparer.Ordinal))
+                    && nameByCSharp.TryGetValue(referenced, out var emittedName))
+                    result.Add(emittedName);
+            }
+        }
+        return result;
+    }
+
+    private static bool CanReach(
+        string current,
+        string target,
+        IReadOnlyDictionary<string, SchemaClass> classes,
+        HashSet<string> visited)
+    {
+        if (current == target) return true;
+        if (!visited.Add(current) || !classes.TryGetValue(current, out var cls)) return false;
+        foreach (var prop in cls.Properties)
+            foreach (var next in EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes))
+                if (CanReach(next, target, classes, visited)) return true;
+        return false;
+    }
+
+    private static IEnumerable<string> EnumerateReferencedTypes(
+        string cSharpType,
+        IReadOnlyDictionary<string, SchemaClass> classes)
+    {
+        var t = cSharpType.TrimEnd('?');
+        if (classes.ContainsKey(t)) { yield return t; yield break; }
+        if (t.EndsWith("[]", System.StringComparison.Ordinal))
+        {
+            foreach (var item in EnumerateReferencedTypes(t.Substring(0, t.Length - 2), classes)) yield return item;
+            yield break;
+        }
+        var single = ExtractGeneric(t, "PatchField", "Nullable", "List", "IList", "ICollection", "IEnumerable",
+            "IReadOnlyList", "IReadOnlyCollection", "HashSet", "ISet", "IReadOnlySet");
+        if (single is not null)
+        {
+            foreach (var item in EnumerateReferencedTypes(single, classes)) yield return item;
+            yield break;
+        }
+        var pair = ExtractTwoGenericArgs(t, "Dictionary", "IDictionary", "IReadOnlyDictionary");
+        if (pair is not null)
+        {
+            foreach (var item in EnumerateReferencedTypes(pair.Value.K, classes)) yield return item;
+            foreach (var item in EnumerateReferencedTypes(pair.Value.V, classes)) yield return item;
+        }
+    }
 
     /// <summary>
     /// Returns classes ordered so every schema is declared before any that
@@ -571,6 +716,11 @@ internal static class ZodEmitter
         return null;
     }
 
+    private static string StripTsExtension(string fileName) =>
+        fileName.EndsWith(".ts", System.StringComparison.OrdinalIgnoreCase)
+            ? fileName.Substring(0, fileName.Length - 3)
+            : fileName;
+
     private static (string K, string V)? ExtractTwoGenericArgs(string typeName, params string[] names)
     {
         var inner = ExtractGeneric(typeName, names);
@@ -610,6 +760,11 @@ internal static class ZodEmitter
             _ => name,
         };
     }
+
+    private static string ValidationGuardName(string emittedName) =>
+        string.IsNullOrEmpty(emittedName)
+            ? "isValue"
+            : "is" + char.ToUpperInvariant(emittedName[0]) + emittedName.Substring(1);
 
     private static string ToSeparated(string name, char sep)
     {

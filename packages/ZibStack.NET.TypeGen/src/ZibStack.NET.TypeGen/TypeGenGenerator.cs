@@ -540,6 +540,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             prop.OpenApiFormat ??= po.OpenApiFormat;
             prop.OpenApiDescription ??= po.OpenApiDescription;
             prop.OpenApiNullableOverride ??= po.OpenApiNullable;
+            prop.ZodFormat ??= po.ZodFormat;
+            prop.ZodFormatLength ??= po.ZodFormatLength;
             if (po.Ignore) { prop.TsIgnore = true; prop.OpenApiIgnore = true; }
             prop.TsIgnore |= po.TsIgnore;
             prop.OpenApiIgnore |= po.OpenApiIgnore;

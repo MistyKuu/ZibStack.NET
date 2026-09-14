@@ -3,7 +3,7 @@
 Roslyn source generator that emits **TypeScript** (`.ts`), **OpenAPI 3.0**
 (`.yaml` / `.json`), and **TanStack Query** clients from C# DTOs/endpoints
 annotated with `[GenerateTypes]`. Optional **Python** (Pydantic v2 / dataclass)
-output. Compile-time only, zero reflection, no running app required.
+and **Zod 4.6** output. Compile-time only, zero reflection, no running app required.
 
 ## What it does
 
@@ -74,6 +74,65 @@ dotnet add package ZibStack.NET.TypeGen
 That's it — `ZibStack.NET.TypeGen.Abstractions` (attributes + settings types)
 is pulled in transitively. The analyzer self-registers; everything else is
 in the attribute / configurator surface.
+
+## Zod 4.6 and validated TanStack clients
+
+Zod generation is opt-in per model. The configurator can compile schemas,
+check them against the emitted TypeScript type, add `isX` guards, and make the
+TanStack client parse API payloads at the network boundary:
+
+```csharp
+[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod | TypeTarget.TanStackQuery)]
+public sealed class Payment
+{
+    [ZodFormat(ZodStringFormat.CreditCard)]
+    public string CardNumber { get; set; } = "";
+
+    [ZodFormat(ZodStringFormat.Iban)]
+    public string Iban { get; set; } = "";
+
+    public string PublicToken { get; set; } = "";
+
+    public Payment? Parent { get; set; } // emitted through z.lazy(...)
+}
+
+public sealed class TypeGenConfig : ITypeGenConfigurator
+{
+    public void Configure(ITypeGenBuilder b)
+    {
+        b.Zod(z =>
+        {
+            z.Compilation = ZodCompilationMode.Compile;
+            z.ConformToTypeScriptTypes = true;
+            z.EmitValidationGuards = true;
+        });
+
+        b.TanStackQuery(q =>
+            q.PayloadValidation = QueryPayloadValidation.RequestsAndResponses);
+
+        b.ForType<Payment>()
+            .Property(x => x.PublicToken)
+            .ZodNanoId(16); // custom-length NanoID is also available fluently
+    }
+}
+```
+
+The generated module uses Zod's native factories and compiler:
+
+```ts
+export const PaymentSchema = z.compile(z.toZod<Payment>()(z.object({
+  cardNumber: z.creditCard(),
+  iban: z.iban(),
+  publicToken: z.nanoid({ length: 16 }),
+  parent: z.lazy(() => PaymentSchema).optional(),
+})));
+
+export const isPayment = (value: unknown): value is z.output<typeof PaymentSchema> =>
+  PaymentSchema.validate(value);
+```
+
+See the sample project's `ZodFeatureExample` for credit cards, IBANs, ULIDs,
+hostnames, Base64/Base64URL, custom NanoIDs, recursion, and response validation.
 
 ## Docs
 

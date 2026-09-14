@@ -72,9 +72,12 @@ b.Property(x => x.Role)
 
 b.Property(x => x.CardNumber)
     .CreditCard();
+
+b.Property(x => x.BankAccount)
+    .Iban();
 ```
 
-Available fluent methods: `.Required()`, `.Email()`, `.Url()`, `.NotEmpty()`, `.MinLength(n)`, `.MaxLength(n)`, `.Range(min, max)`, `.Match(pattern)`, `.In(values)`, `.NotIn(values)`, `.CreditCard()`, `.Phone()`.
+Available fluent methods: `.Required()`, `.Email()`, `.Url()`, `.NotEmpty()`, `.MinLength(n)`, `.MaxLength(n)`, `.Range(min, max)`, `.Match(pattern)`, `.In(values)`, `.NotIn(values)`, `.CreditCard()`, `.Iban()`, `.Phone()`.
 
 ## Cross-Field Comparisons
 

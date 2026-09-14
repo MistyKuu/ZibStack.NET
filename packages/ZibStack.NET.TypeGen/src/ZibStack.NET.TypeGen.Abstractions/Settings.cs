@@ -199,6 +199,33 @@ public enum ZodFileLayout
     SingleFile,
 }
 
+/// <summary>Controls whether generated schemas use Zod's explicit AOT compiler.</summary>
+public enum ZodCompilationMode
+{
+    /// <summary>Emit ordinary schemas. This preserves the pre-4.6 behaviour.</summary>
+    None,
+
+    /// <summary>Wrap schemas in <c>z.compile(...)</c> for Zod's optimized parser.</summary>
+    Compile,
+}
+
+/// <summary>Built-in Zod string checks available to per-property configuration.</summary>
+public enum ZodStringFormat
+{
+    Email,
+    Url,
+    Uuid,
+    Date,
+    DateTime,
+    Hostname,
+    Ulid,
+    NanoId,
+    Base64,
+    Base64Url,
+    CreditCard,
+    Iban,
+}
+
 /// <summary>
 /// Zod emitter settings. Emits TypeScript source files importing <c>zod</c> —
 /// the consuming project must have a <c>zod</c> dependency installed. Independent
@@ -239,6 +266,22 @@ public sealed class ZodSettings
     /// </summary>
     public bool EmitInferredTypes { get; set; } = true;
 
+    /// <summary>
+    /// When enabled, imports the generated TypeScript model and wraps each schema
+    /// with <c>z.toZod&lt;T&gt;()(...)</c>. Zod then reports schema/model drift during
+    /// TypeScript compilation. The inferred alias is omitted to avoid a duplicate name.
+    /// </summary>
+    public bool ConformToTypeScriptTypes { get; set; } = false;
+
+    /// <summary>Opt in to Zod 4.5+'s explicit schema compiler. Default is <see cref="ZodCompilationMode.None"/>.</summary>
+    public ZodCompilationMode Compilation { get; set; } = ZodCompilationMode.None;
+
+    /// <summary>
+    /// Emit an <c>is{Name}(value)</c> type guard backed by Zod 4.5+'s short-circuiting
+    /// <c>validate</c> API. Default <c>false</c>.
+    /// </summary>
+    public bool EmitValidationGuards { get; set; } = false;
+
     /// <summary>Default <see cref="NameStyle.CamelCase"/> — JS/TS convention.</summary>
     public NameStyle PropertyNameStyle { get; set; } = NameStyle.CamelCase;
 
@@ -256,6 +299,19 @@ public enum QueryFileLayout
 
     /// <summary>One <c>{tag}.gen.ts</c> file per endpoint tag/resource.</summary>
     SplitByTag,
+}
+
+/// <summary>Controls runtime Zod validation in generated TanStack Query clients.</summary>
+public enum QueryPayloadValidation
+{
+    /// <summary>Trust request and response payloads, preserving existing behaviour.</summary>
+    None,
+
+    /// <summary>Parse successful API responses through their generated Zod schemas.</summary>
+    Responses,
+
+    /// <summary>Parse request bodies and successful responses through generated Zod schemas.</summary>
+    RequestsAndResponses,
 }
 
 /// <summary>
@@ -297,6 +353,15 @@ public sealed class TanStackQuerySettings
     /// computed from <see cref="OutputDir"/> to the TypeScript model output.
     /// </summary>
     public string? ModelsImportPath { get; set; }
+
+    /// <summary>
+    /// Optional import base for Zod schemas. When unset, relative imports are
+    /// computed from <see cref="OutputDir"/> to the configured Zod output.
+    /// </summary>
+    public string? SchemasImportPath { get; set; }
+
+    /// <summary>Opt-in runtime request/response parsing using generated Zod schemas.</summary>
+    public QueryPayloadValidation PayloadValidation { get; set; } = QueryPayloadValidation.None;
 
     /// <summary>Emit <c>queryOptions</c> helpers for GET endpoints. Default <c>true</c>.</summary>
     public bool EmitQueryOptions { get; set; } = true;

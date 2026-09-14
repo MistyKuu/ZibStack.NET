@@ -89,6 +89,8 @@ public class ConfiguratorParserTests
                         q.ApiClientImportPath = "./client";
                         q.ApiClientName = "request";
                         q.ModelsImportPath = "../models";
+                        q.SchemasImportPath = "../schemas";
+                        q.PayloadValidation = QueryPayloadValidation.RequestsAndResponses;
                         q.EmitHooks = false;
                         q.EmitCacheHelpers = false;
                     });
@@ -105,8 +107,36 @@ public class ConfiguratorParserTests
         Assert.Equal("./client", parsed.Settings.TanStackQuery.ApiClientImportPath);
         Assert.Equal("request", parsed.Settings.TanStackQuery.ApiClientName);
         Assert.Equal("../models", parsed.Settings.TanStackQuery.ModelsImportPath);
+        Assert.Equal("../schemas", parsed.Settings.TanStackQuery.SchemasImportPath);
+        Assert.Equal(QueryPayloadValidation.RequestsAndResponses, parsed.Settings.TanStackQuery.PayloadValidation);
         Assert.False(parsed.Settings.TanStackQuery.EmitHooks);
         Assert.False(parsed.Settings.TanStackQuery.EmitCacheHelpers);
+    }
+
+    [Fact]
+    public void ZodBlockAndPropertyFormat_SetNewSettings()
+    {
+        var parsed = Parse("""
+            public class Payment { public string Card { get; set; } = ""; }
+            public class Cfg : ITypeGenConfigurator {
+                public void Configure(ITypeGenBuilder b) {
+                    b.Zod(z => {
+                        z.Compilation = ZodCompilationMode.Compile;
+                        z.ConformToTypeScriptTypes = true;
+                        z.EmitValidationGuards = true;
+                    });
+                    b.ForType<Payment>().Property(x => x.Card).ZodFormat(ZodStringFormat.CreditCard);
+                    b.ForType<Payment>().Property(x => x.Card).ZodNanoId(16);
+                }
+            }
+            """, out var diags);
+
+        Assert.Empty(diags);
+        Assert.Equal(ZodCompilationMode.Compile, parsed!.Settings.Zod.Compilation);
+        Assert.True(parsed.Settings.Zod.ConformToTypeScriptTypes);
+        Assert.True(parsed.Settings.Zod.EmitValidationGuards);
+        Assert.Equal(ZodStringFormat.NanoId, parsed.PerType["Payment"].Properties["Card"].ZodFormat);
+        Assert.Equal(16, parsed.PerType["Payment"].Properties["Card"].ZodFormatLength);
     }
 
     [Fact]
@@ -457,6 +487,10 @@ public class ConfiguratorParserTests
                 public enum NameStyle { AsIs, CamelCase, SnakeCase, PascalCase }
                 public enum TypeScriptFileLayout { FilePerClass, SingleFile }
                 public enum QueryFileLayout { SingleFile, SplitByTag }
+                public enum QueryPayloadValidation { None, Responses, RequestsAndResponses }
+                public enum ZodFileLayout { FilePerClass, SingleFile }
+                public enum ZodCompilationMode { None, Compile }
+                public enum ZodStringFormat { Email, Url, Uuid, Date, DateTime, Hostname, Ulid, NanoId, Base64, Base64Url, CreditCard, Iban }
                 public sealed class TypeScriptSettings {
                     public string? OutputDir { get; set; }
                     public string SingleFileName { get; set; } = "models.ts";
@@ -481,16 +515,32 @@ public class ConfiguratorParserTests
                     public string? ApiClientImportPath { get; set; }
                     public string ApiClientName { get; set; } = "apiFetch";
                     public string? ModelsImportPath { get; set; }
+                    public string? SchemasImportPath { get; set; }
+                    public QueryPayloadValidation PayloadValidation { get; set; }
                     public bool EmitQueryOptions { get; set; } = true;
                     public bool EmitMutationOptions { get; set; } = true;
                     public bool EmitHooks { get; set; } = true;
                     public bool EmitCacheHelpers { get; set; } = true;
                     public bool EmitGeneratedBanner { get; set; } = true;
                 }
+                public sealed class ZodSettings {
+                    public string? OutputDir { get; set; }
+                    public ZodFileLayout FileLayout { get; set; }
+                    public string SingleFileName { get; set; } = "schemas.ts";
+                    public string FileSuffix { get; set; } = ".schema";
+                    public string SchemaConstSuffix { get; set; } = "Schema";
+                    public bool EmitInferredTypes { get; set; } = true;
+                    public bool ConformToTypeScriptTypes { get; set; }
+                    public ZodCompilationMode Compilation { get; set; }
+                    public bool EmitValidationGuards { get; set; }
+                    public NameStyle PropertyNameStyle { get; set; }
+                    public bool EmitGeneratedBanner { get; set; } = true;
+                }
                 public interface ITypeGenBuilder {
                     ITypeGenBuilder TypeScript(Action<TypeScriptSettings> c);
                     ITypeGenBuilder OpenApi(Action<OpenApiSettings> c);
                     ITypeGenBuilder TanStackQuery(Action<TanStackQuerySettings> c);
+                    ITypeGenBuilder Zod(Action<ZodSettings> c);
                     ITypeBuilder<T> ForType<T>();
                     ITypeBuilder<object> ForType(System.Type t);
                 }
@@ -512,6 +562,8 @@ public class ConfiguratorParserTests
                     IPropertyBuilder<TClass, TProp> OpenApiType(string t);
                     IPropertyBuilder<TClass, TProp> OpenApiRef(string s);
                     IPropertyBuilder<TClass, TProp> OpenApiFormat(string f);
+                    IPropertyBuilder<TClass, TProp> ZodFormat(ZodStringFormat f);
+                    IPropertyBuilder<TClass, TProp> ZodNanoId(int length);
                     IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);
                     IPropertyBuilder<TClass, TProp> OpenApiNullable(bool n);
                     IPropertyBuilder<TClass, TProp> Ignore();
