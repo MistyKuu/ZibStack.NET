@@ -127,6 +127,7 @@ public class ConfiguratorParserTests
                     });
                     b.ForType<Payment>().Property(x => x.Card).ZodFormat(ZodStringFormat.CreditCard);
                     b.ForType<Payment>().Property(x => x.Card).ZodNanoId(16);
+                    b.ForType<Payment>().Property(x => x.Card).ZodSchema("ExternalCardSchema", "@company/schemas");
                 }
             }
             """, out var diags);
@@ -137,6 +138,8 @@ public class ConfiguratorParserTests
         Assert.True(parsed.Settings.Zod.EmitValidationGuards);
         Assert.Equal(ZodStringFormat.NanoId, parsed.PerType["Payment"].Properties["Card"].ZodFormat);
         Assert.Equal(16, parsed.PerType["Payment"].Properties["Card"].ZodFormatLength);
+        Assert.Equal("ExternalCardSchema", parsed.PerType["Payment"].Properties["Card"].ZodSchema);
+        Assert.Equal("@company/schemas", parsed.PerType["Payment"].Properties["Card"].ZodSchemaImportFrom);
     }
 
     [Fact]
@@ -564,6 +567,7 @@ public class ConfiguratorParserTests
                     IPropertyBuilder<TClass, TProp> OpenApiFormat(string f);
                     IPropertyBuilder<TClass, TProp> ZodFormat(ZodStringFormat f);
                     IPropertyBuilder<TClass, TProp> ZodNanoId(int length);
+                    IPropertyBuilder<TClass, TProp> ZodSchema(string expression, string importFrom);
                     IPropertyBuilder<TClass, TProp> OpenApiDescription(string d);
                     IPropertyBuilder<TClass, TProp> OpenApiNullable(bool n);
                     IPropertyBuilder<TClass, TProp> Ignore();

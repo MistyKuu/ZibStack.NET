@@ -23,6 +23,8 @@ public sealed class ZodCompilationTests : IDisposable
     // Pin both packages for determinism across machines / CI.
     private const string TscPackageSpec = "typescript@5.7.3";
     private const string ZodPackageSpec = "zod@4.6.1";
+    private const string ZodGeoJsonPackageSpec = "zod-geojson@1.7.1";
+    private const string GeoJsonTypesPackageSpec = "@types/geojson@7946.0.16";
 
     private readonly string _tempDir;
     private readonly bool _skip;
@@ -279,14 +281,90 @@ public sealed class ZodCompilationTests : IDisposable
             $"tsc failed (exit {exitCode}):{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
     }
 
+    [Fact]
+    public async Task ExternalZodGeoJsonSchema_CompilesAndInfersPropertyType()
+    {
+        if (_skip) return;
+
+        var model = new SchemaModel();
+        var order = ClsModel("Order", new[] { ("DeliveryPoint", "GeoJSON.Text.Geometry.Point", true) });
+        order.Targets = TypeTarget.TypeScript | TypeTarget.Zod;
+        order.Properties[0].TsTypeOverride = "Point";
+        order.Properties[0].TsImportFrom = "geojson";
+        order.Properties[0].ZodSchemaOverride = "GeoJSONPointSchema";
+        order.Properties[0].ZodSchemaImportFrom = "zod-geojson";
+        model.Classes.Add(order);
+
+        var settings = new GlobalSettings();
+        settings.Zod.Compilation = ZodCompilationMode.Compile;
+        var files = TypeScriptEmitter.Emit(model, settings).Concat(ZodEmitter.Emit(model, settings)).ToList();
+        await PrepareWorkspaceAsync(ZodGeoJsonPackageSpec, GeoJsonTypesPackageSpec);
+        foreach (var file in files)
+            File.WriteAllText(Path.Combine(_tempDir, file.FileName), file.Content);
+
+        File.WriteAllText(Path.Combine(_tempDir, "consumer.ts"), """
+            import type { Point } from 'geojson';
+            import { OrderSchema } from './Order.schema';
+
+            const order = OrderSchema.parse({
+                deliveryPoint: { type: 'Point', coordinates: [1, 2] },
+            });
+            const point: Point | null | undefined = order.deliveryPoint;
+            void point;
+            """);
+
+        var compileFiles = files.Select(file => file.FileName).Append("consumer.ts");
+        var (exitCode, stdout, stderr) = await RunAsync(
+            "npx",
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
+                string.Join(" ", compileFiles),
+            workingDir: _tempDir);
+
+        Assert.True(exitCode == 0,
+            $"tsc failed (exit {exitCode}):{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+    }
+
+    [Fact]
+    public async Task ExternalZodGeoJsonSchema_ExactPackageAliasSupportsConformance()
+    {
+        if (_skip) return;
+
+        var model = new SchemaModel();
+        var order = ClsModel("ConformingOrder", new[] { ("DeliveryPoint", "GeoJSON.Text.Geometry.Point", true) });
+        order.Targets = TypeTarget.TypeScript | TypeTarget.Zod;
+        order.Properties[0].TsTypeOverride = "GeoJSONPoint";
+        order.Properties[0].TsImportFrom = "zod-geojson";
+        order.Properties[0].ZodSchemaOverride = "GeoJSONPointSchema";
+        order.Properties[0].ZodSchemaImportFrom = "zod-geojson";
+        model.Classes.Add(order);
+
+        var settings = new GlobalSettings();
+        settings.Zod.ConformToTypeScriptTypes = true;
+        settings.Zod.Compilation = ZodCompilationMode.Compile;
+        var files = TypeScriptEmitter.Emit(model, settings).Concat(ZodEmitter.Emit(model, settings)).ToList();
+        await PrepareWorkspaceAsync(ZodGeoJsonPackageSpec);
+        foreach (var file in files)
+            File.WriteAllText(Path.Combine(_tempDir, file.FileName), file.Content);
+
+        var (exitCode, stdout, stderr) = await RunAsync(
+            "npx",
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --esModuleInterop --target ES2020 --moduleResolution node " +
+                string.Join(" ", files.Select(file => file.FileName)),
+            workingDir: _tempDir);
+
+        Assert.True(exitCode == 0,
+            $"tsc failed (exit {exitCode}):{Environment.NewLine}{stdout}{Environment.NewLine}{stderr}");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    private async Task PrepareWorkspaceAsync()
+    private async Task PrepareWorkspaceAsync(params string[] additionalPackages)
     {
         // Install zod locally so the emitted `import { z } from 'zod';` resolves.
         // Node resolution walks up from temp dir; a sibling node_modules is enough.
+        var packages = string.Join(" ", new[] { ZodPackageSpec }.Concat(additionalPackages));
         var (code, _, err) = await RunAsync("npx",
-            $"-y -p npm@10 npm install --silent --no-audit --no-fund --no-package-lock {ZodPackageSpec}",
+            $"-y -p npm@10 npm install --silent --no-audit --no-fund --no-package-lock {packages}",
             workingDir: _tempDir);
         if (code != 0)
             throw new InvalidOperationException($"zod install failed (exit {code}): {err}");

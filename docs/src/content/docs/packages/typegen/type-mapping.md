@@ -22,7 +22,10 @@ The emitters translate C# types to target-language equivalents. Defaults:
 | `enum` | `export enum` (numeric values) | `type: string, enum: [...]` | `IntEnum` |
 | `enum` with `[JsonConverter(typeof(JsonStringEnumConverter))]` | `export type X = "A" \| "B";` (default — `TsEnumStyle.Union`) | `type: string, enum: [...]` | `(str, Enum)` |
 
-Override any single property with `[TsType("...")]` or `[OpenApiProperty(Format = "...")]`.
+Override any single property with `[TsType("...")]`, `[ZodSchema("...")]`, or
+`[OpenApiProperty(Format = "...")]`. `[TsType]` is static type information;
+`[ZodSchema]` supplies a runtime validator. See the [Zod emitter](/packages/typegen/emitters/zod/)
+for external-schema imports such as `zod-geojson`.
 
 ## `[TsType]` with imports
 

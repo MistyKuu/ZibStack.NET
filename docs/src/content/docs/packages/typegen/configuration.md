@@ -65,6 +65,12 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             .WithGeneratedTypes(TypeTarget.TypeScript | TypeTarget.OpenApi)
             .TsName("ArticleDto")
             .Property(p => p.Body).TsType("string | null");
+
+        // Runtime-schema override from a frontend dependency. This is separate
+        // from TsType because TypeScript types do not validate runtime values.
+        b.ForType<Order>()
+            .Property(p => p.DeliveryPoint)
+            .ZodSchema("GeoJSONPointSchema", "zod-geojson");
     }
 }
 ```

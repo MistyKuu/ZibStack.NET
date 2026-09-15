@@ -522,6 +522,12 @@ internal sealed class SchemaProperty
     public ZodStringFormat? ZodFormat { get; set; }
     public int? ZodFormatLength { get; set; }
 
+    /// <summary>User-supplied Zod schema expression that replaces inferred property mapping.</summary>
+    public string? ZodSchemaOverride { get; set; }
+
+    /// <summary>Optional module specifier supplying named symbols used by <see cref="ZodSchemaOverride"/>.</summary>
+    public string? ZodSchemaImportFrom { get; set; }
+
     /// <summary>True for ZibStack.NET.Dto's tri-state <c>PatchField&lt;T&gt;</c>.</summary>
     public bool IsPatchField { get; set; }
 

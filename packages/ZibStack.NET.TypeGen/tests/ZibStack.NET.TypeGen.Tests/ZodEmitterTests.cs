@@ -109,6 +109,62 @@ public class ZodEmitterTests
     }
 
     [Fact]
+    public void ExternalSchemaOverride_ReplacesInferenceAndEmitsImport()
+    {
+        var cls = Cls("Order", props: new[] { ("DeliveryPoint", "GeoJSON.Text.Geometry.Point", true) });
+        cls.Properties[0].ZodSchemaOverride = "GeoJSONPointSchema";
+        cls.Properties[0].ZodSchemaImportFrom = "zod-geojson";
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("import { GeoJSONPointSchema } from 'zod-geojson';", content);
+        Assert.Contains("deliveryPoint: GeoJSONPointSchema.nullish()", content);
+        Assert.DoesNotContain("deliveryPoint: z.unknown()", content);
+    }
+
+    [Fact]
+    public void ExternalSchemaImports_AreGroupedAndDeduplicatedInSingleFile()
+    {
+        var order = Cls("Order", props: new[] { ("Point", "object", false), ("Feature", "object", false) });
+        order.Properties[0].ZodSchemaOverride = "GeoJSONPointSchema";
+        order.Properties[0].ZodSchemaImportFrom = "zod-geojson";
+        order.Properties[1].ZodSchemaOverride = "GeoJSONFeatureSchema";
+        order.Properties[1].ZodSchemaImportFrom = "zod-geojson";
+        var settings = new GlobalSettings { Zod = { FileLayout = ZodFileLayout.SingleFile } };
+
+        var content = ZodEmitter.Emit(ModelWith(order), settings).Single().Content;
+
+        Assert.Contains("import { GeoJSONFeatureSchema, GeoJSONPointSchema } from 'zod-geojson';", content);
+        Assert.Equal(1, content.Split('\n').Count(line => line.Contains("from 'zod-geojson'")));
+    }
+
+    [Fact]
+    public void ExternalSchemaImport_SupportsLowerCamelCaseNamedExport()
+    {
+        var cls = Cls("Order", props: new[] { ("Payload", "object", false) });
+        cls.Properties[0].ZodSchemaOverride = "payloadSchema";
+        cls.Properties[0].ZodSchemaImportFrom = "@company/schemas";
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("import { payloadSchema } from '@company/schemas';", content);
+        Assert.Contains("payload: payloadSchema", content);
+    }
+
+    [Fact]
+    public void InlineSchemaOverride_RequiresNoImportAndOwnsValidation()
+    {
+        var cls = Cls("Order", props: new[] { ("Code", "string", false) });
+        cls.Properties[0].ZodSchemaOverride = "z.string().startsWith('ord_')";
+        cls.Properties[0].MinLength = 20;
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("code: z.string().startsWith('ord_')", content);
+        Assert.DoesNotContain("startsWith('ord_').min(20)", content);
+    }
+
+    [Fact]
     public void ReadOnly_BecomesOptional()
     {
         var cls = Cls("Order");

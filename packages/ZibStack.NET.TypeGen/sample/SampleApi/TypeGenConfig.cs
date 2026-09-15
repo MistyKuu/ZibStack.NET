@@ -61,7 +61,11 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
         // when the model lives in another project and cannot be annotated.
         b.ForType<ZodFeatureExample>()
             .Property(x => x.PublicToken)
-            .ZodNanoId(16);
+            .ZodNanoId(16)
+            // Same external-schema override through the fluent API, useful
+            // when DeliveryFeature belongs to a referenced assembly.
+            .Property(x => x.DeliveryFeature)
+            .ZodSchema("GeoJSONFeatureSchema", "zod-geojson");
         
         b.ForType<Root>()
             .WithGeneratedTypes(TypeTarget.TypeScript)

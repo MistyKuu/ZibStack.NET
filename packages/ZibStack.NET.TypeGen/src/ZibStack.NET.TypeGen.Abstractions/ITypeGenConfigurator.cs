@@ -166,7 +166,8 @@ public interface ITypeBuilder<T>
 /// <summary>
 /// Per-property fluent overrides. Mirrors the per-property attributes
 /// (<see cref="TsNameAttribute"/>, <see cref="TsTypeAttribute"/>,
-/// <see cref="OpenApiPropertyAttribute"/>, etc.). Use when you can't or don't
+/// <see cref="ZodSchemaAttribute"/>, <see cref="OpenApiPropertyAttribute"/>, etc.).
+/// Use when you can't or don't
 /// want to annotate the source — e.g. DTOs from a referenced library.
 /// </summary>
 /// <typeparam name="TClass">Owning class.</typeparam>
@@ -226,6 +227,16 @@ public interface IPropertyBuilder<TClass, TProp>
 
     /// <summary>Validate a NanoID with an exact custom length.</summary>
     IPropertyBuilder<TClass, TProp> ZodNanoId(int length);
+
+    /// <summary>Replace the inferred validator with a Zod schema expression emitted verbatim.</summary>
+    IPropertyBuilder<TClass, TProp> ZodSchema(string schemaExpression);
+
+    /// <summary>
+    /// Replace the inferred validator with a Zod schema expression and import its
+    /// named symbols from <paramref name="importFrom"/>. Equivalent to
+    /// <c>[ZodSchema(schemaExpression, ImportFrom = importFrom)]</c>.
+    /// </summary>
+    IPropertyBuilder<TClass, TProp> ZodSchema(string schemaExpression, string? importFrom);
 
     /// <summary>Equivalent to <c>[OpenApiProperty(Description = description)]</c>.</summary>
     IPropertyBuilder<TClass, TProp> OpenApiDescription(string description);

@@ -56,6 +56,7 @@ internal static class ZodEmitter
             EmitConformanceImports(sb, model.Classes.Where(c => !SkipClass(c) && (c.Targets & TypeTarget.TypeScript) != 0).Select(c => c.EmittedName)
                 .Concat(model.Enums.Where(e => !SkipEnum(e) && (e.Targets & TypeTarget.TypeScript) != 0).Select(e => e.EmittedName)),
                 ResolveOutputDir(zs.OutputDir, model), settings.TypeScript, zs, model);
+            EmitExternalSchemaImports(sb, model.Classes.Where(c => !SkipClass(c)));
             sb.AppendLine();
 
             // In SingleFile mode order matters — a schema has to be declared
@@ -85,6 +86,7 @@ internal static class ZodEmitter
                 var outputDir = (cls.HasExplicitOutputDir ? cls.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : cls.OutputDir) ?? ".";
                 EmitConformanceImports(sb, (cls.Targets & TypeTarget.TypeScript) != 0 ? new[] { cls.EmittedName } : System.Array.Empty<string>(), outputDir, settings.TypeScript, zs, model);
                 EmitImports(sb, CollectClassReferences(cls, nameByCSharp), cls.EmittedName, zs);
+                EmitExternalSchemaImports(sb, new[] { cls });
                 sb.AppendLine();
                 EmitClass(sb, cls, zs, nameByCSharp, model);
                 files.Add(new EmittedFile(
@@ -135,6 +137,39 @@ internal static class ZodEmitter
         var sorted = refs.Where(r => r != selfName).Distinct().OrderBy(r => r, System.StringComparer.Ordinal).ToList();
         foreach (var r in sorted)
             sb.AppendLine($"import {{ {r}{zs.SchemaConstSuffix} }} from './{r}{zs.FileSuffix}';");
+    }
+
+    private static void EmitExternalSchemaImports(StringBuilder sb, IEnumerable<SchemaClass> classes)
+    {
+        var byPath = new Dictionary<string, HashSet<string>>(System.StringComparer.Ordinal);
+        foreach (var prop in classes.SelectMany(c => c.Properties))
+        {
+            if (prop.TsIgnore || string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)
+                || string.IsNullOrWhiteSpace(prop.ZodSchemaImportFrom))
+                continue;
+
+            if (!byPath.TryGetValue(prop.ZodSchemaImportFrom!, out var names))
+                byPath[prop.ZodSchemaImportFrom!] = names = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var name in ExtractImportedSchemaIdentifiers(prop.ZodSchemaOverride!))
+                names.Add(name);
+        }
+
+        foreach (var entry in byPath.OrderBy(x => x.Key, System.StringComparer.Ordinal))
+        {
+            if (entry.Value.Count == 0) continue;
+            sb.AppendLine($"import {{ {string.Join(", ", entry.Value.OrderBy(x => x, System.StringComparer.Ordinal))} }} from '{entry.Key}';");
+        }
+    }
+
+    private static IEnumerable<string> ExtractImportedSchemaIdentifiers(string expression)
+    {
+        var trimmed = expression.Trim();
+        if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[A-Za-z_$][A-Za-z0-9_$]*$"))
+            return new[] { trimmed };
+
+        return System.Text.RegularExpressions.Regex.Matches(expression, @"[A-Z][A-Za-z0-9_$]*")
+            .Cast<System.Text.RegularExpressions.Match>()
+            .Select(match => match.Value);
     }
 
     private static void EmitConformanceImports(
@@ -375,12 +410,18 @@ internal static class ZodEmitter
         bool conformToTypeScript = false)
     {
         var targetFqn = prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName;
-        var core = MapCSharpToZod(targetFqn, prop.IsNullable, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames);
+        var hasSchemaOverride = !string.IsNullOrWhiteSpace(prop.ZodSchemaOverride);
+        var core = hasSchemaOverride
+            ? prop.ZodSchemaOverride!.Trim()
+            : MapCSharpToZod(targetFqn, prop.IsNullable, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames);
 
-        // Apply string-shaped constraints (length, regex, email/url/uuid formats).
-        // Numeric constraints use gte/lte.
-        core = ApplyStringConstraints(core, prop);
-        core = ApplyNumericConstraints(core, prop);
+        // An explicit schema owns all validation. Inferred schemas continue to
+        // receive constraints discovered from validation/format attributes.
+        if (!hasSchemaOverride)
+        {
+            core = ApplyStringConstraints(core, prop);
+            core = ApplyNumericConstraints(core, prop);
+        }
 
         // Nullable + optional → .nullish() by default. In TypeScript conformance
         // mode, mirror the TS emitter's optional-only contract so z.toZod<T>()
@@ -573,6 +614,7 @@ internal static class ZodEmitter
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
+            if (!string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)) continue;
             CollectRefs(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, nameByCSharp, acc);
         }
         return acc;
@@ -602,6 +644,7 @@ internal static class ZodEmitter
         var result = new HashSet<string>(System.StringComparer.Ordinal);
         foreach (var prop in owner.Properties)
         {
+            if (!string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)) continue;
             foreach (var referenced in EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes))
             {
                 if (CanReach(referenced, owner.CSharpFullName, classes, new HashSet<string>(System.StringComparer.Ordinal))
@@ -621,8 +664,11 @@ internal static class ZodEmitter
         if (current == target) return true;
         if (!visited.Add(current) || !classes.TryGetValue(current, out var cls)) return false;
         foreach (var prop in cls.Properties)
+        {
+            if (!string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)) continue;
             foreach (var next in EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes))
                 if (CanReach(next, target, classes, visited)) return true;
+        }
         return false;
     }
 
@@ -684,6 +730,7 @@ internal static class ZodEmitter
             // (e.g. items: z.array(OrderItemSchema)) must come after the referenced one.
             foreach (var prop in c.Properties)
             {
+                if (!string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)) continue;
                 var propType = (prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName).TrimEnd('?');
                 // Unwrap collections: List<X>, X[], IEnumerable<X> etc.
                 var inner = ExtractGeneric(propType, "List", "IList", "ICollection", "IEnumerable",
