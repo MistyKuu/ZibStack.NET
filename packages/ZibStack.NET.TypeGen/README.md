@@ -93,6 +93,10 @@ public sealed class Payment
 
     public string PublicToken { get; set; } = "";
 
+    [TsType("GeoJSONPoint", ImportFrom = "zod-geojson")]
+    [ZodSchema("GeoJSONPointSchema", ImportFrom = "zod-geojson")]
+    public object? DeliveryPoint { get; set; }
+
     public Payment? Parent { get; set; } // emitted through z.lazy(...)
 }
 
@@ -132,7 +136,17 @@ export const isPayment = (value: unknown): value is z.output<typeof PaymentSchem
 ```
 
 See the sample project's `ZodFeatureExample` for credit cards, IBANs, ULIDs,
-hostnames, Base64/Base64URL, custom NanoIDs, recursion, and response validation.
+hostnames, Base64/Base64URL, custom NanoIDs, recursion, external schemas, and
+response validation. `[ZodSchema]` also has a fluent form:
+
+```csharp
+b.ForType<Payment>()
+    .Property(x => x.DeliveryPoint)
+    .ZodSchema("GeoJSONPointSchema", "zod-geojson");
+```
+
+The frontend must install any package named by `ImportFrom`; for this example,
+use `npm install zod zod-geojson`.
 
 ## Docs
 

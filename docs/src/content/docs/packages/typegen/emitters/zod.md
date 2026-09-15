@@ -92,6 +92,70 @@ b.ForType<Payment>()
 Available formats are email, URL, UUID, date, date-time, hostname, ULID,
 NanoID, Base64, Base64URL, credit card, and IBAN.
 
+## External schemas with `[ZodSchema]`
+
+`[TsType]` controls only the static TypeScript type; it cannot provide runtime
+validation. Use `[ZodSchema]` when a third-party package or shared frontend
+module already exports the runtime schema for a C# property:
+
+```csharp
+public sealed class OrderDto
+{
+    [TsType("Point", ImportFrom = "geojson")]
+    [ZodSchema("GeoJSONPointSchema", ImportFrom = "zod-geojson")]
+    public Point? DeliveryAreaPoint { get; init; }
+
+    [TsType("Feature", ImportFrom = "geojson")]
+    [ZodSchema("GeoJSONFeatureSchema", ImportFrom = "zod-geojson")]
+    public Feature? DeliveryAreaFeature { get; init; }
+}
+```
+
+The Zod file imports and uses those schemas directly:
+
+```typescript
+import { GeoJSONFeatureSchema, GeoJSONPointSchema } from 'zod-geojson';
+
+export const OrderDtoSchema = z.object({
+    deliveryAreaPoint: GeoJSONPointSchema.nullish(),
+    deliveryAreaFeature: GeoJSONFeatureSchema.nullish(),
+});
+```
+
+Install the referenced runtime package in the generated client's project:
+
+```bash
+npm install zod zod-geojson
+npm install --save-dev @types/geojson
+```
+
+The same override is available when the C# model cannot be annotated:
+
+```csharp
+b.ForType<OrderDto>()
+    .Property(x => x.DeliveryAreaPoint)
+    .ZodSchema("GeoJSONPointSchema", "zod-geojson");
+```
+
+The schema expression is emitted verbatim. Omit `ImportFrom` for inline
+expressions such as `z.string().startsWith('ord_')`. TypeGen still applies the
+property's nullable, optional, read-only, and `PatchField<T>` modifier after the
+override. Other inferred validation constraints are not appended because the
+explicit schema owns validation for that property.
+
+Imports sharing a module are grouped and deduplicated in both single-file and
+file-per-class output. External schemas also participate normally in
+`z.compile(...)`, generated guards, and TanStack payload parsing. With
+`ConformToTypeScriptTypes`, the external schema's inferred type must exactly
+match the `[TsType]` expression—not merely be structurally assignable. For
+`zod-geojson`, use its own inferred aliases when exact conformance is enabled:
+
+```csharp
+[TsType("GeoJSONPoint", ImportFrom = "zod-geojson")]
+[ZodSchema("GeoJSONPointSchema", ImportFrom = "zod-geojson")]
+public Point? DeliveryAreaPoint { get; init; }
+```
+
 ## Type mapping
 
 | C# | Zod |
@@ -106,6 +170,7 @@ NanoID, Base64, Base64URL, credit card, and IBAN.
 | `List<T>`, `T[]` | `z.array(T)` |
 | `Dictionary<string, V>` | `z.record(z.string(), V)` |
 | user DTO | direct ref `{Name}Schema` (cross-file import) |
+| `[ZodSchema("X", ImportFrom = "pkg")]` | imported runtime schema `X` |
 | numeric `enum` | `z.union([z.literal(0), z.literal(1), …])` |
 | `enum` + `[JsonStringEnumConverter]` | `z.enum(['A', 'B', …])` |
 

@@ -23,6 +23,7 @@ internal static class SchemaParser
     private const string OpenApiSchemaNameAttr = "ZibStack.NET.TypeGen.OpenApiSchemaNameAttribute";
     private const string OpenApiPropertyAttr = "ZibStack.NET.TypeGen.OpenApiPropertyAttribute";
     private const string ZodFormatAttr = "ZibStack.NET.TypeGen.ZodFormatAttribute";
+    private const string ZodSchemaAttr = "ZibStack.NET.TypeGen.ZodSchemaAttribute";
     private const string OpenApiIgnoreAttr = "ZibStack.NET.TypeGen.OpenApiIgnoreAttribute";
     // String-only — no reference to ZibStack.NET.Dto. The attribute is generated
     // by Dto's source generator into the user's compilation, so we read it via
@@ -893,6 +894,8 @@ internal static class SchemaParser
             TsNameOverride = ReadStringArg(prop, TsNameAttr, "Name"),
             TsTypeOverride = ReadStringArg(prop, TsTypeAttr, "TypeExpression"),
             TsImportFrom = ReadNamedStringArg(prop, TsTypeAttr, "ImportFrom"),
+            ZodSchemaOverride = ReadStringArg(prop, ZodSchemaAttr, "SchemaExpression"),
+            ZodSchemaImportFrom = ReadNamedStringArg(prop, ZodSchemaAttr, "ImportFrom"),
             OpenApiNameOverride = ReadStringArg(prop, OpenApiSchemaNameAttr, "Name"),
             TsIgnore = HasAttr(prop, TsIgnoreAttr),
             OpenApiIgnore = HasAttr(prop, OpenApiIgnoreAttr),

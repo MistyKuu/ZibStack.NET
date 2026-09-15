@@ -60,6 +60,8 @@ internal static class ConfiguratorParser
         public string? OpenApiDescription { get; set; }
         public ZodStringFormat? ZodFormat { get; set; }
         public int? ZodFormatLength { get; set; }
+        public string? ZodSchema { get; set; }
+        public string? ZodSchemaImportFrom { get; set; }
         public bool? OpenApiNullable { get; set; }
         public bool Ignore { get; set; }
         public bool TsIgnore { get; set; }
@@ -552,6 +554,20 @@ internal static class ConfiguratorParser
                 else if (value is NonLiteralMarker) report(Diagnostic.Create(
                     TypeGenDiagnostics.NonLiteralArgument,
                     inv.ArgumentList.Arguments[0].GetLocation(), name));
+            }
+            return;
+        }
+
+        if (name == "ZodSchema")
+        {
+            o.ZodSchema = ReadStringArg(inv, name, sm, report);
+            if (inv.ArgumentList.Arguments.Count >= 2)
+            {
+                var importArg = ReadLiteralValue(inv.ArgumentList.Arguments[1].Expression, sm);
+                if (importArg is string s) o.ZodSchemaImportFrom = s;
+                else if (importArg is NonLiteralMarker) report(Diagnostic.Create(
+                    TypeGenDiagnostics.NonLiteralArgument,
+                    inv.ArgumentList.Arguments[1].GetLocation(), name));
             }
             return;
         }
