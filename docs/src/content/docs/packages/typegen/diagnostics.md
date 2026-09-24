@@ -7,6 +7,7 @@ description: "Every TG00xx diagnostic emitted by the TypeGen analyzer, its sever
 |---|---|---|
 | `TG0001` | Warning | `[GenerateTypes]` with `Targets = TypeTarget.None` — nothing to emit |
 | `TG0002` | Warning | Property type the emitter cannot translate — add `[TsType]` / `[OpenApiProperty]` or `[TsIgnore]` / `[OpenApiIgnore]` |
+| `TG0021` | Error | A compound `[ZodSchema]` expression with `ImportFrom` needs an explicit `Import` export name |
 | `TG0003` | Error | Generic type on `[GenerateTypes]` — not supported in the MVP |
 | `TG0010` | Error | More than one `ITypeGenConfigurator` in this project |
 | `TG0011` | Error | Empty `OutputDir` on `[GenerateTypes]` |

@@ -98,5 +98,15 @@ public class ZodFeatureExample
     // Configured with .ZodNanoId(16) in TypeGenConfig.cs.
     public string PublicToken { get; set; } = "";
 
+    // External runtime schema override. The frontend installs `zod-geojson`;
+    // TypeGen emits both imports instead of z.unknown(). Using the schema
+    // package's inferred alias also satisfies exact z.toZod<T>() mode.
+    [TsType("GeoJSONPoint", ImportFrom = "zod-geojson")]
+    [ZodSchema("GeoJSONPointSchema", ImportFrom = "zod-geojson")]
+    public System.Text.Json.Nodes.JsonObject? DeliveryPoint { get; set; }
+
+    [TsType("GeoJSONFeature", ImportFrom = "zod-geojson")]
+    public System.Text.Json.Nodes.JsonObject? DeliveryFeature { get; set; }
+
     public ZodFeatureExample? Parent { get; set; }
 }

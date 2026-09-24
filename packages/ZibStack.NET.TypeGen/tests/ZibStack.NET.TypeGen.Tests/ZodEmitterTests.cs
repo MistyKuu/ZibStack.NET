@@ -109,6 +109,159 @@ public class ZodEmitterTests
     }
 
     [Fact]
+    public void ExternalSchemaOverride_ReplacesInferenceAndEmitsImport()
+    {
+        var cls = Cls("Order", props: new[] { ("DeliveryPoint", "GeoJSON.Text.Geometry.Point", true) });
+        cls.Properties[0].ZodSchemaOverride = "GeoJSONPointSchema";
+        cls.Properties[0].ZodSchemaImportFrom = "zod-geojson";
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("import { GeoJSONPointSchema } from 'zod-geojson';", content);
+        Assert.Contains("deliveryPoint: (GeoJSONPointSchema).nullish()", content);
+        Assert.DoesNotContain("deliveryPoint: z.unknown()", content);
+    }
+
+    [Fact]
+    public void ExternalSchemaImports_AreGroupedAndDeduplicatedInSingleFile()
+    {
+        var order = Cls("Order", props: new[] { ("Point", "object", false), ("Feature", "object", false) });
+        order.Properties[0].ZodSchemaOverride = "GeoJSONPointSchema";
+        order.Properties[0].ZodSchemaImportFrom = "zod-geojson";
+        order.Properties[1].ZodSchemaOverride = "GeoJSONFeatureSchema";
+        order.Properties[1].ZodSchemaImportFrom = "zod-geojson";
+        var settings = new GlobalSettings { Zod = { FileLayout = ZodFileLayout.SingleFile } };
+
+        var content = ZodEmitter.Emit(ModelWith(order), settings).Single().Content;
+
+        Assert.Contains("import { GeoJSONFeatureSchema, GeoJSONPointSchema } from 'zod-geojson';", content);
+        Assert.Equal(1, content.Split('\n').Count(line => line.Contains("from 'zod-geojson'")));
+    }
+
+    [Fact]
+    public void ExternalSchemaImport_SupportsLowerCamelCaseNamedExport()
+    {
+        var cls = Cls("Order", props: new[] { ("Payload", "object", false) });
+        cls.Properties[0].ZodSchemaOverride = "payloadSchema";
+        cls.Properties[0].ZodSchemaImportFrom = "@company/schemas";
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("import { payloadSchema } from '@company/schemas';", content);
+        Assert.Contains("payload: payloadSchema", content);
+    }
+
+    [Fact]
+    public void CompoundSchema_ImportsOnlyExplicitName()
+    {
+        var cls = Cls("Order", props: new[] { ("Payload", "object", true) });
+        cls.Properties[0].ZodSchemaOverride = "payloadSchema.refine(v => v.startsWith('Point'))";
+        cls.Properties[0].ZodSchemaImportFrom = "@company/schemas";
+        cls.Properties[0].ZodSchemaImport = "payloadSchema";
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("import { payloadSchema } from '@company/schemas';", content);
+        Assert.Contains("payload: (payloadSchema.refine(v => v.startsWith('Point'))).nullish()", content);
+        Assert.DoesNotContain("import { Point", content);
+        Assert.DoesNotContain("import { With", content);
+    }
+
+    [Fact]
+    public void CompoundOverride_IsParenthesizedBeforeOptionalModifiers()
+    {
+        var cls = Cls("Order", props: new[] { ("Payload", "object", true) });
+        cls.Properties[0].ZodSchemaOverride = "condition ? firstSchema : secondSchema";
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains("payload: (condition ? firstSchema : secondSchema).nullish()", content);
+
+        cls.Properties[0].ZodSchemaOverride = "schema as z.ZodType<string>";
+        cls.Properties[0].IsNullable = false;
+        cls.Properties[0].IsReadOnly = true;
+        content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+        Assert.Contains("payload: (schema as z.ZodType<string>).optional()", content);
+    }
+
+    [Fact]
+    public void ExternalNamesCollidingWithGeneratedAndOtherImports_AreAliased()
+    {
+        var address = Cls("Address", props: new[] { ("Value", "string", false) });
+        var order = Cls("Order", props: new[]
+        {
+            ("Billing", "Address", false),
+            ("External", "object", false),
+            ("Other", "object", false),
+        });
+        order.Properties[1].ZodSchemaOverride = "AddressSchema.refine(v => true)";
+        order.Properties[1].ZodSchemaImportFrom = "@acme/schemas";
+        order.Properties[1].ZodSchemaImport = "AddressSchema";
+        order.Properties[2].ZodSchemaOverride = "AddressSchema";
+        order.Properties[2].ZodSchemaImportFrom = "@other/schemas";
+
+        var content = ZodEmitter.Emit(ModelWith(order, address), new GlobalSettings())
+            .Single(f => f.FileName == "Order.schema.ts").Content;
+
+        Assert.Contains("import { AddressSchema } from './Address.schema';", content);
+        Assert.Contains("import { AddressSchema as __zodImport1 } from '@acme/schemas';", content);
+        Assert.Contains("import { AddressSchema as __zodImport2 } from '@other/schemas';", content);
+        Assert.Contains("external: __zodImport1.refine(v => true)", content);
+        Assert.Contains("other: __zodImport2", content);
+
+        var single = ZodEmitter.Emit(ModelWith(order, address), new GlobalSettings
+        {
+            Zod = { FileLayout = ZodFileLayout.SingleFile },
+        }).Single().Content;
+        Assert.Contains("import { AddressSchema as __zodImport1 } from '@acme/schemas';", single);
+        Assert.Contains("export const AddressSchema =", single);
+    }
+
+    [Fact]
+    public void OverrideReferencingGeneratedSchema_ImportsAndOrdersDependency()
+    {
+        var order = Cls("Order", props: new[] { ("Items", "object", false) });
+        order.Properties[0].ZodSchemaOverride = "z.array(OrderItemSchema).min(1)";
+        var item = Cls("OrderItem", props: new[] { ("Sku", "string", false) });
+        var model = ModelWith(order, item);
+
+        var perFile = ZodEmitter.Emit(model, new GlobalSettings())
+            .Single(f => f.FileName == "Order.schema.ts").Content;
+        Assert.Contains("import { OrderItemSchema } from './OrderItem.schema';", perFile);
+
+        var single = ZodEmitter.Emit(model, new GlobalSettings
+        {
+            Zod = { FileLayout = ZodFileLayout.SingleFile },
+        }).Single().Content;
+        Assert.True(single.IndexOf("OrderItemSchema =", System.StringComparison.Ordinal)
+            < single.IndexOf("OrderSchema =", System.StringComparison.Ordinal));
+        Assert.Contains("items: z.array(OrderItemSchema).min(1)", single);
+    }
+
+    [Fact]
+    public void OverrideReferencingSelf_UsesLazySchema()
+    {
+        var node = Cls("Node", props: new[] { ("Children", "object", false) });
+        node.Properties[0].ZodSchemaOverride = "z.array(NodeSchema)";
+
+        var content = ZodEmitter.Emit(ModelWith(node), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("children: z.array(z.lazy(() => NodeSchema))", content);
+        Assert.DoesNotContain("import { NodeSchema }", content);
+    }
+
+    [Fact]
+    public void InlineSchemaOverride_RequiresNoImportAndOwnsValidation()
+    {
+        var cls = Cls("Order", props: new[] { ("Code", "string", false) });
+        cls.Properties[0].ZodSchemaOverride = "z.string().startsWith('ord_')";
+        cls.Properties[0].MinLength = 20;
+
+        var content = ZodEmitter.Emit(ModelWith(cls), new GlobalSettings()).Single().Content;
+
+        Assert.Contains("code: z.string().startsWith('ord_')", content);
+        Assert.DoesNotContain("startsWith('ord_').min(20)", content);
+    }
+
+    [Fact]
     public void ReadOnly_BecomesOptional()
     {
         var cls = Cls("Order");

@@ -16,3 +16,27 @@ public sealed class ZodFormatAttribute : Attribute
 
     public ZodFormatAttribute(ZodStringFormat format) => Format = format;
 }
+
+/// <summary>
+/// Replaces the inferred Zod validator for a property with a user-supplied Zod
+/// schema expression. Use <see cref="ImportFrom"/> when the expression references
+/// named exports from another module, such as <c>GeoJSONPointSchema</c> from
+/// <c>zod-geojson</c>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property, Inherited = true)]
+public sealed class ZodSchemaAttribute : Attribute
+{
+    /// <summary>Zod schema expression emitted verbatim for the property.</summary>
+    public string SchemaExpression { get; }
+
+    /// <summary>Optional module specifier supplying named symbols used by the expression.</summary>
+    public string? ImportFrom { get; set; }
+
+    /// <summary>
+    /// Named export to import from <see cref="ImportFrom"/>. Required when
+    /// <see cref="SchemaExpression"/> is more than a single identifier.
+    /// </summary>
+    public string? Import { get; set; }
+
+    public ZodSchemaAttribute(string schemaExpression) => SchemaExpression = schemaExpression;
+}

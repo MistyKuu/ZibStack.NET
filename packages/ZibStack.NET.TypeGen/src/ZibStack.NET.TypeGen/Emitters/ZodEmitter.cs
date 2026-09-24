@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ZibStack.NET.TypeGen.Generator;
 
@@ -56,6 +57,9 @@ internal static class ZodEmitter
             EmitConformanceImports(sb, model.Classes.Where(c => !SkipClass(c) && (c.Targets & TypeTarget.TypeScript) != 0).Select(c => c.EmittedName)
                 .Concat(model.Enums.Where(e => !SkipEnum(e) && (e.Targets & TypeTarget.TypeScript) != 0).Select(e => e.EmittedName)),
                 ResolveOutputDir(zs.OutputDir, model), settings.TypeScript, zs, model);
+            var externalExpressions = EmitExternalSchemaImports(sb,
+                model.Classes.Where(c => !SkipClass(c)),
+                nameByCSharp.Values.Select(name => name + zs.SchemaConstSuffix));
             sb.AppendLine();
 
             // In SingleFile mode order matters — a schema has to be declared
@@ -64,8 +68,8 @@ internal static class ZodEmitter
             // polymorphic variants before their union parents.
             foreach (var en in model.Enums)
                 EmitEnum(sb, en, zs);
-            foreach (var cls in TopoSortClasses(model))
-                EmitClass(sb, cls, zs, nameByCSharp, model);
+            foreach (var cls in TopoSortClasses(model, zs.SchemaConstSuffix))
+                EmitClass(sb, cls, zs, nameByCSharp, model, externalExpressions);
 
             files.Add(new EmittedFile(
                 Target: TypeTarget.Zod,
@@ -84,9 +88,12 @@ internal static class ZodEmitter
                 sb.AppendLine("import { z } from 'zod';");
                 var outputDir = (cls.HasExplicitOutputDir ? cls.OutputDir : !string.IsNullOrEmpty(globalZodDir) ? globalZodDir : cls.OutputDir) ?? ".";
                 EmitConformanceImports(sb, (cls.Targets & TypeTarget.TypeScript) != 0 ? new[] { cls.EmittedName } : System.Array.Empty<string>(), outputDir, settings.TypeScript, zs, model);
-                EmitImports(sb, CollectClassReferences(cls, nameByCSharp), cls.EmittedName, zs);
+                EmitImports(sb, CollectClassReferences(cls, nameByCSharp, zs.SchemaConstSuffix), cls.EmittedName, zs);
+                var externalExpressions = EmitExternalSchemaImports(sb, new[] { cls },
+                    CollectClassReferences(cls, nameByCSharp, zs.SchemaConstSuffix).Select(name => name + zs.SchemaConstSuffix)
+                        .Concat(new[] { cls.EmittedName + zs.SchemaConstSuffix }));
                 sb.AppendLine();
-                EmitClass(sb, cls, zs, nameByCSharp, model);
+                EmitClass(sb, cls, zs, nameByCSharp, model, externalExpressions);
                 files.Add(new EmittedFile(
                     Target: TypeTarget.Zod,
                     OutputDir: outputDir,
@@ -137,6 +144,83 @@ internal static class ZodEmitter
             sb.AppendLine($"import {{ {r}{zs.SchemaConstSuffix} }} from './{r}{zs.FileSuffix}';");
     }
 
+    // A schema expression is opaque TypeScript. Named imports are explicit; a
+    // bare identifier is the only expression from which a name can be inferred.
+    // Assign aliases whenever an external export would shadow a generated schema
+    // or another external module's export in this output file.
+    private static Dictionary<SchemaProperty, string> EmitExternalSchemaImports(
+        StringBuilder sb, IEnumerable<SchemaClass> classes, IEnumerable<string> localSymbols)
+    {
+        var requests = new List<(SchemaProperty Property, string Path, string Name)>();
+        foreach (var prop in classes.SelectMany(c => c.Properties))
+        {
+            if (prop.TsIgnore || string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)
+                || string.IsNullOrWhiteSpace(prop.ZodSchemaImportFrom))
+                continue;
+            var importName = GetExplicitOrBareImportName(prop);
+            if (importName is not null)
+                requests.Add((prop, prop.ZodSchemaImportFrom!, importName));
+        }
+
+        var reserved = new HashSet<string>(localSymbols, System.StringComparer.Ordinal) { "z" };
+        var distinct = requests.Select(r => (r.Path, r.Name)).Distinct()
+            .OrderBy(r => r.Path, System.StringComparer.Ordinal)
+            .ThenBy(r => r.Name, System.StringComparer.Ordinal).ToList();
+        var counts = distinct.GroupBy(r => r.Name).ToDictionary(g => g.Key, g => g.Count());
+        var used = new HashSet<string>(reserved, System.StringComparer.Ordinal);
+        foreach (var request in distinct) used.Add(request.Name);
+        var aliases = new Dictionary<(string Path, string Name), string>();
+        var nextAlias = 1;
+        foreach (var request in distinct)
+        {
+            var alias = request.Name;
+            if (reserved.Contains(request.Name) || counts[request.Name] > 1)
+            {
+                do { alias = "__zodImport" + nextAlias++; } while (!used.Add(alias));
+            }
+            aliases[request] = alias;
+        }
+
+        foreach (var group in distinct.GroupBy(r => r.Path).OrderBy(g => g.Key, System.StringComparer.Ordinal))
+        {
+            var imports = group.Select(r => r.Name == aliases[r]
+                ? r.Name : r.Name + " as " + aliases[r]);
+            sb.AppendLine($"import {{ {string.Join(", ", imports)} }} from '{group.Key}';");
+        }
+
+        var expressions = new Dictionary<SchemaProperty, string>();
+        foreach (var request in requests)
+        {
+            var alias = aliases[(request.Path, request.Name)];
+            expressions[request.Property] = ReplaceCodeIdentifiers(request.Property.ZodSchemaOverride!,
+                name => name == request.Name ? alias : name);
+        }
+        return expressions;
+    }
+
+    private static string? GetExplicitOrBareImportName(SchemaProperty prop)
+    {
+        if (!string.IsNullOrWhiteSpace(prop.ZodSchemaImport)) return prop.ZodSchemaImport!.Trim();
+        var expression = prop.ZodSchemaOverride?.Trim();
+        return expression is not null && Regex.IsMatch(expression, @"^[A-Za-z_$][A-Za-z0-9_$]*$")
+            ? expression : null;
+    }
+
+    // Only identifier tokens in executable code are touched. Quoted strings,
+    // comments, and member names after a dot are not references to imports.
+    private static readonly Regex CodeTokens = new(
+        @"'(?:\\.|[^'\\])*'|""(?:\\.|[^""\\])*""|`(?:\\.|[^`\\])*`|//[^\r\n]*|/\*[\s\S]*?\*/|[A-Za-z_$][A-Za-z0-9_$]*",
+        RegexOptions.Compiled);
+
+    private static string ReplaceCodeIdentifiers(string expression, System.Func<string, string> replace) =>
+        CodeTokens.Replace(expression, match =>
+        {
+            var first = match.Value[0];
+            if (first == '\'' || first == '"' || first == '`' || first == '/') return match.Value;
+            if (match.Index > 0 && expression[match.Index - 1] == '.') return match.Value;
+            return replace(match.Value);
+        });
+
     private static void EmitConformanceImports(
         StringBuilder sb,
         IEnumerable<string> typeNames,
@@ -180,13 +264,14 @@ internal static class ZodEmitter
         SchemaClass cls,
         ZodSettings zs,
         IReadOnlyDictionary<string, string> nameByCSharp,
-        SchemaModel model)
+        SchemaModel model,
+        IReadOnlyDictionary<SchemaProperty, string> externalExpressions)
     {
         if (SkipClass(cls)) return;
 
         var schemaConst = cls.EmittedName + zs.SchemaConstSuffix;
         var conform = zs.ConformToTypeScriptTypes && (cls.Targets & TypeTarget.TypeScript) != 0;
-        var lazySchemaNames = CollectLazySchemaNames(cls, model, nameByCSharp);
+        var lazySchemaNames = CollectLazySchemaNames(cls, model, nameByCSharp, zs.SchemaConstSuffix);
         var typeAnnotation = lazySchemaNames.Count > 0
             ? conform ? $": z.ZodType<{cls.EmittedName}>" : ": z.ZodType<any>"
             : "";
@@ -303,7 +388,8 @@ internal static class ZodEmitter
             // Explicit TsName override bypasses the style transform — user said what they
             // wanted verbatim. Otherwise run the source name through the configured style.
             var name = prop.TsNameOverride ?? ApplyNameStyle(prop.SourceName, zs.PropertyNameStyle);
-            var expr = BuildPropertyZodExpr(prop, nameByCSharp, cls.TypeParameters, zs.SchemaConstSuffix, lazySchemaNames, conform);
+            var expr = BuildPropertyZodExpr(prop, nameByCSharp, cls.TypeParameters,
+                zs.SchemaConstSuffix, lazySchemaNames, conform, externalExpressions);
             sb.AppendLine($"    {name}: {expr},");
         }
 
@@ -372,15 +458,27 @@ internal static class ZodEmitter
         IReadOnlyList<string> typeParameters,
         string schemaConstSuffix,
         HashSet<string>? lazySchemaNames = null,
-        bool conformToTypeScript = false)
+        bool conformToTypeScript = false,
+        IReadOnlyDictionary<SchemaProperty, string>? externalExpressions = null)
     {
         var targetFqn = prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName;
-        var core = MapCSharpToZod(targetFqn, prop.IsNullable, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames);
+        var hasSchemaOverride = !string.IsNullOrWhiteSpace(prop.ZodSchemaOverride);
+        var core = hasSchemaOverride
+            ? (externalExpressions is not null && externalExpressions.TryGetValue(prop, out var aliased)
+                ? aliased : prop.ZodSchemaOverride!).Trim()
+            : MapCSharpToZod(targetFqn, prop.IsNullable, nameByCSharp, schemaConstSuffix, typeParameters, lazySchemaNames);
 
-        // Apply string-shaped constraints (length, regex, email/url/uuid formats).
-        // Numeric constraints use gte/lte.
-        core = ApplyStringConstraints(core, prop);
-        core = ApplyNumericConstraints(core, prop);
+        if (hasSchemaOverride && lazySchemaNames is { Count: > 0 })
+            core = ReplaceCodeIdentifiers(core, name => lazySchemaNames.Contains(name)
+                ? $"z.lazy(() => {name})" : name);
+
+        // An explicit schema owns all validation. Inferred schemas continue to
+        // receive constraints discovered from validation/format attributes.
+        if (!hasSchemaOverride)
+        {
+            core = ApplyStringConstraints(core, prop);
+            core = ApplyNumericConstraints(core, prop);
+        }
 
         // Nullable + optional → .nullish() by default. In TypeScript conformance
         // mode, mirror the TS emitter's optional-only contract so z.toZod<T>()
@@ -390,9 +488,10 @@ internal static class ZodEmitter
         // be provided, so no nullish/optional even if the C# type is `string?`.
         var effectivelyNullable = prop.IsNullable && !prop.IsExplicitlyRequired;
         if (effectivelyNullable)
-            core += conformToTypeScript ? ".optional()" : ".nullish()";
+            core = (hasSchemaOverride ? "(" + core + ")" : core)
+                + (conformToTypeScript ? ".optional()" : ".nullish()");
         else if (prop.IsReadOnly || prop.IsPatchField || ExtractGeneric(targetFqn.TrimEnd('?'), "PatchField") is not null)
-            core += ".optional()";
+            core = (hasSchemaOverride ? "(" + core + ")" : core) + ".optional()";
 
         return core;
     }
@@ -519,7 +618,7 @@ internal static class ZodEmitter
         // is evaluated, so direct refs are safe. SingleFile mode: the topo sort
         // guarantees declaration order.
         if (nameByCSharp.TryGetValue(t, out var mapped))
-            return lazySchemaNames is not null && lazySchemaNames.Contains(mapped)
+            return lazySchemaNames is not null && lazySchemaNames.Contains(mapped + schemaConstSuffix)
                 ? $"z.lazy(() => {mapped}{schemaConstSuffix})"
                 : mapped + schemaConstSuffix;
 
@@ -554,7 +653,8 @@ internal static class ZodEmitter
 
     // ── reference collection for per-file imports ───────────────────────────
 
-    private static HashSet<string> CollectClassReferences(SchemaClass cls, IReadOnlyDictionary<string, string> nameByCSharp)
+    private static HashSet<string> CollectClassReferences(SchemaClass cls,
+        IReadOnlyDictionary<string, string> nameByCSharp, string schemaConstSuffix)
     {
         var acc = new HashSet<string>();
         if (cls.BaseClassFullName is { } bfn && nameByCSharp.TryGetValue(bfn, out var bn))
@@ -573,9 +673,32 @@ internal static class ZodEmitter
         foreach (var prop in cls.Properties)
         {
             if (prop.TsIgnore) continue;
-            CollectRefs(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, nameByCSharp, acc);
+            if (!string.IsNullOrWhiteSpace(prop.ZodSchemaOverride))
+            {
+                foreach (var reference in EnumerateOverrideReferences(prop, nameByCSharp, schemaConstSuffix))
+                    acc.Add(nameByCSharp[reference]);
+            }
+            else CollectRefs(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, nameByCSharp, acc);
         }
         return acc;
+    }
+
+    private static IEnumerable<string> EnumerateOverrideReferences(SchemaProperty prop,
+        IReadOnlyDictionary<string, string> nameByCSharp, string schemaConstSuffix)
+    {
+        if (string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)) yield break;
+        var external = !string.IsNullOrWhiteSpace(prop.ZodSchemaImportFrom)
+            ? GetExplicitOrBareImportName(prop) : null;
+        var bySchema = nameByCSharp.ToDictionary(pair => pair.Value + schemaConstSuffix,
+            pair => pair.Key, System.StringComparer.Ordinal);
+        var found = new HashSet<string>(System.StringComparer.Ordinal);
+        ReplaceCodeIdentifiers(prop.ZodSchemaOverride!, name =>
+        {
+            if (name != external && bySchema.TryGetValue(name, out var csharpName))
+                found.Add(csharpName);
+            return name;
+        });
+        foreach (var reference in found) yield return reference;
     }
 
     private static void CollectRefs(string cSharpType, IReadOnlyDictionary<string, string> nameLookup, HashSet<string> acc)
@@ -596,33 +719,46 @@ internal static class ZodEmitter
     private static HashSet<string> CollectLazySchemaNames(
         SchemaClass owner,
         SchemaModel model,
-        IReadOnlyDictionary<string, string> nameByCSharp)
+        IReadOnlyDictionary<string, string> nameByCSharp,
+        string schemaConstSuffix)
     {
         var classes = model.Classes.ToDictionary(c => c.CSharpFullName, c => c);
         var result = new HashSet<string>(System.StringComparer.Ordinal);
         foreach (var prop in owner.Properties)
         {
-            foreach (var referenced in EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes))
+            foreach (var referenced in PropertyReferences(prop, classes, nameByCSharp, schemaConstSuffix))
             {
-                if (CanReach(referenced, owner.CSharpFullName, classes, new HashSet<string>(System.StringComparer.Ordinal))
+                if (CanReach(referenced, owner.CSharpFullName, classes, nameByCSharp,
+                        schemaConstSuffix, new HashSet<string>(System.StringComparer.Ordinal))
                     && nameByCSharp.TryGetValue(referenced, out var emittedName))
-                    result.Add(emittedName);
+                    result.Add(emittedName + schemaConstSuffix);
             }
         }
         return result;
     }
 
+    private static IEnumerable<string> PropertyReferences(SchemaProperty prop,
+        IReadOnlyDictionary<string, SchemaClass> classes,
+        IReadOnlyDictionary<string, string> nameByCSharp, string schemaConstSuffix) =>
+        !string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)
+            ? EnumerateOverrideReferences(prop, nameByCSharp, schemaConstSuffix)
+            : EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes);
+
     private static bool CanReach(
         string current,
         string target,
         IReadOnlyDictionary<string, SchemaClass> classes,
+        IReadOnlyDictionary<string, string> nameByCSharp,
+        string schemaConstSuffix,
         HashSet<string> visited)
     {
         if (current == target) return true;
         if (!visited.Add(current) || !classes.TryGetValue(current, out var cls)) return false;
         foreach (var prop in cls.Properties)
-            foreach (var next in EnumerateReferencedTypes(prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName, classes))
-                if (CanReach(next, target, classes, visited)) return true;
+        {
+            foreach (var next in PropertyReferences(prop, classes, nameByCSharp, schemaConstSuffix))
+                if (CanReach(next, target, classes, nameByCSharp, schemaConstSuffix, visited)) return true;
+        }
         return false;
     }
 
@@ -658,9 +794,10 @@ internal static class ZodEmitter
     /// Cycles (if any) fall back to source order — <c>z.lazy(…)</c> in the
     /// property expression breaks the cycle at runtime.
     /// </summary>
-    private static List<SchemaClass> TopoSortClasses(SchemaModel model)
+    private static List<SchemaClass> TopoSortClasses(SchemaModel model, string schemaConstSuffix)
     {
         var byName = model.Classes.ToDictionary(c => c.CSharpFullName, c => c);
+        var nameByCSharp = model.Classes.Where(c => !SkipClass(c)).ToDictionary(c => c.CSharpFullName, c => c.EmittedName);
         var emitted = model.Classes.Where(c => !SkipClass(c)).ToList();
         var emittedSet = new HashSet<string>(emitted.Select(c => c.CSharpFullName));
         var visited = new HashSet<string>();
@@ -684,13 +821,9 @@ internal static class ZodEmitter
             // (e.g. items: z.array(OrderItemSchema)) must come after the referenced one.
             foreach (var prop in c.Properties)
             {
-                var propType = (prop.TargetTypeCSharpFqn ?? prop.CSharpTypeFullName).TrimEnd('?');
-                // Unwrap collections: List<X>, X[], IEnumerable<X> etc.
-                var inner = ExtractGeneric(propType, "List", "IList", "ICollection", "IEnumerable",
-                    "IReadOnlyList", "IReadOnlyCollection", "HashSet");
-                var resolved = inner ?? (propType.EndsWith("[]") ? propType.Substring(0, propType.Length - 2) : propType);
-                if (byName.TryGetValue(resolved, out var depCls) && emittedSet.Contains(resolved))
-                    Visit(depCls);
+                foreach (var referenced in PropertyReferences(prop, byName, nameByCSharp, schemaConstSuffix))
+                    if (byName.TryGetValue(referenced, out var depCls) && emittedSet.Contains(referenced))
+                        Visit(depCls);
             }
 
             result.Add(c);

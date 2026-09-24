@@ -322,6 +322,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             ReportUntranslatableProperties(spc, model);
 
             var settings = config?.Settings ?? new GlobalSettings();
+            if (RequestsTarget(model, TypeTarget.Zod) && !ValidateZodSchemaImports(model, spc.ReportDiagnostic))
+                return;
             // Detect ZibStack.NET.Query presence by probing a well-known type. When
             // referenced, the Dto CRUD list endpoint binds additional query-string params
             // (filter/sort/select/count) — the OpenAPI paths must match that shape.
@@ -542,6 +544,9 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             prop.OpenApiNullableOverride ??= po.OpenApiNullable;
             prop.ZodFormat ??= po.ZodFormat;
             prop.ZodFormatLength ??= po.ZodFormatLength;
+            prop.ZodSchemaOverride ??= po.ZodSchema;
+            prop.ZodSchemaImportFrom ??= po.ZodSchemaImportFrom;
+            prop.ZodSchemaImport ??= po.ZodSchemaImport;
             if (po.Ignore) { prop.TsIgnore = true; prop.OpenApiIgnore = true; }
             prop.TsIgnore |= po.TsIgnore;
             prop.OpenApiIgnore |= po.OpenApiIgnore;
@@ -779,6 +784,28 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                         cls.SourceName, prop.SourceName, prop.CSharpTypeFullName, "OpenAPI"));
             }
         }
+    }
+
+    internal static bool ValidateZodSchemaImports(SchemaModel model, System.Action<Diagnostic> report)
+    {
+        var valid = true;
+        foreach (var cls in model.Classes)
+        {
+            if (cls.TsIgnore || (cls.Targets & TypeTarget.Zod) == 0) continue;
+            foreach (var prop in cls.Properties)
+            {
+                if (prop.TsIgnore || string.IsNullOrWhiteSpace(prop.ZodSchemaOverride)
+                    || string.IsNullOrWhiteSpace(prop.ZodSchemaImportFrom)) continue;
+                var expression = prop.ZodSchemaOverride!.Trim();
+                if (!string.IsNullOrWhiteSpace(prop.ZodSchemaImport)
+                    || System.Text.RegularExpressions.Regex.IsMatch(expression, @"^[A-Za-z_$][A-Za-z0-9_$]*$"))
+                    continue;
+                report(Diagnostic.Create(TypeGenDiagnostics.ZodSchemaImportRequired,
+                    prop.Location ?? Location.None, cls.SourceName, prop.SourceName));
+                valid = false;
+            }
+        }
+        return valid;
     }
 
     /// <summary>

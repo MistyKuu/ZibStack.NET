@@ -38,9 +38,9 @@ public sealed class SampleApiBuildTests
 
         // All artifacts must land under generated/, nothing in the project root.
         // OrderItem is renamed to "hoho" via b.ForType<OrderItem>().TsName("hoho") in TypeGenConfig.cs.
-        Assert.True(File.Exists(Path.Combine(GeneratedDir, "Order.ts")));
+        Assert.True(File.Exists(Path.Combine(GeneratedDir, "order.ts")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "hoho.ts")));
-        Assert.True(File.Exists(Path.Combine(GeneratedDir, "OrderStatus.ts")));
+        Assert.True(File.Exists(Path.Combine(GeneratedDir, "orderStatus.ts")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "openapi.yaml")));
         Assert.True(File.Exists(Path.Combine(GeneratedDir, "api.gen.ts")));
 
@@ -52,7 +52,7 @@ public sealed class SampleApiBuildTests
         // Cross-file imports must follow the renamed type — proves the import resolver
         // walks the post-fluent emitted name, not the source name.
         // TypeNameStyle=CamelCase in SampleApi/TypeGenConfig.cs lowercases all type names.
-        var orderTs = File.ReadAllText(Path.Combine(GeneratedDir, "Order.ts"));
+        var orderTs = File.ReadAllText(Path.Combine(GeneratedDir, "order.ts"));
         Assert.Contains("import { hoho } from './hoho';", orderTs);
         Assert.Contains("import { orderStatus } from './orderStatus';", orderTs);
 

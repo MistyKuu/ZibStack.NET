@@ -90,4 +90,13 @@ internal static class TypeGenDiagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
+
+    public const string ZodSchemaImportRequiredId = "TG0021";
+    public static readonly DiagnosticDescriptor ZodSchemaImportRequired = new(
+        ZodSchemaImportRequiredId,
+        title: "Zod schema import needs an explicit export name",
+        messageFormat: "Property '{0}.{1}' uses a compound Zod schema expression with ImportFrom. Set Import = \"ExportedSchemaName\" (or pass the third .ZodSchema argument).",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

@@ -18,6 +18,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install TypeGen Python test dependency
+        run: python -m pip install 'pydantic>=2,<3'
+
       - name: Build
         run: dotnet build ZibStack.NET.slnx -c Release
 
@@ -38,6 +51,9 @@ jobs:
 
       - name: Test Validation
         run: dotnet test packages/ZibStack.NET.Validation/tests/ZibStack.NET.Validation.Tests/ZibStack.NET.Validation.Tests.csproj -c Release --no-build
+
+      - name: Test TypeGen
+        run: dotnet test packages/ZibStack.NET.TypeGen/tests/ZibStack.NET.TypeGen.Tests/ZibStack.NET.TypeGen.Tests.csproj -c Release --no-build
 
       - name: Test UI
         run: dotnet test packages/ZibStack.NET.UI/tests/ZibStack.NET.UI.Tests/ZibStack.NET.UI.Tests.csproj -c Release --no-build
