@@ -606,7 +606,17 @@ internal static class TanStackQueryEmitter
         sb.AppendLine($"        try {{ return {query.BaseUrlExpression}; }} catch {{ return undefined; }}");
         sb.AppendLine("    })();");
         sb.AppendLine("    const baseUrl = configuredBaseUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost');");
-        sb.AppendLine("    const url = new URL(path, baseUrl);");
+        if (query.PreserveBaseUrlPath)
+        {
+            sb.AppendLine("    const serviceBaseUrl = new URL(baseUrl);");
+            sb.AppendLine("    if (!serviceBaseUrl.pathname.endsWith('/')) serviceBaseUrl.pathname += '/';");
+            sb.AppendLine("    const isAbsoluteUrl = /^[a-z][a-z\\d+.-]*:/i.test(path) || path.startsWith('//');");
+            sb.AppendLine("    const url = new URL(isAbsoluteUrl ? path : path.replace(/^\\/+/, ''), serviceBaseUrl);");
+        }
+        else
+        {
+            sb.AppendLine("    const url = new URL(path, baseUrl);");
+        }
         sb.AppendLine("    if (options.query) {");
         sb.AppendLine("        for (const [key, value] of Object.entries(options.query)) {");
         sb.AppendLine("            if (value === undefined || value === null) continue;");
