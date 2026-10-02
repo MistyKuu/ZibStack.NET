@@ -339,6 +339,14 @@ public sealed class TanStackQuerySettings
     public string BaseUrlExpression { get; set; } = "import.meta.env.VITE_API_URL";
 
     /// <summary>
+    /// Resolve endpoint routes beneath the base URL pathname, treating it as a
+    /// directory even without a trailing slash. Default <c>false</c> preserves
+    /// standard URL resolution. Absolute URLs and protocol-relative paths retain
+    /// standard URL semantics in either mode. Applies only to the default client.
+    /// </summary>
+    public bool PreserveBaseUrlPath { get; set; }
+
+    /// <summary>
     /// Optional module specifier for a user-supplied API client. When set, the
     /// emitter imports <see cref="ApiClientName"/> from this module and does not
     /// emit the default <c>apiFetch</c> implementation.

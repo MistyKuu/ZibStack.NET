@@ -48,6 +48,10 @@ ZibStack is designed so you can adopt as little or as much as you want. Start at
 
 ## Packages
 
+TypeGen's TanStack Query client supports reverse-proxy service prefixes via
+`q.PreserveBaseUrlPath = true`; see the
+[URL resolution guide](https://mistykuu.github.io/ZibStack.NET/packages/typegen/emitters/tanstack-query/#reverse-proxy-service-prefixes).
+
 | Package | NuGet | Description |
 |---|---|---|
 | [**ZibStack.NET.Aop**](packages/ZibStack.NET.Aop/) | `dotnet add package ZibStack.NET.Aop` | AOP framework with C# interceptors. Built-in: `[Log]`, `[Trace]`, `[Retry]`, `[Cache]`, `[Metrics]`, `[Timeout]`, `[Authorize]`, `[Validate]`, `[Transaction]`. Custom aspects via `IAspectHandler`. Global `Apply<>()` rules. |
