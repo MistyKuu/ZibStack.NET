@@ -77,9 +77,16 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             var (((symbols, compilation), projectDir), _configuratorSources) = source;
             // Note: do NOT early-return on empty symbols — the configurator's
             // .WithGeneratedTypes(...) fluent discovery (handled below) is a valid
-            // sole driver of generation. The bottom of this callback exits anyway
-            // if nothing accumulates in the model.
+            // sole driver of generation. A successful empty run must replace the
+            // persisted manifest too, otherwise MSBuild replays the previous run.
             if (symbols.IsDefault) symbols = ImmutableArray<INamedTypeSymbol?>.Empty;
+
+            bool hasGenerationErrors = false;
+            void ReportDiagnostic(Diagnostic diagnostic)
+            {
+                if (diagnostic.Severity == DiagnosticSeverity.Error) hasGenerationErrors = true;
+                spc.ReportDiagnostic(diagnostic);
+            }
 
             // Warn about [CrudApi]-only classes that TypeGen can't emit paths for —
             // they need [GenerateTypes] so we discover them via the same provider.
@@ -89,7 +96,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             {
                 if (sym is null) continue;
                 if (!SchemaParser.HasGenerateTypes(sym) && SchemaParser.HasCrudApi(sym))
-                    spc.ReportDiagnostic(Diagnostic.Create(
+                    ReportDiagnostic(Diagnostic.Create(
                         TypeGenDiagnostics.CrudApiWithoutGenerateTypes,
                         sym.Locations.FirstOrDefault() ?? Location.None,
                         sym.ToDisplayString()));
@@ -97,7 +104,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
 
             // Parse ITypeGenConfigurator DSL first — global settings feed the emitters,
             // per-type overrides merge into SchemaClass/SchemaEnum below.
-            var config = ConfiguratorParser.Parse(compilation, spc.ReportDiagnostic);
+            var config = ConfiguratorParser.Parse(compilation, ReportDiagnostic);
 
             var model = new SchemaModel();
             foreach (var sym in symbols)
@@ -108,7 +115,7 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 // instead of emitting broken output.
                 if (sym.IsGenericType)
                 {
-                    spc.ReportDiagnostic(Diagnostic.Create(
+                    ReportDiagnostic(Diagnostic.Create(
                         TypeGenDiagnostics.GenericType,
                         sym.Locations.FirstOrDefault() ?? Location.None,
                         sym.ToDisplayString()));
@@ -120,8 +127,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     var en = SchemaParser.ParseEnum(sym);
                     if (en is null) continue;
                     ApplyFluentToEnum(en, config);
-                    ReportTargetsIfEmpty(spc, sym, en.Targets);
-                    ReportInvalidOutputDirIfEmpty(spc, sym, en.OutputDir);
+                    ReportTargetsIfEmpty(ReportDiagnostic, sym, en.Targets);
+                    ReportInvalidOutputDirIfEmpty(ReportDiagnostic, sym, en.OutputDir);
                     model.Enums.Add(en);
                 }
                 else
@@ -129,8 +136,8 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                     var cls = SchemaParser.ParseClass(sym);
                     if (cls is null) continue;
                     ApplyFluentToClass(cls, config);
-                    ReportTargetsIfEmpty(spc, sym, cls.Targets);
-                    ReportInvalidOutputDirIfEmpty(spc, sym, cls.OutputDir);
+                    ReportTargetsIfEmpty(ReportDiagnostic, sym, cls.Targets);
+                    ReportInvalidOutputDirIfEmpty(ReportDiagnostic, sym, cls.OutputDir);
                     model.Classes.Add(cls);
 
                     // Synthesize Create/Update/Response companion schemas from Dto's attributes.
@@ -312,8 +319,6 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             // so target names / OutputDirs are final.
             SchemaParser.ResolveGenericTypeReferences(model);
 
-            if (model.Classes.Count == 0 && model.Enums.Count == 0) return;
-
             // Surface every property whose C# type won't render into a sane TS /
             // OpenAPI expression (fell back to `unknown` / `object` because the type
             // isn't primitive, isn't in the model, isn't overridden, isn't ignored).
@@ -349,7 +354,12 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             if (RequestsTarget(model, TypeTarget.TanStackQuery))
                 allFiles.AddRange(TanStackQueryEmitter.Emit(model, settings));
 
-            if (allFiles.Count == 0) return;
+            // Empty is an authoritative result only when generation succeeded.
+            // In particular an incomplete IDE edit / failed configurator must not
+            // be mistaken for removing the last generation request.
+            if (allFiles.Count == 0 && (hasGenerationErrors ||
+                compilation.GetDiagnostics(spc.CancellationToken).Any(d => d.Severity == DiagnosticSeverity.Error)))
+                return;
 
             // Emit the manifest as a .g.cs containing string constants. The companion
             // MSBuild task reads this file at build time, decodes the constants, and
@@ -699,19 +709,19 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static void ReportTargetsIfEmpty(SourceProductionContext spc, ISymbol sym, TypeTarget targets)
+    private static void ReportTargetsIfEmpty(System.Action<Diagnostic> report, ISymbol sym, TypeTarget targets)
     {
         if (targets == TypeTarget.None)
-            spc.ReportDiagnostic(Diagnostic.Create(
+            report(Diagnostic.Create(
                 TypeGenDiagnostics.NoTargets,
                 sym.Locations.FirstOrDefault() ?? Location.None,
                 sym.Name));
     }
 
-    private static void ReportInvalidOutputDirIfEmpty(SourceProductionContext spc, ISymbol sym, string outputDir)
+    private static void ReportInvalidOutputDirIfEmpty(System.Action<Diagnostic> report, ISymbol sym, string outputDir)
     {
         if (string.IsNullOrWhiteSpace(outputDir))
-            spc.ReportDiagnostic(Diagnostic.Create(
+            report(Diagnostic.Create(
                 TypeGenDiagnostics.InvalidOutputDir,
                 sym.Locations.FirstOrDefault() ?? Location.None,
                 outputDir ?? "<null>",
