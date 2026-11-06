@@ -176,6 +176,35 @@ stale files in the touched directories: any file carrying our `@generated`
 banner that isn't in the current emit set gets deleted, so renames don't
 leak orphaned outputs.
 
+### Removing the last generation request
+
+When a successful generation pass has no output, TypeGen still emits a valid
+manifest with `FileCount = 0`. Removing the final `[GenerateTypes]` attribute
+or fluent `.WithGeneratedTypes(...)` registration therefore replaces the
+previous manifest rather than leaving it available for MSBuild to replay.
+An emitter that legitimately produces no files follows the same path.
+
+Both live writes and the MSBuild task use `obj/.typegen-dirs` to find previously
+used output directories and remove files bearing the TypeGen banner. Handwritten
+files are preserved. Subsequent builds cannot resurrect old output from the
+empty manifest, even when compilation is skipped. Compilation errors or fatal
+TypeGen diagnostics that prevent generation are not treated as successful empty
+runs and do not authorize this cleanup.
+
+After upgrading from a version that retained stale manifests, run
+`dotnet build -t:Rebuild` once for each affected project to replace its cached
+manifest. A configurator in another project does not update this project's
+manifest. If the TypeGen package has already been removed entirely, its generator
+and cleanup task cannot run; clear the affected project's old `obj` cache and
+remove obsolete generated files manually.
+
+Live cleanup requires an IDE host that reruns the generator and permits analyzer
+file I/O; otherwise build the project to run the MSBuild cleanup. Files generated
+with banners disabled are not automatically removed. Ownership remains
+banner-based and scoped to directories rather than individual projects: use
+separate output directories for different projects, since sharing one can cause
+one project's sweep to remove another project's generated files.
+
 No companion task DLL, no reflection over the built assembly — the inline task is ~60
 lines of C# directly in the `.targets` file. Files are skipped when their content is
 unchanged (stable mtimes, no file-watcher thrash in frontend dev servers).
