@@ -44,6 +44,7 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             q.OutputDir = "../client/src/api";
             q.SingleFileName = "api.gen.ts";
             q.BaseUrlExpression = "import.meta.env.VITE_API_URL";
+            // q.PreserveBaseUrlPath = true; // retain reverse-proxy prefixes
             // q.FileLayout = QueryFileLayout.SplitByTag;
             // q.ApiClientImportPath = "./http-client";
             // q.ApiClientName = "request";

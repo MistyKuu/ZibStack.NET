@@ -86,6 +86,7 @@ public class ConfiguratorParserTests
                         q.FileLayout = QueryFileLayout.SplitByTag;
                         q.SingleFileName = "query.gen.ts";
                         q.BaseUrlExpression = "window.location.origin";
+                        q.PreserveBaseUrlPath = true;
                         q.ApiClientImportPath = "./client";
                         q.ApiClientName = "request";
                         q.ModelsImportPath = "../models";
@@ -104,6 +105,7 @@ public class ConfiguratorParserTests
         Assert.Equal(QueryFileLayout.SplitByTag, parsed.Settings.TanStackQuery.FileLayout);
         Assert.Equal("query.gen.ts", parsed.Settings.TanStackQuery.SingleFileName);
         Assert.Equal("window.location.origin", parsed.Settings.TanStackQuery.BaseUrlExpression);
+        Assert.True(parsed.Settings.TanStackQuery.PreserveBaseUrlPath);
         Assert.Equal("./client", parsed.Settings.TanStackQuery.ApiClientImportPath);
         Assert.Equal("request", parsed.Settings.TanStackQuery.ApiClientName);
         Assert.Equal("../models", parsed.Settings.TanStackQuery.ModelsImportPath);
@@ -517,6 +519,7 @@ public class ConfiguratorParserTests
                     public QueryFileLayout FileLayout { get; set; }
                     public string SingleFileName { get; set; } = "api.gen.ts";
                     public string BaseUrlExpression { get; set; } = "import.meta.env.VITE_API_URL";
+                    public bool PreserveBaseUrlPath { get; set; }
                     public string? ApiClientImportPath { get; set; }
                     public string ApiClientName { get; set; } = "apiFetch";
                     public string? ModelsImportPath { get; set; }

@@ -140,6 +140,7 @@ public class TanStackQueryEmitterTests
         var settings = new GlobalSettings();
         settings.TanStackQuery.FileLayout = QueryFileLayout.SplitByTag;
         settings.TanStackQuery.ApiClientImportPath = "./http-client";
+        settings.TanStackQuery.PreserveBaseUrlPath = true;
         settings.TanStackQuery.ApiClientName = "request";
         settings.TanStackQuery.EmitHooks = false;
         settings.TanStackQuery.EmitCacheHelpers = false;
