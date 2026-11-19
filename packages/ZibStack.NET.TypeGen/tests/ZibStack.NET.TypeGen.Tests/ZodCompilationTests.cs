@@ -282,6 +282,66 @@ public sealed class ZodCompilationTests : IDisposable
     }
 
     [Fact]
+    public async Task TanStackQuerySelectors_InferDataWithAndWithoutOptionsFactories()
+    {
+        if (_skip) return;
+
+        var model = new SchemaModel();
+        model.Endpoints.Add(new EndpointInfo
+        {
+            Verb = "get", Pattern = "/names/{id}", OperationId = "getName", ResponseCSharpType = "string",
+            Parameters = { new EndpointParameter { Name = "id", Location = ParamLocation.Route, CSharpType = "int", Required = true } },
+        });
+        model.Endpoints.Add(new EndpointInfo
+        {
+            Verb = "get", Pattern = "/greeting", OperationId = "getGreeting", ResponseCSharpType = "string",
+            Parameters = { new EndpointParameter { Name = "lang", Location = ParamLocation.Query, CSharpType = "string" } },
+        });
+        model.Endpoints.Add(new EndpointInfo
+        {
+            Verb = "get", Pattern = "/status", OperationId = "getStatus", ResponseCSharpType = "string",
+        });
+
+        await PrepareWorkspaceAsync("@tanstack/react-query@5.90.21", "react@19.1.0", "@types/react@19.1.0");
+        foreach (var emitQueryOptions in new[] { true, false })
+        {
+            var settings = new GlobalSettings();
+            settings.TanStackQuery.EmitQueryOptions = emitQueryOptions;
+            settings.TanStackQuery.BaseUrlExpression = "undefined";
+            var client = Assert.Single(TanStackQueryEmitter.Emit(model, settings));
+            File.WriteAllText(Path.Combine(_tempDir, emitQueryOptions ? "with-options.ts" : "without-options.ts"), client.Content + "\n" + """
+                type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+                type Expect<T extends true> = T;
+                const plain = useGetName({ id: 1 });
+                const picked = useGetName({ id: 1 }, { select: name => name.length });
+                const greeting = useGetGreeting();
+                const formatted = useGetGreeting({ lang: 'en' }, { select: text => ({ text }) });
+                const defaulted = useGetGreeting(undefined, { select: text => text.length });
+                const status = useGetStatus();
+                const healthy = useGetStatus({ select: text => text === 'ok' });
+                type Plain = Expect<Equal<typeof plain.data, string | undefined>>;
+                type Picked = Expect<Equal<typeof picked.data, number | undefined>>;
+                type Greeting = Expect<Equal<typeof greeting.data, string | undefined>>;
+                type Formatted = Expect<Equal<typeof formatted.data, { text: string } | undefined>>;
+                type Defaulted = Expect<Equal<typeof defaulted.data, number | undefined>>;
+                type Status = Expect<Equal<typeof status.data, string | undefined>>;
+                type Healthy = Expect<Equal<typeof healthy.data, boolean | undefined>>;
+                // @ts-expect-error Endpoint input is required.
+                useGetName({ select: (name: string) => name.length });
+                // @ts-expect-error A selected type requires a selector.
+                useGetName<number>({ id: 1 });
+                // @ts-expect-error The selector receives the endpoint response type.
+                useGetStatus({ select: (status: number) => status });
+                """);
+        }
+
+        var (exitCode, stdout, stderr) = await RunAsync("npx",
+            $"-y -p {TscPackageSpec} tsc --noEmit --strict --skipLibCheck --target ES2020 --moduleResolution node with-options.ts without-options.ts",
+            workingDir: _tempDir);
+        Assert.True(exitCode == 0, $"tsc failed (exit {exitCode}):\n{stdout}\n{stderr}");
+    }
+
+    [Fact]
     public async Task ExternalZodGeoJsonSchema_CompilesAndInfersPropertyType()
     {
         if (_skip) return;
@@ -392,11 +452,10 @@ public sealed class ZodCompilationTests : IDisposable
 
     private async Task PrepareWorkspaceAsync(params string[] additionalPackages)
     {
-        // Install zod locally so the emitted `import { z } from 'zod';` resolves.
-        // Node resolution walks up from temp dir; a sibling node_modules is enough.
+        // Keep dependencies in this fixture even if npm finds a package in a parent directory.
         var packages = string.Join(" ", new[] { ZodPackageSpec }.Concat(additionalPackages));
         var (code, _, err) = await RunAsync("npx",
-            $"-y -p npm@10 npm install --silent --no-audit --no-fund --no-package-lock {packages}",
+            $"-y -p npm@10 npm install --prefix . --silent --no-audit --no-fund --no-package-lock {packages}",
             workingDir: _tempDir);
         if (code != 0)
             throw new InvalidOperationException($"zod install failed (exit {code}): {err}");
