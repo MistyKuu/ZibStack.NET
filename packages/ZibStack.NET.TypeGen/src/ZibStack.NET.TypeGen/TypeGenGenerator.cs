@@ -329,21 +329,20 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
             var settings = config?.Settings ?? new GlobalSettings();
             if (RequestsTarget(model, TypeTarget.Zod) && !ValidateZodSchemaImports(model, spc.ReportDiagnostic))
                 return;
-            // Detect ZibStack.NET.Query presence by probing a well-known type. When
-            // referenced, the Dto CRUD list endpoint binds additional query-string params
-            // (filter/sort/select/count) — the OpenAPI paths must match that shape.
-            settings.HasQueryDsl = compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null;
-
-            // Populate model.Endpoints: scan hand-written [ApiController] classes +
-            // synthesize from [CrudApi]. Native scans win on (verb, pattern) collisions
-            // so a hand-written controller overrides CrudApi synthesis for the same slot.
-            EndpointDiscovery.Populate(model, compilation);
+            var emitOpenApi = RequestsTarget(model, TypeTarget.OpenApi);
+            var emitTanStackQuery = RequestsTarget(model, TypeTarget.TanStackQuery);
+            if (emitOpenApi || emitTanStackQuery)
+            {
+                // CRUD list endpoints expose additional query parameters when Query is referenced.
+                settings.HasQueryDsl = compilation.GetTypeByMetadataName("ZibStack.NET.Query.FilterParser") is not null;
+                EndpointDiscovery.Populate(model, compilation);
+            }
 
             // Run each requested emitter.
             var allFiles = new List<EmittedFile>();
             if (RequestsTarget(model, TypeTarget.TypeScript))
                 allFiles.AddRange(TypeScriptEmitter.Emit(model, settings));
-            if (RequestsTarget(model, TypeTarget.OpenApi))
+            if (emitOpenApi)
                 allFiles.AddRange(OpenApiEmitter.Emit(model, settings));
             if (RequestsTarget(model, TypeTarget.Python))
                 allFiles.AddRange(PythonEmitter.Emit(model, settings));
@@ -351,14 +350,16 @@ public sealed class TypeGenGenerator : IIncrementalGenerator
                 allFiles.AddRange(ZodEmitter.Emit(model, settings));
             if (RequestsTarget(model, TypeTarget.GraphQL))
                 allFiles.AddRange(GraphQLEmitter.Emit(model, settings));
-            if (RequestsTarget(model, TypeTarget.TanStackQuery))
+            if (emitTanStackQuery)
                 allFiles.AddRange(TanStackQueryEmitter.Emit(model, settings));
 
-            // Empty is an authoritative result only when generation succeeded.
-            // In particular an incomplete IDE edit / failed configurator must not
-            // be mistaken for removing the last generation request.
+            // Preserve old output during syntax errors or fatal TypeGen diagnostics.
+            // Semantic diagnostics here can report missing symbols that another
+            // source generator will supply later in the build.
+            var cancellationToken = spc.CancellationToken;
             if (allFiles.Count == 0 && (hasGenerationErrors ||
-                compilation.GetDiagnostics(spc.CancellationToken).Any(d => d.Severity == DiagnosticSeverity.Error)))
+                compilation.SyntaxTrees.Any(tree => tree.GetDiagnostics(cancellationToken)
+                    .Any(d => d.Severity == DiagnosticSeverity.Error))))
                 return;
 
             // Emit the manifest as a .g.cs containing string constants. The companion

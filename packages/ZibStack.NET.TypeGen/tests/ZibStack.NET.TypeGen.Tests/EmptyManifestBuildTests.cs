@@ -15,12 +15,22 @@ public class EmptyManifestBuildTests : IClassFixture<TypeGenPackageFixture>
     public EmptyManifestBuildTests(TypeGenPackageFixture package) => _package = package;
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public async Task RemovingLastRequest_ReplacesManifestAndCleansOwnedFiles(bool fluent, bool liveWrites)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public async Task RemovingLastRequest_ReplacesManifestAndCleansOwnedFiles(bool fluent, bool liveWrites, bool generatedRegex)
     {
         var dir = _package.CreateConsumer(liveWrites);
+        if (generatedRegex)
+            await File.WriteAllTextAsync(Path.Combine(dir, "Patterns.cs"), """
+                using System.Text.RegularExpressions;
+                public static partial class Patterns
+                {
+                    [GeneratedRegex("abc")]
+                    public static partial Regex Example();
+                }
+                """);
         string Source(string output, bool example, bool other) =>
             "using ZibStack.NET.TypeGen;\n" +
             (!fluent && example ? $"[GenerateTypes(Targets = TypeTarget.TypeScript | TypeTarget.Zod, OutputDir = \"{output}\")]\n" : "") +

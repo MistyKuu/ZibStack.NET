@@ -188,9 +188,8 @@ An emitter that legitimately produces no files follows the same path.
 Both live writes and the MSBuild task use `obj/.typegen-dirs` to find previously
 used output directories and remove files bearing the TypeGen banner. Handwritten
 files are preserved. Subsequent builds cannot resurrect old output from the
-empty manifest, even when compilation is skipped. Compilation errors or fatal
-TypeGen diagnostics that prevent generation are not treated as successful empty
-runs and do not authorize this cleanup.
+empty manifest, even when compilation is skipped. Syntax errors and fatal
+TypeGen diagnostics that prevent generation preserve the previous output.
 
 After upgrading from a version that retained stale manifests, run
 `dotnet build -t:Rebuild` once for each affected project to replace its cached
