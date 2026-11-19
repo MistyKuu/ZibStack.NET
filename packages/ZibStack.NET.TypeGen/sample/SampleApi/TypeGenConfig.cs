@@ -32,6 +32,9 @@ public sealed class TypeGenConfig : ITypeGenConfigurator
             // The default is import.meta.env.VITE_API_URL. The sample uses the
             // current origin so api.gen.ts type-checks in non-Vite clients too.
             q.BaseUrlExpression = "window.location.origin";
+            // When the configured base includes a reverse-proxy service prefix,
+            // resolve backend routes beneath it (opt-in for compatibility):
+            // q.PreserveBaseUrlPath = true;
         });
 
         b.OpenApi(oa =>

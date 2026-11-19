@@ -107,6 +107,7 @@ internal sealed class TanStackQuerySettings
     public QueryFileLayout FileLayout { get; set; } = QueryFileLayout.SingleFile;
     public string SingleFileName { get; set; } = "api.gen.ts";
     public string BaseUrlExpression { get; set; } = "import.meta.env.VITE_API_URL";
+    public bool PreserveBaseUrlPath { get; set; }
     public string? ApiClientImportPath { get; set; }
     public string ApiClientName { get; set; } = "apiFetch";
     public string? ModelsImportPath { get; set; }

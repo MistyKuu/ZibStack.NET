@@ -422,6 +422,7 @@ internal static class ConfiguratorParser
             case "FileLayout": if (val is int fl) s.FileLayout = (QueryFileLayout)fl; break;
             case "SingleFileName": if (val is string sf) s.SingleFileName = sf; break;
             case "BaseUrlExpression": if (val is string bu) s.BaseUrlExpression = bu; break;
+            case "PreserveBaseUrlPath": if (val is bool pb) s.PreserveBaseUrlPath = pb; break;
             case "ApiClientImportPath": s.ApiClientImportPath = val as string; break;
             case "ApiClientName": if (val is string ac) s.ApiClientName = ac; break;
             case "ModelsImportPath": s.ModelsImportPath = val as string; break;
