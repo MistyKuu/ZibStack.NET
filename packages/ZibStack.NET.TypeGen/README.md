@@ -55,6 +55,8 @@ the property graph, so you only annotate root aggregates.
 - **TanStack Query emitter** — generates React Query v5 clients from the same
   endpoint discovery model as OpenAPI. Supports Minimal API `.WithName(...)` /
   `.WithTags(...)`, custom API clients, split-by-tag output, and cache helpers.
+  Set `q.PreserveBaseUrlPath = true` to retain reverse-proxy service prefixes.
+  See the [URL resolution guide](https://mistykuu.github.io/ZibStack.NET/packages/typegen/emitters/tanstack-query/#reverse-proxy-service-prefixes).
 - **Fluent project-wide config** via `ITypeGenConfigurator` — global output dir,
   file layout (`FilePerClass` / `SingleFile`), naming styles, per-type overrides,
   property-level overrides.
