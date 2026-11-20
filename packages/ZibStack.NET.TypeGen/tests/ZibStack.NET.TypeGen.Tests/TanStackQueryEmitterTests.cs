@@ -103,7 +103,7 @@ public class TanStackQueryEmitterTests
         Assert.Contains("minimumBudget: input.minimumBudget", ts);
         Assert.Contains("pageSize: input.pageSize", ts);
         Assert.Contains("export function getWorkspaceReportJobsOptions(input: GetWorkspaceReportJobsInput)", ts);
-        Assert.Contains("return useQuery(getWorkspaceReportJobsOptions(input));", ts);
+        Assert.Contains("...getWorkspaceReportJobsOptions(input),", ts);
         Assert.Contains("export function prefetchGetWorkspaceReportJobs(queryClient: QueryClient, input: GetWorkspaceReportJobsInput)", ts);
         Assert.Contains("export function invalidateReportsQueries(queryClient: QueryClient)", ts);
 

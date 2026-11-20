@@ -788,23 +788,34 @@ internal static class TanStackQueryEmitter
         var hookName = "use" + ToPascalIdentifier(op.Name);
         if (op.IsQuery)
         {
-            sb.Append($"export function {hookName}(");
+            var response = $"Awaited<ReturnType<typeof {op.Name}>>";
+            const string result = "import('@tanstack/react-query').UseQueryResult";
+            var plainInput = "";
+            var selectInput = "";
+            var implementationInput = "";
             if (op.HasInput)
-                sb.Append(op.HasRequiredInput ? $"input: {op.InputTypeName}" : $"input: {op.InputTypeName} = {{}}");
-            sb.AppendLine(") {");
+            {
+                plainInput = $"input{(op.HasRequiredInput ? "" : "?")}: {op.InputTypeName}, ";
+                selectInput = $"input: {op.InputTypeName}{(op.HasRequiredInput ? "" : " | undefined")}, ";
+                implementationInput = $"input: {op.InputTypeName}{(op.HasRequiredInput ? "" : " = {}")}, ";
+            }
+            // A caller may specify a selected type only when supplying a selector.
+            var selector = $"(data: {response}) => TSelected";
+            sb.AppendLine($"export function {hookName}({plainInput}options?: {{ select?: undefined }}): {result}<{response}>;");
+            sb.AppendLine($"export function {hookName}<TSelected>({selectInput}options: {{ select: {selector} }}): {result}<TSelected>;");
+            sb.AppendLine($"export function {hookName}<TSelected>({implementationInput}options?: {{ select?: {selector} }}) {{");
+            sb.AppendLine("    return useQuery({");
             if (query.EmitQueryOptions)
-                sb.AppendLine(op.HasInput
-                    ? $"    return useQuery({op.Name}Options(input));"
-                    : $"    return useQuery({op.Name}Options());");
+                sb.AppendLine($"        ...{op.Name}Options({(op.HasInput ? "input" : "")}),");
             else
             {
                 var keyCall = BuildKeyCall(op);
                 var fetchCall = op.HasInput ? $"{op.Name}(input, signal)" : $"{op.Name}(signal)";
-                sb.AppendLine("    return useQuery({");
                 sb.AppendLine($"        queryKey: {keyCall},");
                 sb.AppendLine($"        queryFn: ({{ signal }}) => {fetchCall},");
-                sb.AppendLine("    });");
             }
+            sb.AppendLine("        select: options?.select,");
+            sb.AppendLine("    });");
             sb.AppendLine("}");
             sb.AppendLine();
             return;

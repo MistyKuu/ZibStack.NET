@@ -202,10 +202,35 @@ export function searchWorkItemsOptions(input: SearchWorkItemsInput) {
     });
 }
 
-export function useSearchWorkItems(input: SearchWorkItemsInput) {
-    return useQuery(searchWorkItemsOptions(input));
+export function useSearchWorkItems(input: SearchWorkItemsInput, options?: { select?: undefined }):
+    import('@tanstack/react-query').UseQueryResult<PaginatedResponseOfWorkItemSummary>;
+export function useSearchWorkItems<TSelected>(input: SearchWorkItemsInput, options: {
+    select: (data: PaginatedResponseOfWorkItemSummary) => TSelected;
+}): import('@tanstack/react-query').UseQueryResult<TSelected>;
+export function useSearchWorkItems<TSelected>(input: SearchWorkItemsInput, options?: {
+    select?: (data: PaginatedResponseOfWorkItemSummary) => TSelected;
+}) {
+    return useQuery({
+        ...searchWorkItemsOptions(input),
+        select: options?.select,
+    });
 }
 ```
+
+Every generated GET hook accepts a component-level `select` callback with the
+endpoint's response type as its input. TypeScript infers `data` from the
+callback's return value (`WorkItemSummary[] | undefined` here):
+
+```typescript
+const { data: items } = useSearchWorkItems({ workspaceId, page: 1 }, {
+    select: response => response.items,
+});
+```
+
+The query cache still holds the full response, and omitting `select` returns
+that response as `data`. For a hook with no endpoint inputs, pass `{ select }`
+as the first argument. If all inputs are optional, pass `undefined` as the
+first argument to use their defaults. No C# attributes or settings are needed.
 
 Mutations get a fetch function, `mutationOptions`, a React hook, and tag-wide
 invalidation:
